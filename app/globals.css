@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════
+   BREGO DESIGN SYSTEM — Global Tokens
+═══════════════════════════════════════ */
+
+@layer base {
+  :root {
+    /* Typography */
+    --font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+    /* Colour tokens (shadcn / zinc palette) */
+    --background:     #FAFAFA;
+    --card:           #FFFFFF;
+    --card-border:    #E4E4E7;
+    --border:         #E4E4E7;
+    --muted:          #F4F4F5;
+    --muted-fg:       #71717A;
+    --foreground:     #09090B;
+    --primary:        #18181B;
+    --secondary-fg:   #52525B;
+    --accent:         #2563EB;
+    --accent-subtle:  #EFF6FF;
+    --destructive:    #EF4444;
+    --dest-subtle:    #FEF2F2;
+    --warning:        #F59E0B;
+    --warn-subtle:    #FFFBEB;
+    --success:        #10B981;
+    --succ-subtle:    #ECFDF5;
+
+    /* Spacing (8px grid) */
+    --sp-1: 4px;
+    --sp-2: 8px;
+    --sp-3: 12px;
+    --sp-4: 16px;
+    --sp-5: 20px;
+    --sp-6: 24px;
+    --sp-7: 32px;
+    --sp-8: 40px;
+
+    /* Radius */
+    --r-sm: 6px;
+    --r-md: 8px;
+    --r-lg: 12px;
+    --r-full: 999px;
+
+    /* Shadows */
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.07);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
+  }
+
+  /* ── Base resets ── */
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html {
+    font-size: 14px; /* Body default = 14px (1rem) */
+  }
+
+  body {
+    font-family: var(--font-family);
+    font-weight: 400;
+    color: var(--foreground);
+    background: var(--background);
+    line-height: 1.5;
+  }
+
+  /* ── Typography scale ── */
+  h1, .text-h1 {
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.3px;
+    color: var(--foreground);
+  }
+
+  h2, .text-h2 {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.2px;
+    color: var(--foreground);
+  }
+
+  h3, .text-h3 {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: -0.1px;
+    color: var(--foreground);
+  }
+
+  p, .text-body {
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--foreground);
+  }
+
+  .text-caption {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--muted-fg);
+  }
+
+  .text-micro {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted-fg);
+  }
+}
+
+/* ═══════════════════════════════════════
+   UTILITY CLASSES
+═══════════════════════════════════════ */
+@layer utilities {
+  .font-light    { font-weight: 300; }
+  .font-normal   { font-weight: 400; }
+  .font-medium   { font-weight: 500; }
+  .font-semibold { font-weight: 600; }
+  .font-bold     { font-weight: 700; }
+
+  /* ── Material Symbols ── */
+  .material-symbols-outlined {
+    font-variation-settings:
+      'FILL' 0,
+      'wght' 300,
+      'GRAD' 0,
+      'opsz' 20;
+  }
+}
