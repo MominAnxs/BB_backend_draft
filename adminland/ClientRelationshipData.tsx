@@ -95,28 +95,28 @@ function getStatusColor(s: string): string {
 function getServiceLabel(s: string): string { return s === 'Performance Marketing' ? 'PM' : 'A&T'; }
 
 function renderScore(score: number): { color: string; label: string } {
-  if (score >= 4.5) return { color: 'text-emerald-600', label: 'Excellent' };
-  if (score >= 3.5) return { color: 'text-blue-600', label: 'Good' };
-  if (score >= 2.5) return { color: 'text-amber-600', label: 'Fair' };
+  if (score >= 4) return { color: 'text-emerald-600', label: 'Excellent' };
+  if (score >= 3) return { color: 'text-blue-600', label: 'Good' };
+  if (score >= 2) return { color: 'text-amber-600', label: 'Fair' };
   return { color: 'text-rose-600', label: 'Poor' };
 }
 
 // ── Realistic Brego Data ──
 const initialRelationships: ClientRelationship[] = [
-  { id: 'CR-001', clientName: 'Zenith Retail Pvt Ltd', service: 'Performance Marketing', accountManager: 'Priya Sharma', monthlyBilling: 150000, tenure: 18, serviceHeadScore: 4.8, cooScore: 4.5, overallHealth: 'Strong', trend: 'Improving', lastTouchpoint: '2026-03-28', nextReview: '2026-04-05', touchpointType: 'Strategic Review', keyContact: 'Rajesh Khanna', keyContactRole: 'CMO', notes: 'Flagship client. ROAS consistently above 4x. Expanding to Google Ads next quarter. CMO personally praised the team in last QBR.', status: 'Stable', wins: ['ROAS improved 2.1x → 4.8x', 'Upsold to premium tier', 'Case study published'] },
-  { id: 'CR-002', clientName: 'Meridian Healthcare', service: 'Accounts & Taxation', accountManager: 'Rohan Desai', monthlyBilling: 45000, tenure: 8, serviceHeadScore: 2.5, cooScore: 3.0, overallHealth: 'At Risk', trend: 'Declining', lastTouchpoint: '2026-03-20', nextReview: '2026-04-01', touchpointType: 'Escalation', keyContact: 'Dr. Meera Shah', keyContactRole: 'Founder', notes: 'GST delays 3 months running. Founder personally escalated. Dedicated executive now assigned but trust is damaged. Need consistent delivery for 2 months to recover.', status: 'Escalated', riskFactors: ['Repeated GST delays', 'Founder escalation', 'Competitor pitching'] },
-  { id: 'CR-003', clientName: 'NovaTech Solutions', service: 'Accounts & Taxation', accountManager: 'Rohan Desai', monthlyBilling: 60000, tenure: 14, serviceHeadScore: 4.2, cooScore: 3.8, overallHealth: 'Healthy', trend: 'Improving', lastTouchpoint: '2026-03-25', nextReview: '2026-04-10', touchpointType: 'Check-in Call', keyContact: 'Vikram Joshi', keyContactRole: 'CFO', notes: 'Strong on delivery. Tax savings of ₹4.2L this FY built significant trust. CFO appreciates proactive advice. Exploring advisory retainer upsell.', status: 'Active', wins: ['₹4.2L tax savings', 'Response SLA met consistently'] },
-  { id: 'CR-004', clientName: 'Bloom Botanics', service: 'Performance Marketing', accountManager: 'Sneha Patel', monthlyBilling: 85000, tenure: 6, serviceHeadScore: 1.5, cooScore: 2.0, overallHealth: 'At Risk', trend: 'Declining', lastTouchpoint: '2026-03-15', nextReview: '2026-03-31', touchpointType: 'Escalation', keyContact: 'Anita Kulkarni', keyContactRole: 'Marketing Head', notes: 'Critical situation. Creative quality issues for 3 consecutive months. Brand name misspelled in ads. Zero conversions in March. Client exploring other agencies.', status: 'Escalated', riskFactors: ['Creative quality failures', 'Zero March conversions', 'Actively exploring alternatives', 'Brand damage from errors'] },
-  { id: 'CR-005', clientName: 'GreenLeaf Organics', service: 'Accounts & Taxation', accountManager: 'Kavita Nair', monthlyBilling: 55000, tenure: 24, serviceHeadScore: 5.0, cooScore: 4.8, overallHealth: 'Strong', trend: 'Stable', lastTouchpoint: '2026-03-26', nextReview: '2026-04-15', touchpointType: 'QBR', keyContact: 'Arjun Malhotra', keyContactRole: 'Director', notes: 'Model client. Zero errors in 24 months. Proactively flagged TDS mismatch saving ₹1.8L. Video testimonial recorded. Referred 2 new clients.', status: 'Stable', wins: ['Zero errors in 24 months', 'Saved ₹1.8L TDS mismatch', '2 referrals generated', 'Video testimonial'] },
-  { id: 'CR-006', clientName: 'Sunrise Hospitality', service: 'Performance Marketing', accountManager: 'Sneha Patel', monthlyBilling: 200000, tenure: 12, serviceHeadScore: 4.5, cooScore: 4.2, overallHealth: 'Strong', trend: 'Improving', lastTouchpoint: '2026-03-22', nextReview: '2026-04-08', touchpointType: 'Strategic Review', keyContact: 'Rahul Mehra', keyContactRole: 'VP Marketing', notes: 'High-value client. Seasonal campaign drove 62% booking increase in off-peak months. Upsold to premium plan with ₹50K MRR increase. VP personally acknowledged the team.', status: 'Stable', wins: ['62% off-peak booking increase', 'Upsold ₹50K MRR', 'VP Marketing advocates internally'] },
-  { id: 'CR-007', clientName: 'UrbanNest Realty', service: 'Performance Marketing', accountManager: 'Akshay Mehta', monthlyBilling: 120000, tenure: 10, serviceHeadScore: 2.8, cooScore: 3.2, overallHealth: 'Needs Attention', trend: 'Stable', lastTouchpoint: '2026-03-18', nextReview: '2026-04-02', touchpointType: 'Check-in Call', keyContact: 'Sanjay Gupta', keyContactRole: 'Business Head', notes: 'Communication gap is the core issue. Results are decent (3.2x ROAS) but client feels uninformed. Weekly update calls scheduled but not consistently happening.', status: 'Watch List', riskFactors: ['Inconsistent communication', 'Missed weekly updates', 'Client feels uninformed'] },
-  { id: 'CR-008', clientName: 'FreshBite Foods', service: 'Performance Marketing', accountManager: 'Priya Sharma', monthlyBilling: 95000, tenure: 9, serviceHeadScore: 4.0, cooScore: 3.5, overallHealth: 'Healthy', trend: 'Improving', lastTouchpoint: '2026-03-27', nextReview: '2026-04-12', touchpointType: 'Check-in Call', keyContact: 'Deepa Nair', keyContactRole: 'Growth Lead', notes: 'Solid mid-tier client. CAC reduced from ₹180 to ₹95 after funnel optimization. Client happy with video ad performance. Potential to expand to Instagram shopping.', status: 'Active', wins: ['CAC reduced 50%', 'Video ads outperforming 30%'] },
-  { id: 'CR-009', clientName: 'Quantum Finserv', service: 'Accounts & Taxation', accountManager: 'Rohan Desai', monthlyBilling: 75000, tenure: 11, serviceHeadScore: 2.8, cooScore: 3.0, overallHealth: 'Needs Attention', trend: 'Declining', lastTouchpoint: '2026-03-19', nextReview: '2026-04-01', touchpointType: 'Escalation', keyContact: 'Nikhil Agarwal', keyContactRole: 'CEO', notes: 'Accuracy issues are the primary concern. 2 errors in March P&L. For a finserv company, this is critical. CEO has raised it directly with COO. Must deliver zero-error April reports.', status: 'Watch List', riskFactors: ['P&L accuracy errors', 'CEO escalation', 'Regulatory risk for client'] },
-  { id: 'CR-010', clientName: 'Pinnacle Education', service: 'Performance Marketing', accountManager: 'Priya Sharma', monthlyBilling: 350000, tenure: 15, serviceHeadScore: 3.5, cooScore: 3.8, overallHealth: 'Healthy', trend: 'Stable', lastTouchpoint: '2026-03-24', nextReview: '2026-04-07', touchpointType: 'Strategic Review', keyContact: 'Amit Deshmukh', keyContactRole: 'CEO', notes: 'Highest billing PM client. Lead quality is the ongoing concern — 35% unqualified. New pre-qualification form implemented. CEO engaged and patient but watching closely.', status: 'Active', wins: ['Consistent lead volume', 'CEO directly engaged'] },
-  { id: 'CR-011', clientName: 'Metro Logistics', service: 'Performance Marketing', accountManager: 'Akshay Mehta', monthlyBilling: 65000, tenure: 7, serviceHeadScore: 2.0, cooScore: 2.5, overallHealth: 'At Risk', trend: 'Declining', lastTouchpoint: '2026-03-14', nextReview: '2026-03-31', touchpointType: 'Escalation', keyContact: 'Pradeep Kumar', keyContactRole: 'Operations Head', notes: 'Communication breakdown. Multiple missed callbacks. Akshay on performance improvement plan. Client given direct line to team lead as interim measure. Must stabilize within 2 weeks.', status: 'Escalated', riskFactors: ['Missed callbacks', 'AM on PIP', 'Client escalated internally'] },
-  { id: 'CR-012', clientName: 'Spice Route Exports', service: 'Accounts & Taxation', accountManager: 'Kavita Nair', monthlyBilling: 40000, tenure: 5, serviceHeadScore: 3.8, cooScore: 3.5, overallHealth: 'Healthy', trend: 'Improving', lastTouchpoint: '2026-03-21', nextReview: '2026-04-10', touchpointType: 'Check-in Call', keyContact: 'Arun Kapoor', keyContactRole: 'Co-Founder', notes: 'Newer client showing positive trajectory. Simplified reporting template well received. Cash flow forecast template being added per their request. Building trust steadily.', status: 'Active', wins: ['Simplified reporting appreciated', 'Growing trust'] },
-  { id: 'CR-013', clientName: 'Orbit Fashion', service: 'Performance Marketing', accountManager: 'Sneha Patel', monthlyBilling: 110000, tenure: 13, serviceHeadScore: 4.0, cooScore: 4.0, overallHealth: 'Healthy', trend: 'Stable', lastTouchpoint: '2026-03-23', nextReview: '2026-04-09', touchpointType: 'Strategic Review', keyContact: 'Nisha Verma', keyContactRole: 'Brand Director', notes: 'Reliable relationship. Influencer marketing strategy working well. Brand Director is a strong advocate internally. Exploring micro-influencer expansion for April collection.', status: 'Active', wins: ['Influencer ROI proven', 'Brand Director advocates'] },
-  { id: 'CR-014', clientName: 'Artisan Crafts Co', service: 'Accounts & Taxation', accountManager: 'Kavita Nair', monthlyBilling: 35000, tenure: 20, serviceHeadScore: 4.8, cooScore: 4.5, overallHealth: 'Strong', trend: 'Stable', lastTouchpoint: '2026-03-26', nextReview: '2026-04-20', touchpointType: 'QBR', keyContact: 'Meena Deshpande', keyContactRole: 'Owner', notes: 'One of our longest-serving A&T clients. Every filing delivered 2-3 days early without exception. Annual contract renewed with 10% rate increase accepted. Perfect compliance record.', status: 'Stable', wins: ['100% on-time delivery', 'Rate increase accepted', 'Annual renewal confirmed'] },
+  { id: 'CR-001', clientName: 'Zenith Retail Pvt Ltd', service: 'Performance Marketing', accountManager: 'Priya Sharma', monthlyBilling: 150000, tenure: 18, serviceHeadScore: 5, cooScore: 5, overallHealth: 'Strong', trend: 'Improving', lastTouchpoint: '2026-03-28', nextReview: '2026-04-05', touchpointType: 'Strategic Review', keyContact: 'Rajesh Khanna', keyContactRole: 'CMO', notes: 'Flagship client. ROAS consistently above 4x. Expanding to Google Ads next quarter. CMO personally praised the team in last QBR.', status: 'Stable', wins: ['ROAS improved 2.1x → 4.8x', 'Upsold to premium tier', 'Case study published'] },
+  { id: 'CR-002', clientName: 'Meridian Healthcare', service: 'Accounts & Taxation', accountManager: 'Rohan Desai', monthlyBilling: 45000, tenure: 8, serviceHeadScore: 2, cooScore: 3, overallHealth: 'At Risk', trend: 'Declining', lastTouchpoint: '2026-03-20', nextReview: '2026-04-01', touchpointType: 'Escalation', keyContact: 'Dr. Meera Shah', keyContactRole: 'Founder', notes: 'GST delays 3 months running. Founder personally escalated. Dedicated executive now assigned but trust is damaged. Need consistent delivery for 2 months to recover.', status: 'Escalated', riskFactors: ['Repeated GST delays', 'Founder escalation', 'Competitor pitching'] },
+  { id: 'CR-003', clientName: 'NovaTech Solutions', service: 'Accounts & Taxation', accountManager: 'Rohan Desai', monthlyBilling: 60000, tenure: 14, serviceHeadScore: 4, cooScore: 4, overallHealth: 'Healthy', trend: 'Improving', lastTouchpoint: '2026-03-25', nextReview: '2026-04-10', touchpointType: 'Check-in Call', keyContact: 'Vikram Joshi', keyContactRole: 'CFO', notes: 'Strong on delivery. Tax savings of ₹4.2L this FY built significant trust. CFO appreciates proactive advice. Exploring advisory retainer upsell.', status: 'Active', wins: ['₹4.2L tax savings', 'Response SLA met consistently'] },
+  { id: 'CR-004', clientName: 'Bloom Botanics', service: 'Performance Marketing', accountManager: 'Sneha Patel', monthlyBilling: 85000, tenure: 6, serviceHeadScore: 1, cooScore: 2, overallHealth: 'At Risk', trend: 'Declining', lastTouchpoint: '2026-03-15', nextReview: '2026-03-31', touchpointType: 'Escalation', keyContact: 'Anita Kulkarni', keyContactRole: 'Marketing Head', notes: 'Critical situation. Creative quality issues for 3 consecutive months. Brand name misspelled in ads. Zero conversions in March. Client exploring other agencies.', status: 'Escalated', riskFactors: ['Creative quality failures', 'Zero March conversions', 'Actively exploring alternatives', 'Brand damage from errors'] },
+  { id: 'CR-005', clientName: 'GreenLeaf Organics', service: 'Accounts & Taxation', accountManager: 'Kavita Nair', monthlyBilling: 55000, tenure: 24, serviceHeadScore: 5, cooScore: 5, overallHealth: 'Strong', trend: 'Stable', lastTouchpoint: '2026-03-26', nextReview: '2026-04-15', touchpointType: 'QBR', keyContact: 'Arjun Malhotra', keyContactRole: 'Director', notes: 'Model client. Zero errors in 24 months. Proactively flagged TDS mismatch saving ₹1.8L. Video testimonial recorded. Referred 2 new clients.', status: 'Stable', wins: ['Zero errors in 24 months', 'Saved ₹1.8L TDS mismatch', '2 referrals generated', 'Video testimonial'] },
+  { id: 'CR-006', clientName: 'Sunrise Hospitality', service: 'Performance Marketing', accountManager: 'Sneha Patel', monthlyBilling: 200000, tenure: 12, serviceHeadScore: 5, cooScore: 4, overallHealth: 'Strong', trend: 'Improving', lastTouchpoint: '2026-03-22', nextReview: '2026-04-08', touchpointType: 'Strategic Review', keyContact: 'Rahul Mehra', keyContactRole: 'VP Marketing', notes: 'High-value client. Seasonal campaign drove 62% booking increase in off-peak months. Upsold to premium plan with ₹50K MRR increase. VP personally acknowledged the team.', status: 'Stable', wins: ['62% off-peak booking increase', 'Upsold ₹50K MRR', 'VP Marketing advocates internally'] },
+  { id: 'CR-007', clientName: 'UrbanNest Realty', service: 'Performance Marketing', accountManager: 'Akshay Mehta', monthlyBilling: 120000, tenure: 10, serviceHeadScore: 3, cooScore: 3, overallHealth: 'Needs Attention', trend: 'Stable', lastTouchpoint: '2026-03-18', nextReview: '2026-04-02', touchpointType: 'Check-in Call', keyContact: 'Sanjay Gupta', keyContactRole: 'Business Head', notes: 'Communication gap is the core issue. Results are decent (3.2x ROAS) but client feels uninformed. Weekly update calls scheduled but not consistently happening.', status: 'Watch List', riskFactors: ['Inconsistent communication', 'Missed weekly updates', 'Client feels uninformed'] },
+  { id: 'CR-008', clientName: 'FreshBite Foods', service: 'Performance Marketing', accountManager: 'Priya Sharma', monthlyBilling: 95000, tenure: 9, serviceHeadScore: 4, cooScore: 4, overallHealth: 'Healthy', trend: 'Improving', lastTouchpoint: '2026-03-27', nextReview: '2026-04-12', touchpointType: 'Check-in Call', keyContact: 'Deepa Nair', keyContactRole: 'Growth Lead', notes: 'Solid mid-tier client. CAC reduced from ₹180 to ₹95 after funnel optimization. Client happy with video ad performance. Potential to expand to Instagram shopping.', status: 'Active', wins: ['CAC reduced 50%', 'Video ads outperforming 30%'] },
+  { id: 'CR-009', clientName: 'Quantum Finserv', service: 'Accounts & Taxation', accountManager: 'Rohan Desai', monthlyBilling: 75000, tenure: 11, serviceHeadScore: 3, cooScore: 3, overallHealth: 'Needs Attention', trend: 'Declining', lastTouchpoint: '2026-03-19', nextReview: '2026-04-01', touchpointType: 'Escalation', keyContact: 'Nikhil Agarwal', keyContactRole: 'CEO', notes: 'Accuracy issues are the primary concern. 2 errors in March P&L. For a finserv company, this is critical. CEO has raised it directly with COO. Must deliver zero-error April reports.', status: 'Watch List', riskFactors: ['P&L accuracy errors', 'CEO escalation', 'Regulatory risk for client'] },
+  { id: 'CR-010', clientName: 'Pinnacle Education', service: 'Performance Marketing', accountManager: 'Priya Sharma', monthlyBilling: 350000, tenure: 15, serviceHeadScore: 4, cooScore: 4, overallHealth: 'Healthy', trend: 'Stable', lastTouchpoint: '2026-03-24', nextReview: '2026-04-07', touchpointType: 'Strategic Review', keyContact: 'Amit Deshmukh', keyContactRole: 'CEO', notes: 'Highest billing PM client. Lead quality is the ongoing concern — 35% unqualified. New pre-qualification form implemented. CEO engaged and patient but watching closely.', status: 'Active', wins: ['Consistent lead volume', 'CEO directly engaged'] },
+  { id: 'CR-011', clientName: 'Metro Logistics', service: 'Performance Marketing', accountManager: 'Akshay Mehta', monthlyBilling: 65000, tenure: 7, serviceHeadScore: 2, cooScore: 2, overallHealth: 'At Risk', trend: 'Declining', lastTouchpoint: '2026-03-14', nextReview: '2026-03-31', touchpointType: 'Escalation', keyContact: 'Pradeep Kumar', keyContactRole: 'Operations Head', notes: 'Communication breakdown. Multiple missed callbacks. Akshay on performance improvement plan. Client given direct line to team lead as interim measure. Must stabilize within 2 weeks.', status: 'Escalated', riskFactors: ['Missed callbacks', 'AM on PIP', 'Client escalated internally'] },
+  { id: 'CR-012', clientName: 'Spice Route Exports', service: 'Accounts & Taxation', accountManager: 'Kavita Nair', monthlyBilling: 40000, tenure: 5, serviceHeadScore: 4, cooScore: 3, overallHealth: 'Healthy', trend: 'Improving', lastTouchpoint: '2026-03-21', nextReview: '2026-04-10', touchpointType: 'Check-in Call', keyContact: 'Arun Kapoor', keyContactRole: 'Co-Founder', notes: 'Newer client showing positive trajectory. Simplified reporting template well received. Cash flow forecast template being added per their request. Building trust steadily.', status: 'Active', wins: ['Simplified reporting appreciated', 'Growing trust'] },
+  { id: 'CR-013', clientName: 'Orbit Fashion', service: 'Performance Marketing', accountManager: 'Sneha Patel', monthlyBilling: 110000, tenure: 13, serviceHeadScore: 4, cooScore: 4, overallHealth: 'Healthy', trend: 'Stable', lastTouchpoint: '2026-03-23', nextReview: '2026-04-09', touchpointType: 'Strategic Review', keyContact: 'Nisha Verma', keyContactRole: 'Brand Director', notes: 'Reliable relationship. Influencer marketing strategy working well. Brand Director is a strong advocate internally. Exploring micro-influencer expansion for April collection.', status: 'Active', wins: ['Influencer ROI proven', 'Brand Director advocates'] },
+  { id: 'CR-014', clientName: 'Artisan Crafts Co', service: 'Accounts & Taxation', accountManager: 'Kavita Nair', monthlyBilling: 35000, tenure: 20, serviceHeadScore: 5, cooScore: 5, overallHealth: 'Strong', trend: 'Stable', lastTouchpoint: '2026-03-26', nextReview: '2026-04-20', touchpointType: 'QBR', keyContact: 'Meena Deshpande', keyContactRole: 'Owner', notes: 'One of our longest-serving A&T clients. Every filing delivered 2-3 days early without exception. Annual contract renewed with 10% rate increase accepted. Perfect compliance record.', status: 'Stable', wins: ['100% on-time delivery', 'Rate increase accepted', 'Annual renewal confirmed'] },
 ];
 
 // ── Filter Panel ──
@@ -188,17 +188,42 @@ function TrendBadge({ trend }: { trend: ClientRelationship['trend'] }) {
   return <div className="flex items-center gap-1 text-black/40"><Minus className="w-3.5 h-3.5" /><span className="text-caption font-medium">Stable</span></div>;
 }
 
-// ── Score Bar ──
-function ScoreBar({ score, label }: { score: number; label: string }) {
-  const info = renderScore(score);
+// ── Star Rating (read-only, whole numbers 1-5) ──
+// color variants: 'amber' (COO default), 'purple' (PM HOD), 'cyan' (A&T HOD)
+type StarColor = 'amber' | 'purple' | 'cyan';
+const STAR_COLORS: Record<StarColor, { filled: string; text: string }> = {
+  amber:  { filled: 'text-[#FDAB3D] fill-[#FDAB3D]', text: 'text-[#FDAB3D]' },
+  purple: { filled: 'text-[#7C3AED] fill-[#7C3AED]', text: 'text-[#7C3AED]' },
+  cyan:   { filled: 'text-[#06B6D4] fill-[#06B6D4]', text: 'text-[#06B6D4]' },
+};
+
+function StarRating({ score, size = 'sm', color = 'amber' }: { score: number; size?: 'sm' | 'md'; color?: StarColor }) {
+  const dim = size === 'md' ? 'w-4 h-4' : 'w-3.5 h-3.5';
+  const c = STAR_COLORS[color];
   return (
-    <div className="space-y-1">
+    <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5">
+        {[1, 2, 3, 4, 5].map(i => (
+          <Star key={i} className={`${dim} ${i <= score ? c.filled : 'text-black/10 fill-current'}`} />
+        ))}
+      </div>
+      <span className={`text-caption font-semibold ${c.text} tabular-nums ml-0.5`}>{score}/5</span>
+    </div>
+  );
+}
+
+// ── Score Bar (drawer version with label + stars + bar) ──
+const BAR_COLORS: Record<StarColor, string> = { amber: 'bg-[#FDAB3D]', purple: 'bg-[#7C3AED]', cyan: 'bg-[#06B6D4]' };
+
+function ScoreBar({ score, label, color = 'amber' }: { score: number; label: string; color?: StarColor }) {
+  return (
+    <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-black/50 text-caption font-medium">{label}</span>
-        <span className={`text-caption font-semibold ${info.color}`}>{score.toFixed(1)}/5</span>
+        <span className="text-black/55 text-caption font-medium">{label}</span>
+        <StarRating score={score} size="sm" color={color} />
       </div>
       <div className="h-1.5 rounded-full bg-black/[0.04] overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${score >= 4.5 ? 'bg-[#00C875]' : score >= 3.5 ? 'bg-[#204CC7]' : score >= 2.5 ? 'bg-[#FDAB3D]' : 'bg-[#E2445C]'}`} style={{ width: `${(score / 5) * 100}%` }} />
+        <div className={`h-full rounded-full transition-all ${BAR_COLORS[color]}`} style={{ width: `${(score / 5) * 100}%` }} />
       </div>
     </div>
   );
@@ -226,6 +251,11 @@ export function ClientRelationshipData() {
   const changeStatus = (id: string, newStatus: ClientRelationship['status']) => {
     setRelationships(prev => prev.map(r => r.id === id ? { ...r, status: newStatus } : r));
     setOpenStatusDropdown(null);
+  };
+
+  const updateNotes = (id: string, notes: string) => {
+    setRelationships(prev => prev.map(r => r.id === id ? { ...r, notes } : r));
+    if (selectedClient?.id === id) setSelectedClient(prev => prev ? { ...prev, notes } : prev);
   };
 
   const handleSort = (field: SortField) => {
@@ -269,7 +299,7 @@ export function ClientRelationshipData() {
   const atRiskMRR = filteredRelationships.filter(r => r.overallHealth === 'At Risk' || r.overallHealth === 'Needs Attention').reduce((s, r) => s + r.monthlyBilling, 0);
   const improvingCount = filteredRelationships.filter(r => r.trend === 'Improving').length;
   const decliningCount = filteredRelationships.filter(r => r.trend === 'Declining').length;
-  const avgScore = total > 0 ? filteredRelationships.reduce((s, r) => s + (r.serviceHeadScore + r.cooScore) / 2, 0) / total : 0;
+  const avgScore = total > 0 ? Math.round(filteredRelationships.reduce((s, r) => s + (r.serviceHeadScore + r.cooScore) / 2, 0) / total) : 0;
   const overdueReviews = filteredRelationships.filter(r => daysUntil(r.nextReview) < 0).length;
   const upcomingReviews = filteredRelationships.filter(r => { const d = daysUntil(r.nextReview); return d >= 0 && d <= 7; }).length;
   const pmCount = filteredRelationships.filter(r => r.service === 'Performance Marketing').length;
@@ -337,8 +367,8 @@ export function ClientRelationshipData() {
         <div className="bg-white border border-black/[0.06] rounded-2xl p-5 flex flex-col gap-4 hover:shadow-sm transition-shadow">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <p className="text-black/50 text-caption font-medium uppercase tracking-wide">Health Score</p>
-              <p className={`text-h1 font-bold ${avgScore >= 4 ? 'text-[#00C875]' : avgScore >= 3 ? 'text-[#FDAB3D]' : 'text-[#E2445C]'}`}>{avgScore.toFixed(1)}/5</p>
+              <p className="text-black/50 text-caption font-medium uppercase tracking-wide">Avg Client Rating</p>
+              <div className="mt-1"><StarRating score={avgScore} size="md" /></div>
             </div>
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${avgScore >= 4 ? 'bg-[#00C875]/[0.08]' : avgScore >= 3 ? 'bg-[#FDAB3D]/[0.08]' : 'bg-[#E2445C]/[0.06]'}`}>
               <Heart className={`w-5 h-5 ${avgScore >= 4 ? 'text-[#00C875]/70' : avgScore >= 3 ? 'text-[#FDAB3D]/70' : 'text-[#E2445C]/60'}`} />
@@ -468,7 +498,7 @@ export function ClientRelationshipData() {
                 <SortHeader field="tenure">Tenure</SortHeader>
                 <SortHeader field="overallHealth">Health</SortHeader>
                 <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Trend</th>
-                <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Scores</th>
+                <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Client Rating</th>
                 <SortHeader field="nextReview">Next Review</SortHeader>
                 <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Status</th>
                 <th className="px-4 py-3 w-10"></th>
@@ -499,18 +529,16 @@ export function ClientRelationshipData() {
                     </td>
                     <td className="px-4 py-3"><TrendBadge trend={r.trend} /></td>
                     <td className="px-4 py-3">
-                      {(() => {
-                        const avg = (r.serviceHeadScore + r.cooScore) / 2;
-                        const avgColor = avg >= 4 ? 'text-[#00C875]' : avg >= 3 ? 'text-[#FDAB3D]' : 'text-[#E2445C]';
-                        return (
-                          <div className="flex items-center gap-2.5">
-                            <span className={`text-[15px] font-bold ${avgColor} tabular-nums`}>{avg.toFixed(1)}</span>
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-[12px] text-black/40 leading-tight">{r.service === 'Performance Marketing' ? 'CP' : 'ZB'} {r.serviceHeadScore.toFixed(1)} · TA {r.cooScore.toFixed(1)}</span>
-                            </div>
-                          </div>
-                        );
-                      })()}
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-black/40 font-medium w-[18px]">{r.service === 'Performance Marketing' ? 'CP' : 'ZB'}</span>
+                          <StarRating score={r.serviceHeadScore} size="sm" color={r.service === 'Performance Marketing' ? 'purple' : 'cyan'} />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-black/40 font-medium w-[18px]">TA</span>
+                          <StarRating score={r.cooScore} size="sm" color="amber" />
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <p className={`text-caption font-medium ${isOverdue ? 'text-[#E2445C]' : isUrgent ? 'text-[#FDAB3D]' : 'text-black/60'}`}>
@@ -607,14 +635,18 @@ export function ClientRelationshipData() {
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-                  {/* Scores */}
+                  {/* Client Feedback — Star Ratings (parity with client-facing app) */}
                   <div className="bg-white border border-black/[0.06] rounded-xl p-4">
-                    <h3 className="text-black/90 text-body font-semibold mb-3">Relationship Scores</h3>
-                    <div className="space-y-3">
-                      <ScoreBar score={selectedClient.serviceHeadScore} label={selectedClient.service === 'Performance Marketing' ? 'CP — Chinmay Pawar (PM HOD)' : 'ZB — Zubear Shaikh (A&T HOD)'} />
-                      <ScoreBar score={selectedClient.cooScore} label="TA — Tejas Atha (COO)" />
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="text-black/90 text-body font-semibold">Client Feedback</h3>
+                      <span className="text-[11px] text-black/30 font-medium">Rated by client via app</span>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-black/[0.04] flex items-center justify-between">
+                    <p className="text-caption text-black/40 mb-4">Star ratings provided by the client for leadership</p>
+                    <div className="space-y-4">
+                      <ScoreBar score={selectedClient.serviceHeadScore} label={selectedClient.service === 'Performance Marketing' ? 'CP — Chinmay Pawar (PM HOD)' : 'ZB — Zubear Shaikh (A&T HOD)'} color={selectedClient.service === 'Performance Marketing' ? 'purple' : 'cyan'} />
+                      <ScoreBar score={selectedClient.cooScore} label="TA — Tejas Atha (COO)" color="amber" />
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-black/[0.04] flex items-center justify-between">
                       <span className="text-black/50 text-caption font-medium">Overall Health</span>
                       <span className={`inline-flex px-2.5 py-1 rounded-md text-caption font-medium border ${getHealthColor(selectedClient.overallHealth)}`}>{selectedClient.overallHealth}</span>
                     </div>
@@ -628,7 +660,7 @@ export function ClientRelationshipData() {
                       <div className="h-px bg-black/[0.04]" />
                       <div className="flex items-center justify-between"><div className="flex items-center gap-2"><User className="w-3.5 h-3.5 text-black/35" /><span className="text-black/50 text-caption font-medium">Account Manager</span></div><p className="text-black/80 text-body font-medium">{selectedClient.accountManager}</p></div>
                       <div className="h-px bg-black/[0.04]" />
-                      <div className="flex items-center justify-between"><div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-black/35" /><span className="text-black/50 text-caption font-medium">Last Touchpoint</span></div><div className="text-right"><p className="text-black/80 text-body font-medium">{formatDate(selectedClient.lastTouchpoint)}</p><p className="text-black/40 text-caption font-normal">{selectedClient.touchpointType}</p></div></div>
+                      <div className="flex items-center justify-between"><div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-black/35" /><span className="text-black/50 text-caption font-medium">Last Touchpoint</span></div><p className="text-black/80 text-body font-medium">{formatDate(selectedClient.lastTouchpoint)}</p></div>
                       <div className="h-px bg-black/[0.04]" />
                       <div className="flex items-center justify-between"><div className="flex items-center gap-2"><Calendar className="w-3.5 h-3.5 text-black/35" /><span className="text-black/50 text-caption font-medium">Next Review</span></div><p className={`text-body font-medium ${isOverdue ? 'text-[#E2445C]' : 'text-black/80'}`}>{formatDate(selectedClient.nextReview)} {isOverdue && <span className="text-caption">({Math.abs(reviewDays)}d overdue)</span>}</p></div>
                       <div className="h-px bg-black/[0.04]" />
@@ -660,10 +692,16 @@ export function ClientRelationshipData() {
                     </div>
                   )}
 
-                  {/* Notes */}
+                  {/* Notes — editable */}
                   <div className="bg-white border border-black/[0.06] rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2.5"><FileText className="w-3.5 h-3.5 text-[#204CC7]" /><h3 className="text-black/90 text-body font-semibold">Strategic Notes</h3></div>
-                    <p className="text-black/65 text-body leading-relaxed">{selectedClient.notes}</p>
+                    <textarea
+                      value={selectedClient.notes}
+                      onChange={e => updateNotes(selectedClient.id, e.target.value)}
+                      rows={4}
+                      className="w-full text-body text-black/65 leading-relaxed bg-transparent border border-transparent rounded-lg px-0 py-0 resize-none focus:outline-none focus:border-black/10 focus:bg-black/[0.02] focus:px-3 focus:py-2 transition-all placeholder:text-black/30"
+                      placeholder="Add strategic notes..."
+                    />
                   </div>
                 </div>
 

@@ -6,14 +6,14 @@ import {
   AlertTriangle, ArrowRight,
   MessageSquare, Cake,
   FileText, Users, Target, Megaphone,
-  AlertCircle, TrendingUp, Shield, Clock,
+  AlertCircle, TrendingUp, Shield, Clock, Circle,
 } from 'lucide-react';
 
 // ═══════════════════════════════════════════════
 // ─── DASHBOARD DATA (from Workspace modules) ──
 // ═══════════════════════════════════════════════
 
-const todayISO = '2026-03-18';
+const todayISO = '2026-04-04';
 const greeting = 'Good morning';
 
 // My Assignments (from task-data.ts — user's own tasks grouped by priority)
@@ -21,30 +21,46 @@ interface MyTask {
   id: string;
   title: string;
   priority: 'P1' | 'P2' | 'P3';
-  status: 'Pending' | 'In Progress';
+  status: 'Pending' | 'Done';
   dueDate: string;
   dueDateISO: string;
   group: string;
   groupColor: string;
   project: 'BG' | 'A&T' | 'PM';
   projectColor: string;
+  assignee: { initials: string; color: string };
 }
 
 const myAssignments: MyTask[] = [
-  // P1
-  { id: 't1', title: 'Prepare and file monthly GST returns for active client accounts', priority: 'P1', status: 'Pending', dueDate: '24 Feb', dueDateISO: '2026-02-24', group: 'TechCorp India', groupColor: '#6366F1', project: 'A&T', projectColor: '#10B981' },
-  { id: 't8', title: 'Set up Google Ads campaign for Alpine Group Q2 launch', priority: 'P1', status: 'In Progress', dueDate: '18 Mar', dueDateISO: '2026-03-18', group: 'Alpine Group', groupColor: '#2563EB', project: 'PM', projectColor: '#3B82F6' },
-  { id: 't12', title: 'Submit monthly performance report to Alpine Group', priority: 'P1', status: 'Pending', dueDate: '15 Mar', dueDateISO: '2026-03-15', group: 'Alpine Group', groupColor: '#2563EB', project: 'PM', projectColor: '#3B82F6' },
-  { id: 't22', title: 'Standardize GST filing templates across all A&T clients', priority: 'P1', status: 'In Progress', dueDate: '23 Mar', dueDateISO: '2026-03-23', group: 'Brego Delivery Team', groupColor: '#204CC7', project: 'A&T', projectColor: '#10B981' },
-  { id: 't23', title: 'Conduct internal audit of Q4 tax filings for compliance gaps', priority: 'P1', status: 'Pending', dueDate: '25 Mar', dueDateISO: '2026-03-25', group: 'Brego Delivery Team', groupColor: '#204CC7', project: 'A&T', projectColor: '#10B981' },
-  { id: 't26', title: 'Build cross-client performance benchmarking dashboard', priority: 'P1', status: 'In Progress', dueDate: '23 Mar', dueDateISO: '2026-03-23', group: 'Brego Delivery Team', groupColor: '#204CC7', project: 'PM', projectColor: '#3B82F6' },
-  // P2
-  { id: 't2', title: 'Submit Q4 bank reconciliation statements', priority: 'P2', status: 'Pending', dueDate: '25 Feb', dueDateISO: '2026-02-25', group: 'Green Energy Industries', groupColor: '#10B981', project: 'A&T', projectColor: '#10B981' },
-  { id: 't4', title: 'Complete compliance audit checklist for RetailMax onboarding', priority: 'P2', status: 'Pending', dueDate: '27 Feb', dueDateISO: '2026-02-27', group: 'RetailMax', groupColor: '#14B8A6', project: 'A&T', projectColor: '#10B981' },
-  { id: 't9', title: 'Create Meta Ads creative variants for 99 Pancakes', priority: 'P2', status: 'Pending', dueDate: '19 Mar', dueDateISO: '2026-03-19', group: '99 Pancakes', groupColor: '#F97316', project: 'PM', projectColor: '#3B82F6' },
-  { id: 't6', title: 'Generate P&L statement and balance sheet for Q3 board review', priority: 'P2', status: 'Pending', dueDate: '10 Mar', dueDateISO: '2026-03-10', group: 'Fashion Forward Ltd', groupColor: '#F59E0B', project: 'A&T', projectColor: '#10B981' },
-  { id: 't25', title: 'Train new team members on TDS computation and filing process', priority: 'P2', status: 'Pending', dueDate: '26 Mar', dueDateISO: '2026-03-26', group: 'Brego Delivery Team', groupColor: '#204CC7', project: 'A&T', projectColor: '#10B981' },
-  { id: 't27', title: 'Define and document paid media SOP for new client onboarding', priority: 'P2', status: 'Pending', dueDate: '25 Mar', dueDateISO: '2026-03-25', group: 'Brego Delivery Team', groupColor: '#204CC7', project: 'PM', projectColor: '#3B82F6' },
+  // ── Client Tasks (various clients) ──
+  // Alpine Group — PM
+  { id: 't8', title: 'Set up Google Ads campaign for Alpine Group Q2 launch', priority: 'P1', status: 'Done', dueDate: '18 Mar', dueDateISO: '2026-03-18', group: 'Alpine Group', groupColor: '#2563EB', project: 'PM', projectColor: '#3B82F6', assignee: { initials: 'CP', color: '#7C3AED' } },
+  { id: 't12', title: 'Submit monthly performance report to Alpine Group', priority: 'P1', status: 'Pending', dueDate: '01 Apr', dueDateISO: '2026-04-01', group: 'Alpine Group', groupColor: '#2563EB', project: 'PM', projectColor: '#3B82F6', assignee: { initials: 'CP', color: '#7C3AED' } },
+  { id: 't30', title: 'Review and optimize Alpine Group landing page conversion funnel', priority: 'P2', status: 'Pending', dueDate: '08 Apr', dueDateISO: '2026-04-08', group: 'Alpine Group', groupColor: '#2563EB', project: 'PM', projectColor: '#3B82F6', assignee: { initials: 'HR', color: '#10B981' } },
+  // TechCorp India — A&T
+  { id: 't1', title: 'Prepare and file monthly GST returns for active client accounts', priority: 'P1', status: 'Done', dueDate: '24 Mar', dueDateISO: '2026-03-24', group: 'TechCorp India', groupColor: '#6366F1', project: 'A&T', projectColor: '#10B981', assignee: { initials: 'ZS', color: '#06B6D4' } },
+  { id: 't31', title: 'Reconcile TDS credit ledger with Form 26AS for Q4', priority: 'P1', status: 'Pending', dueDate: '03 Apr', dueDateISO: '2026-04-03', group: 'TechCorp India', groupColor: '#6366F1', project: 'A&T', projectColor: '#10B981', assignee: { initials: 'ZS', color: '#06B6D4' } },
+  // 99 Pancakes — PM
+  { id: 't9', title: 'Create Meta Ads creative variants for 99 Pancakes', priority: 'P1', status: 'Pending', dueDate: '02 Apr', dueDateISO: '2026-04-02', group: '99 Pancakes', groupColor: '#F97316', project: 'PM', projectColor: '#3B82F6', assignee: { initials: 'CP', color: '#7C3AED' } },
+  { id: 't32', title: 'Prepare April media plan and budget allocation', priority: 'P2', status: 'Pending', dueDate: '07 Apr', dueDateISO: '2026-04-07', group: '99 Pancakes', groupColor: '#F97316', project: 'PM', projectColor: '#3B82F6', assignee: { initials: 'HR', color: '#10B981' } },
+  // Green Energy Industries — A&T
+  { id: 't2', title: 'Submit Q4 bank reconciliation statements', priority: 'P1', status: 'Pending', dueDate: '31 Mar', dueDateISO: '2026-03-31', group: 'Green Energy Industries', groupColor: '#10B981', project: 'A&T', projectColor: '#10B981', assignee: { initials: 'ZS', color: '#06B6D4' } },
+  { id: 't33', title: 'Prepare advance tax computation for FY 2025-26', priority: 'P2', status: 'Pending', dueDate: '10 Apr', dueDateISO: '2026-04-10', group: 'Green Energy Industries', groupColor: '#10B981', project: 'A&T', projectColor: '#10B981', assignee: { initials: 'ML', color: '#F59E0B' } },
+  // RetailMax — A&T
+  { id: 't4', title: 'Complete compliance audit checklist for RetailMax onboarding', priority: 'P2', status: 'Done', dueDate: '27 Mar', dueDateISO: '2026-03-27', group: 'RetailMax', groupColor: '#14B8A6', project: 'A&T', projectColor: '#10B981', assignee: { initials: 'ML', color: '#F59E0B' } },
+  { id: 't34', title: 'Set up accounting ledger and chart of accounts', priority: 'P1', status: 'Pending', dueDate: '05 Apr', dueDateISO: '2026-04-05', group: 'RetailMax', groupColor: '#14B8A6', project: 'A&T', projectColor: '#10B981', assignee: { initials: 'ZS', color: '#06B6D4' } },
+  // Fashion Forward Ltd — A&T
+  { id: 't6', title: 'Generate P&L statement and balance sheet for Q3 board review', priority: 'P2', status: 'Done', dueDate: '10 Mar', dueDateISO: '2026-03-10', group: 'Fashion Forward Ltd', groupColor: '#F59E0B', project: 'A&T', projectColor: '#10B981', assignee: { initials: 'ML', color: '#F59E0B' } },
+  // UrbanNest Realty — PM
+  { id: 't35', title: 'Launch Google Performance Max campaign for UrbanNest Q2', priority: 'P1', status: 'Pending', dueDate: '06 Apr', dueDateISO: '2026-04-06', group: 'UrbanNest Realty', groupColor: '#8B5CF6', project: 'PM', projectColor: '#3B82F6', assignee: { initials: 'CP', color: '#7C3AED' } },
+  { id: 't36', title: 'Audit existing ad account structure and negative keywords', priority: 'P2', status: 'Pending', dueDate: '09 Apr', dueDateISO: '2026-04-09', group: 'UrbanNest Realty', groupColor: '#8B5CF6', project: 'PM', projectColor: '#3B82F6', assignee: { initials: 'HR', color: '#10B981' } },
+  // ── Brego Internal Tasks ──
+  { id: 't22', title: 'Standardize GST filing templates across all A&T clients', priority: 'P1', status: 'Done', dueDate: '23 Mar', dueDateISO: '2026-03-23', group: 'Brego Delivery Team', groupColor: '#204CC7', project: 'A&T', projectColor: '#10B981', assignee: { initials: 'ZS', color: '#06B6D4' } },
+  { id: 't23', title: 'Conduct internal audit of Q4 tax filings for compliance gaps', priority: 'P1', status: 'Pending', dueDate: '02 Apr', dueDateISO: '2026-04-02', group: 'Brego Delivery Team', groupColor: '#204CC7', project: 'A&T', projectColor: '#10B981', assignee: { initials: 'ZS', color: '#06B6D4' } },
+  { id: 't26', title: 'Build cross-client performance benchmarking dashboard', priority: 'P1', status: 'Pending', dueDate: '04 Apr', dueDateISO: '2026-04-04', group: 'Brego Delivery Team', groupColor: '#204CC7', project: 'PM', projectColor: '#3B82F6', assignee: { initials: 'CP', color: '#7C3AED' } },
+  { id: 't25', title: 'Train new team members on TDS computation and filing process', priority: 'P2', status: 'Pending', dueDate: '07 Apr', dueDateISO: '2026-04-07', group: 'Brego Delivery Team', groupColor: '#204CC7', project: 'A&T', projectColor: '#10B981', assignee: { initials: 'ML', color: '#F59E0B' } },
+  { id: 't27', title: 'Define and document paid media SOP for new client onboarding', priority: 'P2', status: 'Pending', dueDate: '08 Apr', dueDateISO: '2026-04-08', group: 'Brego Delivery Team', groupColor: '#204CC7', project: 'PM', projectColor: '#3B82F6', assignee: { initials: 'HR', color: '#10B981' } },
+  { id: 't37', title: 'Review and update employee KRA targets for Q2', priority: 'P2', status: 'Pending', dueDate: '11 Apr', dueDateISO: '2026-04-11', group: 'Brego Delivery Team', groupColor: '#204CC7', project: 'A&T', projectColor: '#10B981', assignee: { initials: 'TA', color: '#3B82F6' } },
 ];
 
 // Active Incidents (from IncidentData.tsx — Open/In Progress assigned to user)
@@ -110,8 +126,8 @@ interface PMAttentionItem {
 const pmAttention: PMAttentionItem[] = [
   // Onboarding
   { client: 'Nor Black Nor White', type: 'onboarding', stage: 'Not Started', detail: 'No team assigned yet', urgency: 'high', daysPending: 12 },
-  { client: 'Enagenbio', type: 'onboarding', stage: 'Awaiting Proposal', detail: 'Client waiting on proposal deck', urgency: 'high', daysPending: 8 },
-  { client: 'Una Homes LLP', type: 'onboarding', stage: 'Team Assigned', detail: 'Kickoff not scheduled yet', urgency: 'medium', daysPending: 5 },
+  { client: 'Enagenbio', type: 'onboarding', stage: 'Awaiting Proposal', detail: 'No teams assigned yet', urgency: 'high', daysPending: 8 },
+  { client: 'Una Homes LLP', type: 'onboarding', stage: 'Team Assigned', detail: 'Onboarding in progress', urgency: 'medium', daysPending: 5 },
   // Kickoff
   { client: 'Knickgasm', type: 'kickoff', stage: 'Negotiation', detail: 'Counter-proposal received — needs review', urgency: 'high', daysPending: 6 },
   // Growth Plans
@@ -151,7 +167,7 @@ const atAttention: ATAttentionItem[] = [
 
 // A&T category config for grouped rendering
 const atCategoryConfig: Record<string, { label: string; accent: string; bg: string; text: string }> = {
-  overdue:         { label: 'Overdue Tasks', accent: '#E2445C', bg: 'bg-rose-50', text: 'text-rose-600' },
+  overdue:         { label: 'Overdue Work', accent: '#E2445C', bg: 'bg-rose-50', text: 'text-rose-600' },
   'pending-kickoff': { label: 'New Client Setup', accent: '#F59E0B', bg: 'bg-amber-50', text: 'text-amber-700' },
 };
 
@@ -268,7 +284,8 @@ export function Dashboard() {
   const [atTab, setAtTab] = useState<'overdue' | 'pending-kickoff'>('overdue');
   const [pmPerfTab, setPmPerfTab] = useState<'ecommerce' | 'leadgen'>('ecommerce');
 
-  const filteredAssignments = taskFilter === 'all' ? myAssignments : myAssignments.filter(t => t.priority === taskFilter);
+  const pendingAssignments = myAssignments.filter(t => t.status === 'Pending');
+  const filteredAssignments = taskFilter === 'all' ? pendingAssignments : pendingAssignments.filter(t => t.priority === taskFilter);
 
   // Split: Client Tasks vs Brego Group
   const clientTasks = filteredAssignments.filter(t => t.group !== 'Brego Delivery Team');
@@ -305,7 +322,7 @@ export function Dashboard() {
   const bregoOverdue = bregoTasks.filter(t => daysUntil(t.dueDateISO) < 0).length;
 
   return (
-    <main className="h-[calc(100vh-53px)] overflow-y-auto bg-[#FAFBFC]" aria-label="Employee Dashboard">
+    <main className="h-[calc(100vh-53px)] overflow-y-auto bg-[#FAFBFC]" aria-label="Home">
       <div className="max-w-[1280px] mx-auto px-8 py-7 pb-12">
 
         {/* ── Greeting ── */}
@@ -347,8 +364,9 @@ export function Dashboard() {
             {/* ── Shared Priority Filter (above both widgets) ── */}
             {/* Rendered inside each widget header for visual cohesion */}
 
-            {/* ── Client Tasks Widget ── */}
+            {/* ── Client Tasks Widget (Basecamp-style) ── */}
             <section className="rounded-xl border border-black/[0.06] bg-white overflow-hidden flex flex-col" aria-label="Client task assignments">
+              {/* Header */}
               <div className="px-5 py-3.5 border-b border-black/[0.04] flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center" aria-hidden="true">
@@ -360,77 +378,89 @@ export function Dashboard() {
                     <span className="text-caption font-bold px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-500">{clientOverdue} overdue</span>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-0.5 bg-black/[0.03] rounded-lg p-0.5" role="radiogroup" aria-label="Filter client tasks by priority">
-                    {(['all', 'P1', 'P2'] as const).map(f => (
-                      <button
-                        key={f}
-                        role="radio"
-                        aria-checked={taskFilter === f}
-                        onClick={() => setTaskFilter(f)}
-                        className={`px-2 py-0.5 rounded-md text-caption font-semibold transition-all ${
-                          taskFilter === f ? 'bg-white shadow-sm text-[#204CC7]' : 'text-black/35 hover:text-black/55'
-                        }`}
-                      >
-                        {f === 'all' ? 'All' : f}
-                      </button>
-                    ))}
-                  </div>
+                <div className="flex items-center gap-0.5 bg-black/[0.03] rounded-lg p-0.5" role="radiogroup" aria-label="Filter client tasks by priority">
+                  {(['all', 'P1', 'P2'] as const).map(f => (
+                    <button
+                      key={f}
+                      role="radio"
+                      aria-checked={taskFilter === f}
+                      onClick={() => setTaskFilter(f)}
+                      className={`px-2.5 py-1 rounded-md text-caption font-semibold transition-all ${
+                        taskFilter === f ? 'bg-white shadow-sm text-[#204CC7]' : 'text-black/35 hover:text-black/55'
+                      }`}
+                    >
+                      {f === 'all' ? 'All' : f}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Client Task List — grouped by client name */}
-              <div className="flex-1 overflow-y-auto" style={{ maxHeight: '340px' }}>
+              {/* Task List — grouped by client */}
+              <div className="flex-1 overflow-y-auto" style={{ maxHeight: '400px' }}>
                 {clientSortedGroups.length === 0 ? (
                   <div className="px-5 py-10 text-center">
-                    <p className="text-body text-black/30">No {taskFilter} client tasks</p>
+                    <p className="text-body text-black/30">No {taskFilter === 'all' ? '' : taskFilter + ' '}pending client tasks</p>
                   </div>
                 ) : (
-                  <div className="divide-y divide-black/[0.04]">
+                  <div>
                     {clientSortedGroups.map(([groupName, tasks]) => (
                       <div key={groupName}>
-                        <div className="px-5 py-2 bg-black/[0.015] flex items-center justify-between">
+                        {/* Group header */}
+                        <div className="px-5 py-2 bg-black/[0.018] flex items-center justify-between border-b border-black/[0.04]">
                           <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: tasks[0].groupColor }} aria-hidden="true" />
-                            <span className="text-caption font-bold text-black/50">{groupName}</span>
+                            <span className="w-[5px] h-[5px] rounded-full" style={{ backgroundColor: tasks[0].groupColor }} aria-hidden="true" />
+                            <span className="text-caption font-bold text-black/55">{groupName}</span>
                             <span className="text-caption font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: `${tasks[0].projectColor}10`, color: tasks[0].projectColor }}>
                               {tasks[0].project}
                             </span>
                           </div>
-                          <span className="text-caption text-black/35">{tasks.length}</span>
+                          <span className="text-caption font-medium text-black/30">{tasks.length}</span>
                         </div>
+                        {/* Task rows */}
                         {tasks.map(task => {
                           const days = daysUntil(task.dueDateISO);
                           const overdue = days < 0;
                           const today = days === 0;
                           const urgent = days <= 2 && days >= 0;
-                          const ps = priorityStyles[task.priority];
                           return (
                             <div
                               key={task.id}
-                              className={`flex items-start gap-2.5 px-5 py-3 hover:bg-black/[0.008] focus-visible:ring-2 focus-visible:ring-[#204CC7]/20 focus-visible:outline-none transition-colors cursor-pointer border-l-[3px] ${
-                                overdue ? 'border-l-rose-400 bg-rose-50/30' : urgent ? 'border-l-amber-400' : 'border-l-transparent'
+                              className={`flex items-center gap-3 px-5 py-3 border-b border-black/[0.03] hover:bg-black/[0.01] transition-colors cursor-pointer group ${
+                                overdue ? 'bg-rose-50/40' : ''
                               }`}
                               role="button"
                               tabIndex={0}
                               onClick={() => router.push('/workspace')}
                               onKeyDown={(e) => handleKeyNav(e, () => router.push('/workspace'))}
-                              aria-label={`${task.priority} task: ${task.title}. ${task.status}. ${overdue ? `${Math.abs(days)} days overdue` : today ? 'Due today' : `Due ${task.dueDate}`}`}
+                              aria-label={`${task.priority} task: ${task.title}. Pending. ${overdue ? `${Math.abs(days)} days overdue` : today ? 'Due today' : `Due ${task.dueDate}`}`}
                             >
-                              <span className={`flex-shrink-0 mt-0.5 text-caption font-bold px-1.5 py-0.5 rounded ${ps.bg} ${ps.text}`}>
-                                {task.priority}
-                              </span>
+                              {/* Basecamp-style circle checkbox */}
+                              <Circle className={`w-[18px] h-[18px] flex-shrink-0 ${overdue ? 'text-rose-300' : 'text-black/15'} group-hover:text-[#204CC7]/40 transition-colors`} strokeWidth={2} />
+                              {/* Task content */}
                               <div className="flex-1 min-w-0">
-                                <p className={`text-body leading-snug ${overdue ? 'text-black/80 font-medium' : 'text-black/65'}`}>{task.title}</p>
-                                <span className={`inline-block mt-1 text-caption font-medium px-1.5 py-0.5 rounded ${
-                                  task.status === 'In Progress' ? 'bg-blue-50 text-blue-600' : 'bg-black/[0.03] text-black/30'
-                                }`}>{task.status === 'In Progress' ? 'Active' : 'Pending'}</span>
+                                <p className={`text-body leading-snug ${overdue ? 'text-black/80' : 'text-black/70'}`}>{task.title}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className={`text-caption font-bold ${task.priority === 'P1' ? 'text-red-500' : 'text-amber-500'}`}>{task.priority}</span>
+                                  <span className="text-black/10">·</span>
+                                  <span className={`text-caption font-medium ${
+                                    overdue ? 'text-rose-500' : today ? 'text-amber-600' : urgent ? 'text-amber-500' : 'text-black/35'
+                                  }`}>
+                                    {overdue ? `${Math.abs(days)}d overdue` : today ? 'Due today' : urgent ? `${days}d left` : `Due ${task.dueDate}`}
+                                  </span>
+                                  <span className="text-black/10">·</span>
+                                  <span className="inline-flex items-center gap-1 text-caption text-black/35">
+                                    <span className="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-600 font-semibold text-[11px] leading-none">Pending</span>
+                                  </span>
+                                </div>
                               </div>
-                              <span className={`flex-shrink-0 mt-0.5 text-caption font-semibold ${
-                                overdue ? 'text-rose-500' : today ? 'text-amber-600' : urgent ? 'text-amber-500' : 'text-black/30'
-                              }`}>
-                                {overdue ? `${Math.abs(days)}d overdue` : today ? 'Today' : urgent ? `${days}d left` : task.dueDate}
-                              </span>
+                              {/* Assignee avatar */}
+                              <div
+                                className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-white"
+                                style={{ backgroundColor: task.assignee.color }}
+                                title={task.assignee.initials}
+                              >
+                                {task.assignee.initials}
+                              </div>
                             </div>
                           );
                         })}
@@ -442,13 +472,14 @@ export function Dashboard() {
 
               <div className="px-5 py-2.5 border-t border-black/[0.04] bg-black/[0.01]">
                 <button onClick={() => router.push('/workspace')} className="text-caption font-semibold text-[#204CC7]/70 hover:text-[#204CC7] flex items-center gap-1 transition-colors">
-                  View all client tasks <ArrowRight className="w-3 h-3" />
+                  View all tasks <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
             </section>
 
-            {/* ── Brego Group Widget ── */}
+            {/* ── Brego Group Widget (Basecamp-style) ── */}
             <section className="rounded-xl border border-black/[0.06] bg-white overflow-hidden flex flex-col" aria-label="Brego internal task assignments">
+              {/* Header */}
               <div className="px-5 py-3.5 border-b border-black/[0.04] flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center" aria-hidden="true">
@@ -460,80 +491,92 @@ export function Dashboard() {
                     <span className="text-caption font-bold px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-500">{bregoOverdue} overdue</span>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-0.5 bg-black/[0.03] rounded-lg p-0.5" role="radiogroup" aria-label="Filter internal tasks by priority">
-                    {(['all', 'P1', 'P2'] as const).map(f => (
-                      <button
-                        key={f}
-                        role="radio"
-                        aria-checked={taskFilter === f}
-                        onClick={() => setTaskFilter(f)}
-                        className={`px-2 py-0.5 rounded-md text-caption font-semibold transition-all ${
-                          taskFilter === f ? 'bg-white shadow-sm text-[#204CC7]' : 'text-black/35 hover:text-black/55'
-                        }`}
-                      >
-                        {f === 'all' ? 'All' : f}
-                      </button>
-                    ))}
-                  </div>
+                <div className="flex items-center gap-0.5 bg-black/[0.03] rounded-lg p-0.5" role="radiogroup" aria-label="Filter internal tasks by priority">
+                  {(['all', 'P1', 'P2'] as const).map(f => (
+                    <button
+                      key={f}
+                      role="radio"
+                      aria-checked={taskFilter === f}
+                      onClick={() => setTaskFilter(f)}
+                      className={`px-2.5 py-1 rounded-md text-caption font-semibold transition-all ${
+                        taskFilter === f ? 'bg-white shadow-sm text-[#204CC7]' : 'text-black/35 hover:text-black/55'
+                      }`}
+                    >
+                      {f === 'all' ? 'All' : f}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Brego Task List — grouped by department (A&T / PM) */}
-              <div className="flex-1 overflow-y-auto" style={{ maxHeight: '340px' }}>
+              {/* Task List — grouped by department (A&T / PM) */}
+              <div className="flex-1 overflow-y-auto" style={{ maxHeight: '400px' }}>
                 {bregoSortedGroups.length === 0 ? (
                   <div className="px-5 py-10 text-center">
-                    <p className="text-body text-black/30">No {taskFilter} internal tasks</p>
+                    <p className="text-body text-black/30">No {taskFilter === 'all' ? '' : taskFilter + ' '}pending internal tasks</p>
                   </div>
                 ) : (
-                  <div className="divide-y divide-black/[0.04]">
+                  <div>
                     {bregoSortedGroups.map(([groupName, tasks]) => {
                       const deptColor = groupName === 'Accounts & Taxation' ? '#06B6D4' : '#7C3AED';
                       const deptLabel = groupName === 'Accounts & Taxation' ? 'A&T' : 'PM';
                       return (
                         <div key={groupName}>
-                          <div className="px-5 py-2 bg-black/[0.015] flex items-center justify-between">
+                          {/* Group header */}
+                          <div className="px-5 py-2 bg-black/[0.018] flex items-center justify-between border-b border-black/[0.04]">
                             <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: deptColor }} aria-hidden="true" />
-                              <span className="text-caption font-bold text-black/50">{groupName}</span>
+                              <span className="w-[5px] h-[5px] rounded-full" style={{ backgroundColor: deptColor }} aria-hidden="true" />
+                              <span className="text-caption font-bold text-black/55">{groupName}</span>
                               <span className="text-caption font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: `${deptColor}10`, color: deptColor }}>
                                 {deptLabel}
                               </span>
                             </div>
-                            <span className="text-caption text-black/35">{tasks.length}</span>
+                            <span className="text-caption font-medium text-black/30">{tasks.length}</span>
                           </div>
+                          {/* Task rows */}
                           {tasks.map(task => {
                             const days = daysUntil(task.dueDateISO);
                             const overdue = days < 0;
                             const today = days === 0;
                             const urgent = days <= 2 && days >= 0;
-                            const ps = priorityStyles[task.priority];
                             return (
                               <div
                                 key={task.id}
-                                className={`flex items-start gap-2.5 px-5 py-3 hover:bg-black/[0.008] focus-visible:ring-2 focus-visible:ring-[#204CC7]/20 focus-visible:outline-none transition-colors cursor-pointer border-l-[3px] ${
-                                  overdue ? 'border-l-rose-400 bg-rose-50/30' : urgent ? 'border-l-amber-400' : 'border-l-transparent'
+                                className={`flex items-center gap-3 px-5 py-3 border-b border-black/[0.03] hover:bg-black/[0.01] transition-colors cursor-pointer group ${
+                                  overdue ? 'bg-rose-50/40' : ''
                                 }`}
                                 role="button"
                                 tabIndex={0}
                                 onClick={() => router.push('/workspace')}
                                 onKeyDown={(e) => handleKeyNav(e, () => router.push('/workspace'))}
-                                aria-label={`${task.priority} task: ${task.title}. ${task.status}. ${overdue ? `${Math.abs(days)} days overdue` : today ? 'Due today' : `Due ${task.dueDate}`}`}
+                                aria-label={`${task.priority} task: ${task.title}. Pending. ${overdue ? `${Math.abs(days)} days overdue` : today ? 'Due today' : `Due ${task.dueDate}`}`}
                               >
-                                <span className={`flex-shrink-0 mt-0.5 text-caption font-bold px-1.5 py-0.5 rounded ${ps.bg} ${ps.text}`}>
-                                  {task.priority}
-                                </span>
+                                {/* Basecamp-style circle checkbox */}
+                                <Circle className={`w-[18px] h-[18px] flex-shrink-0 ${overdue ? 'text-rose-300' : 'text-black/15'} group-hover:text-[#204CC7]/40 transition-colors`} strokeWidth={2} />
+                                {/* Task content */}
                                 <div className="flex-1 min-w-0">
-                                  <p className={`text-body leading-snug ${overdue ? 'text-black/80 font-medium' : 'text-black/65'}`}>{task.title}</p>
-                                  <span className={`inline-block mt-1 text-caption font-medium px-1.5 py-0.5 rounded ${
-                                    task.status === 'In Progress' ? 'bg-blue-50 text-blue-600' : 'bg-black/[0.03] text-black/30'
-                                  }`}>{task.status === 'In Progress' ? 'Active' : 'Pending'}</span>
+                                  <p className={`text-body leading-snug ${overdue ? 'text-black/80' : 'text-black/70'}`}>{task.title}</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className={`text-caption font-bold ${task.priority === 'P1' ? 'text-red-500' : 'text-amber-500'}`}>{task.priority}</span>
+                                    <span className="text-black/10">·</span>
+                                    <span className={`text-caption font-medium ${
+                                      overdue ? 'text-rose-500' : today ? 'text-amber-600' : urgent ? 'text-amber-500' : 'text-black/35'
+                                    }`}>
+                                      {overdue ? `${Math.abs(days)}d overdue` : today ? 'Due today' : urgent ? `${days}d left` : `Due ${task.dueDate}`}
+                                    </span>
+                                    <span className="text-black/10">·</span>
+                                    <span className="inline-flex items-center gap-1 text-caption text-black/35">
+                                      <span className="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-600 font-semibold text-[11px] leading-none">Pending</span>
+                                    </span>
+                                  </div>
                                 </div>
-                                <span className={`flex-shrink-0 mt-0.5 text-caption font-semibold ${
-                                  overdue ? 'text-rose-500' : today ? 'text-amber-600' : urgent ? 'text-amber-500' : 'text-black/30'
-                                }`}>
-                                  {overdue ? `${Math.abs(days)}d overdue` : today ? 'Today' : urgent ? `${days}d left` : task.dueDate}
-                                </span>
+                                {/* Assignee avatar */}
+                                <div
+                                  className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-white"
+                                  style={{ backgroundColor: task.assignee.color }}
+                                  title={task.assignee.initials}
+                                >
+                                  {task.assignee.initials}
+                                </div>
                               </div>
                             );
                           })}
@@ -546,7 +589,7 @@ export function Dashboard() {
 
               <div className="px-5 py-2.5 border-t border-black/[0.04] bg-black/[0.01]">
                 <button onClick={() => router.push('/workspace')} className="text-caption font-semibold text-[#204CC7]/70 hover:text-[#204CC7] flex items-center gap-1 transition-colors">
-                  View all internal tasks <ArrowRight className="w-3 h-3" />
+                  View all tasks <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
             </section>
@@ -707,11 +750,11 @@ export function Dashboard() {
                       tabIndex={0}
                       onClick={() => router.push('/workspace')}
                       onKeyDown={(e) => handleKeyNav(e, () => router.push('/workspace'))}
-                      aria-label={`${item.urgency} urgency: ${item.client}. ${item.stage}. ${item.detail}`}
+                      aria-label={`${item.urgency} urgency: ${item.client}. Pending. ${item.detail}`}
                     >
                       <div className="flex items-center justify-between mb-0.5">
                         <span className="text-body font-medium text-black/75 truncate">{item.client}</span>
-                        <span className={`text-caption font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ml-2 ${cat.bg} ${cat.text}`}>{item.stage}</span>
+                        <span className="text-caption font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ml-2 bg-amber-50 text-amber-600">Pending</span>
                       </div>
                       <p className="text-caption text-black/55 leading-relaxed">{item.detail}</p>
                       {item.daysPending && (
@@ -747,7 +790,7 @@ export function Dashboard() {
               {/* Overdue / New Client Setup Tabs */}
               <div className="px-5 py-0 border-b border-black/[0.04] flex items-center gap-0" role="tablist" aria-label="A&T category">
                 {([
-                  { key: 'overdue' as const, label: 'Overdue Tasks' },
+                  { key: 'overdue' as const, label: 'Overdue Work' },
                   { key: 'pending-kickoff' as const, label: 'New Client Setup' },
                 ]).map(tab => {
                   const count = atAttention.filter(i => i.type === tab.key).length;

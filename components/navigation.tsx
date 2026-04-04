@@ -18,9 +18,9 @@ function MIcon({ name, className = '' }: { name: string; className?: string }) {
 }
 
 const navItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: 'space_dashboard', href: '/dashboard' },
+  { id: 'home',      label: 'Home', icon: 'space_dashboard', href: '/home' },
   { id: 'inbox',     label: 'Inbox',     icon: 'mail',            href: '/inbox' },
-  { id: 'reports',   label: 'Reports',   icon: 'monitoring',      href: '/reports' },
+  { id: 'dashboard', label: 'Dashboard',  icon: 'monitoring',      href: '/dashboard' },
   { id: 'workspace', label: 'Workspace', icon: 'work',            href: '/workspace' },
   { id: 'dataroom',  label: 'Dataroom',  icon: 'database',        href: '/dataroom' },
 ];
@@ -45,7 +45,7 @@ export function Navigation() {
         <div className="flex items-center justify-between h-[52px]">
           {/* ── Left: Logo (fixed width to balance right side) ── */}
           <div className="w-[200px] flex items-center">
-          <Link href="/dashboard" className="flex items-center gap-3" aria-label="Brego Business home">
+          <Link href="/home" className="flex items-center gap-3" aria-label="Brego Business home">
             <div
               className="w-9 h-9 rounded-xl flex items-center justify-center overflow-hidden"
               aria-hidden="true"

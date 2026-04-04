@@ -78,13 +78,6 @@ export function SalesReport() {
 
   return (
     <div className="space-y-7">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-black/90">Sales Reports</h2>
-          <p className="text-sm text-black/65 mt-1">Track pipeline, performance, and revenue metrics</p>
-        </div>
-      </div>
 
       {/* Key Metrics Cards */}
       <div className="grid grid-cols-4 gap-5">

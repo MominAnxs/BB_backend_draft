@@ -1,6 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
-import { Users, Search, Plus, X, AlertTriangle, CheckCircle, Clock, Award, TrendingUp, Filter, UserPlus, Building2, User, Briefcase, DollarSign, Home, ChevronDown, Check, Mail, RotateCcw, Trash2, Send } from 'lucide-react';
+import { Users, Search, Plus, X, AlertTriangle, CheckCircle, Clock, Award, TrendingUp, Filter, UserPlus, Building2, User, Briefcase, DollarSign, Home, ChevronDown, Check, Mail, RotateCcw, Trash2, Send, Shield, Eye, MessageSquare, FolderOpen, ListTodo, BarChart3, Settings } from 'lucide-react';
 
 interface Employee {
   id: number;
@@ -8,6 +8,7 @@ interface Employee {
   name: string;
   email: string;
   role: string;
+  designation: string;
   joiningDate: string;
   department: string;
   status: 'Confirmed' | 'Probation' | 'Intern';
@@ -40,17 +41,9 @@ interface Employee {
 const ROLES = [
   'Admin',
   'HOD',
-  'Sr. Manager',
   'Manager',
-  'Sr. Executive',
-  'Jr. Executive',
-  'Graphic Designer',
-  'Video Editor',
-  'Video Shooter',
-  'Motion Graphics',
-  'Performance Marketing Specialist',
-  'Finance Manager',
-  'Intern - Performance Marketing',
+  'Executive',
+  'Intern',
 ];
 
 const DEPARTMENTS = [
@@ -84,21 +77,27 @@ const REPORTING_MANAGERS = [
   'Harshal R.',
 ];
 
-// Mock clients list
-const AVAILABLE_CLIENTS = [
-  'All',
-  'Acme Corp',
-  'Tech Innovations',
-  'Global Exports',
-  'Sunrise Retail',
-  'FinTech Solutions',
-  'Urban Living',
-  'Retail Solutions',
-  'Media House Inc',
-  'Digital Dynamics',
-  'Cloud Systems',
-  'Smart Solutions',
-  'Enterprise Plus',
+// Mock clients list with service categorization
+interface ClientInfo {
+  name: string;
+  service: 'Performance Marketing' | 'Accounts & Taxation';
+}
+
+const AVAILABLE_CLIENTS: ClientInfo[] = [
+  // Performance Marketing clients
+  { name: 'Acme Corp', service: 'Performance Marketing' },
+  { name: 'Tech Innovations', service: 'Performance Marketing' },
+  { name: 'Global Exports', service: 'Performance Marketing' },
+  { name: 'Sunrise Retail', service: 'Performance Marketing' },
+  { name: 'Urban Living', service: 'Performance Marketing' },
+  { name: 'Digital Dynamics', service: 'Performance Marketing' },
+  { name: 'Smart Solutions', service: 'Performance Marketing' },
+  // Accounts & Taxation clients
+  { name: 'FinTech Solutions', service: 'Accounts & Taxation' },
+  { name: 'Retail Solutions', service: 'Accounts & Taxation' },
+  { name: 'Media House Inc', service: 'Accounts & Taxation' },
+  { name: 'Cloud Systems', service: 'Accounts & Taxation' },
+  { name: 'Enterprise Plus', service: 'Accounts & Taxation' },
 ];
 
 // --- Rating Options ---
@@ -214,10 +213,10 @@ function daysAgo(dateStr: string): number {
 }
 
 const INITIAL_INVITES: PendingInvite[] = [
-  { id: 101, name: 'Priya Sharma', email: 'priya.sharma@bregobusiness.com', role: 'Jr. Executive', department: 'Performance Marketing', invitedOn: '2026-03-28', invitedBy: 'Mihir L.', status: 'Pending' },
-  { id: 102, name: 'Arjun Mehta', email: 'arjun.mehta@bregobusiness.com', role: 'Sr. Executive', department: 'Finance', invitedOn: '2026-03-25', invitedBy: 'Zubear S.', status: 'Pending' },
-  { id: 103, name: 'Neha Desai', email: 'neha.desai@bregobusiness.com', role: 'Intern - Performance Marketing', department: 'Performance Marketing', invitedOn: '2026-03-18', invitedBy: 'Hooshang B.', status: 'Expired' },
-  { id: 104, name: 'Rohan Kulkarni', email: 'rohan.k@bregobusiness.com', role: 'Graphic Designer', department: 'Design', invitedOn: '2026-03-30', invitedBy: 'Harshal R.', status: 'Pending' },
+  { id: 101, name: 'Priya Sharma', email: 'priya.sharma@bregobusiness.com', role: 'Executive', department: 'Performance Marketing', invitedOn: '2026-03-28', invitedBy: 'Mihir L.', status: 'Pending' },
+  { id: 102, name: 'Arjun Mehta', email: 'arjun.mehta@bregobusiness.com', role: 'Executive', department: 'Finance', invitedOn: '2026-03-25', invitedBy: 'Zubear S.', status: 'Pending' },
+  { id: 103, name: 'Neha Desai', email: 'neha.desai@bregobusiness.com', role: 'Intern', department: 'Performance Marketing', invitedOn: '2026-03-18', invitedBy: 'Hooshang B.', status: 'Expired' },
+  { id: 104, name: 'Rohan Kulkarni', email: 'rohan.k@bregobusiness.com', role: 'Executive', department: 'Design', invitedOn: '2026-03-30', invitedBy: 'Harshal R.', status: 'Pending' },
 ];
 
 // --- Filter Types ---
@@ -276,6 +275,7 @@ export function EmployeesNew() {
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<EmployeeFilters>(DEFAULT_FILTERS);
   const [showPendingInvites, setShowPendingInvites] = useState(false);
+  const [showPermissions, setShowPermissions] = useState(false);
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>(INITIAL_INVITES);
 
   // Client assignment modal
@@ -293,6 +293,7 @@ export function EmployeesNew() {
       name: 'Mihir L. (Me)',
       email: 'mihir@bregobusiness.com',
       role: 'Admin',
+      designation: 'Founder & CEO',
       joiningDate: '6th Nov, 2025',
       department: 'All',
       status: 'Confirmed',
@@ -325,6 +326,7 @@ export function EmployeesNew() {
       name: 'Tejas A.',
       email: 'tejas@bregobusiness.com',
       role: 'HOD',
+      designation: 'Chief Operating Officer',
       joiningDate: '6th Nov, 2025',
       department: 'All',
       status: 'Confirmed',
@@ -357,6 +359,7 @@ export function EmployeesNew() {
       name: 'Zeel M.',
       email: 'zeel@bregobusiness.com',
       role: 'HOD',
+      designation: 'Head of Performance Marketing',
       joiningDate: '6th Nov, 2025',
       department: 'All',
       status: 'Confirmed',
@@ -389,6 +392,7 @@ export function EmployeesNew() {
       name: 'Hooshang B.',
       email: 'hooshang@bregobusiness.com',
       role: 'HOD',
+      designation: 'Head of Sales',
       joiningDate: '6th Nov, 2025',
       department: 'All',
       status: 'Confirmed',
@@ -421,6 +425,7 @@ export function EmployeesNew() {
       name: 'Zubear S.',
       email: 'zubear@bregobusiness.com',
       role: 'HOD',
+      designation: 'Head of Accounts & Taxation',
       joiningDate: '6th Nov, 2025',
       department: 'Finance',
       status: 'Confirmed',
@@ -453,6 +458,7 @@ export function EmployeesNew() {
       name: 'Irshad O.',
       email: 'irshad@bregobusiness.com',
       role: 'HOD',
+      designation: 'Head of Finance',
       joiningDate: '6th Nov, 2025',
       department: 'Finance',
       status: 'Confirmed',
@@ -484,7 +490,8 @@ export function EmployeesNew() {
       code: 'BRG007',
       name: 'Harshal R.',
       email: 'harshal.rane@example.com',
-      role: 'Operations',
+      role: 'Manager',
+      designation: 'Operations Manager',
       joiningDate: '6th Nov, 2025',
       department: 'All',
       status: 'Confirmed',
@@ -516,7 +523,8 @@ export function EmployeesNew() {
       code: 'BRG008',
       name: 'John Doe',
       email: 'john.doe@example.com',
-      role: 'Sr. Executive',
+      role: 'Executive',
+      designation: 'Performance Marketing Executive',
       joiningDate: '6th Nov, 2025',
       department: 'Performance Marketing',
       status: 'Confirmed',
@@ -548,7 +556,8 @@ export function EmployeesNew() {
       code: 'BRG009',
       name: 'Sarah Johnson',
       email: 'sarah.johnson@example.com',
-      role: 'Jr. Executive',
+      role: 'Executive',
+      designation: 'Performance Marketing Executive',
       joiningDate: '15th Dec, 2025',
       department: 'Performance Marketing',
       status: 'Probation',
@@ -641,7 +650,8 @@ export function EmployeesNew() {
     name: '',
     email: '',
     code: generateEmployeeCode(),
-    role: 'Jr. Executive',
+    role: 'Executive',
+    designation: '',
     department: 'Performance Marketing',
     status: 'Probation' as 'Confirmed' | 'Probation' | 'Intern',
     joiningDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).replace(/ /g, ' '),
@@ -736,6 +746,7 @@ export function EmployeesNew() {
       name: newEmployee.name,
       email: newEmployee.email,
       role: newEmployee.role,
+      designation: newEmployee.designation || '',
       department: newEmployee.role === 'Admin' ? 'All' : newEmployee.department,
       status: newEmployee.status,
       joiningDate: newEmployee.joiningDate,
@@ -771,7 +782,8 @@ export function EmployeesNew() {
       name: '',
       email: '',
       code: generateEmployeeCode(),
-      role: 'Jr. Executive',
+      role: 'Executive',
+      designation: '',
       department: 'Performance Marketing',
       status: 'Probation',
       joiningDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).replace(/ /g, ' '),
@@ -854,14 +866,21 @@ export function EmployeesNew() {
               )}
             </button>
             {activeView === 'all' && (
-              <button onClick={() => setShowPendingInvites(true)}
-                className="flex items-center gap-1.5 px-3 py-2 border border-black/10 rounded-lg bg-white text-black/70 hover:bg-black/5 transition-all text-caption font-medium">
-                <Mail className="w-3.5 h-3.5" />
-                <span>Pending Invites</span>
-                {pendingInvites.length > 0 && (
-                  <span className="min-w-[18px] h-[18px] rounded-full bg-[#FDAB3D] text-white text-[11px] font-bold flex items-center justify-center leading-none px-1">{pendingInvites.length}</span>
-                )}
-              </button>
+              <>
+                <button onClick={() => setShowPendingInvites(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 border border-black/10 rounded-lg bg-white text-black/70 hover:bg-black/5 transition-all text-caption font-medium">
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>Pending Invites</span>
+                  {pendingInvites.length > 0 && (
+                    <span className="min-w-[18px] h-[18px] rounded-full bg-[#FDAB3D] text-white text-[11px] font-bold flex items-center justify-center leading-none px-1">{pendingInvites.length}</span>
+                  )}
+                </button>
+                <button onClick={() => setShowPermissions(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 border border-black/10 rounded-lg bg-white text-black/70 hover:bg-black/5 transition-all text-caption font-medium">
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>Permissions</span>
+                </button>
+              </>
             )}
             <button
               onClick={() => {
@@ -1274,6 +1293,20 @@ export function EmployeesNew() {
                     </select>
                   </div>
 
+                  {/* Designation */}
+                  <div>
+                    <label className="block text-caption font-medium text-black/70 mb-2">
+                      Designation
+                    </label>
+                    <input
+                      type="text"
+                      value={newEmployee.designation}
+                      onChange={(e) => setNewEmployee({ ...newEmployee, designation: e.target.value })}
+                      placeholder="e.g. Marketing Executive"
+                      className="w-full px-3 py-2.5 text-body border border-black/10 rounded-xl bg-white text-black placeholder:text-black/30 focus:outline-none focus:ring-2 focus:ring-[#204CC7] focus:border-transparent transition-all"
+                    />
+                  </div>
+
                   {/* Department */}
                   <div>
                     <label className="block text-caption font-medium text-black/70 mb-2">
@@ -1385,8 +1418,39 @@ export function EmployeesNew() {
       {/* Client Assignment Modal */}
       {assignModalEmployee && (() => {
         const emp = employees.find(e => e.id === assignModalEmployee.id) ?? assignModalEmployee;
-        const filteredClients = AVAILABLE_CLIENTS.filter(c => c !== 'All' && c.toLowerCase().includes(assignSearch.toLowerCase()));
         const assignedSet = new Set(emp.assignedClients);
+        const searchLower = assignSearch.toLowerCase();
+        const filteredClients = AVAILABLE_CLIENTS.filter(c => c.name.toLowerCase().includes(searchLower));
+        const pmClients = filteredClients.filter(c => c.service === 'Performance Marketing');
+        const atClients = filteredClients.filter(c => c.service === 'Accounts & Taxation');
+        const pmAssignedCount = AVAILABLE_CLIENTS.filter(c => c.service === 'Performance Marketing' && assignedSet.has(c.name)).length;
+        const atAssignedCount = AVAILABLE_CLIENTS.filter(c => c.service === 'Accounts & Taxation' && assignedSet.has(c.name)).length;
+
+        const toggleAll = (service: 'Performance Marketing' | 'Accounts & Taxation') => {
+          const serviceClients = AVAILABLE_CLIENTS.filter(c => c.service === service).map(c => c.name);
+          const allAssigned = serviceClients.every(name => assignedSet.has(name));
+          setEmployees(prev => prev.map(e => {
+            if (e.id !== emp.id) return e;
+            const updated = allAssigned
+              ? e.assignedClients.filter(c => !serviceClients.includes(c))
+              : [...new Set([...e.assignedClients, ...serviceClients])];
+            return { ...e, assignedClients: updated };
+          }));
+        };
+
+        const ClientRow = ({ client }: { client: ClientInfo }) => {
+          const isAssigned = assignedSet.has(client.name);
+          return (
+            <button onClick={() => toggleClientAssignment(emp.id, client.name)}
+              className={`w-full flex items-center gap-3 px-5 py-2.5 transition-all ${isAssigned ? 'bg-[#204CC7]/[0.03]' : 'hover:bg-black/[0.02]'}`}>
+              <div className={`w-[18px] h-[18px] rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isAssigned ? 'border-[#204CC7] bg-[#204CC7]' : 'border-black/20'}`}>
+                {isAssigned && <Check className="w-3 h-3 text-white" />}
+              </div>
+              <span className={`text-body flex-1 text-left ${isAssigned ? 'text-black font-medium' : 'text-black/65'}`}>{client.name}</span>
+            </button>
+          );
+        };
+
         return (
           <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
@@ -1394,12 +1458,16 @@ export function EmployeesNew() {
               <div className="px-6 py-4 border-b border-black/[0.06] flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-[#204CC7]/[0.07] rounded-full flex items-center justify-center">
-                      <span className="text-[#204CC7] text-caption font-semibold">{emp.name.charAt(0)}</span>
+                    <div className="w-10 h-10 bg-[#204CC7]/[0.07] rounded-full flex items-center justify-center">
+                      <span className="text-[#204CC7] text-body font-semibold">{emp.name.charAt(0)}</span>
                     </div>
                     <div>
                       <h3 className="text-body font-semibold text-black">{emp.name}</h3>
-                      <p className="text-caption text-black/45">{emp.assignedClients.length} client{emp.assignedClients.length !== 1 ? 's' : ''} assigned</p>
+                      <p className="text-caption text-black/45">
+                        {emp.assignedClients.filter(c => c !== 'All').length === 0
+                          ? 'No clients assigned'
+                          : `${emp.assignedClients.filter(c => c !== 'All').length} client${emp.assignedClients.filter(c => c !== 'All').length !== 1 ? 's' : ''} assigned`}
+                      </p>
                     </div>
                   </div>
                   <button onClick={() => setAssignModalEmployee(null)} className="w-8 h-8 rounded-lg hover:bg-black/5 flex items-center justify-center transition-all">
@@ -1412,29 +1480,12 @@ export function EmployeesNew() {
                   <input
                     type="text" placeholder="Search clients..." value={assignSearch}
                     onChange={e => setAssignSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-caption border border-black/10 rounded-lg bg-white text-black placeholder:text-black/40 focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all"
+                    className="w-full pl-9 pr-3 py-2.5 text-body border border-black/10 rounded-xl bg-white text-black placeholder:text-black/40 focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all"
                   />
                 </div>
               </div>
 
-              {/* Assigned Clients (removable tags) */}
-              {emp.assignedClients.length > 0 && (
-                <div className="px-6 py-3 border-b border-black/[0.04] flex-shrink-0">
-                  <p className="text-caption text-black/40 font-medium mb-2">Assigned</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {emp.assignedClients.map(c => (
-                      <span key={c} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#204CC7]/[0.07] text-[#204CC7] text-caption font-medium">
-                        {c}
-                        <button onClick={() => toggleClientAssignment(emp.id, c)} className="hover:bg-[#204CC7]/10 rounded p-0.5 transition-all">
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Client List */}
+              {/* Client List — grouped by service */}
               <div className="flex-1 overflow-y-auto">
                 {filteredClients.length === 0 ? (
                   <div className="py-12 text-center">
@@ -1442,33 +1493,59 @@ export function EmployeesNew() {
                     <p className="text-black/45 text-caption">No clients match your search</p>
                   </div>
                 ) : (
-                  <div className="py-1">
-                    {filteredClients.map(client => {
-                      const isAssigned = assignedSet.has(client);
-                      return (
-                        <button key={client} onClick={() => toggleClientAssignment(emp.id, client)}
-                          className={`w-full flex items-center gap-3 px-6 py-2.5 transition-all ${isAssigned ? 'bg-[#204CC7]/[0.03]' : 'hover:bg-black/[0.02]'}`}>
-                          <div className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isAssigned ? 'border-[#204CC7] bg-[#204CC7]' : 'border-black/20'}`}>
-                            {isAssigned && <Check className="w-3 h-3 text-white" />}
+                  <>
+                    {/* Performance Marketing Section */}
+                    {pmClients.length > 0 && (
+                      <div>
+                        <div className="px-5 pt-4 pb-2 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-[#7C3AED]" />
+                            <span className="text-caption font-semibold text-black/70">Performance Marketing</span>
+                            <span className="text-caption text-black/30">{pmAssignedCount}/{pmClients.length}</span>
                           </div>
-                          <span className={`text-caption flex-1 text-left ${isAssigned ? 'text-black/90 font-medium' : 'text-black/65'}`}>{client}</span>
-                          {isAssigned && <span className="text-[11px] text-[#204CC7]/60 font-medium">Assigned</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
+                          <button
+                            onClick={() => toggleAll('Performance Marketing')}
+                            className="text-[11px] font-medium text-[#204CC7] hover:text-[#1a3d9f] transition-all"
+                          >
+                            {pmClients.every(c => assignedSet.has(c.name)) ? 'Deselect all' : 'Select all'}
+                          </button>
+                        </div>
+                        {pmClients.map(client => <ClientRow key={client.name} client={client} />)}
+                      </div>
+                    )}
+
+                    {/* Accounts & Taxation Section */}
+                    {atClients.length > 0 && (
+                      <div className={pmClients.length > 0 ? 'border-t border-black/[0.04]' : ''}>
+                        <div className="px-5 pt-4 pb-2 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-[#06B6D4]" />
+                            <span className="text-caption font-semibold text-black/70">Accounts & Taxation</span>
+                            <span className="text-caption text-black/30">{atAssignedCount}/{atClients.length}</span>
+                          </div>
+                          <button
+                            onClick={() => toggleAll('Accounts & Taxation')}
+                            className="text-[11px] font-medium text-[#204CC7] hover:text-[#1a3d9f] transition-all"
+                          >
+                            {atClients.every(c => assignedSet.has(c.name)) ? 'Deselect all' : 'Select all'}
+                          </button>
+                        </div>
+                        {atClients.map(client => <ClientRow key={client.name} client={client} />)}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
               {/* Footer */}
               <div className="px-6 py-3 border-t border-black/[0.06] flex items-center justify-between flex-shrink-0">
-                {emp.assignedClients.length > 0 ? (
+                {emp.assignedClients.filter(c => c !== 'All').length > 0 ? (
                   <button onClick={() => clearAllClients(emp.id)} className="text-caption text-[#E2445C] font-medium hover:text-[#d13a4f] transition-all">
                     Remove All
                   </button>
                 ) : <div />}
                 <button onClick={() => setAssignModalEmployee(null)}
-                  className="px-4 py-2 bg-[#204CC7] text-white rounded-lg text-caption font-medium hover:bg-[#1a3d9f] transition-all">
+                  className="px-5 py-2 bg-[#204CC7] text-white rounded-lg text-caption font-medium hover:bg-[#1a3d9f] transition-all">
                   Done
                 </button>
               </div>
@@ -1581,6 +1658,154 @@ export function EmployeesNew() {
         </div>
       )}
 
+      {/* Permissions Modal */}
+      {showPermissions && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowPermissions(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[680px] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-black/[0.06] flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-black text-h3 font-semibold">Role Permissions</h3>
+                  <p className="text-caption text-black/50 mt-0.5">Control what each role can do across the platform</p>
+                </div>
+                <button onClick={() => setShowPermissions(false)} aria-label="Close permissions"
+                  className="p-1.5 rounded-lg hover:bg-black/5 transition-colors text-black/40 hover:text-black/70">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Permissions Table */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              {/* Column Headers */}
+              <div className="grid grid-cols-[1fr_72px_72px_72px_72px_72px] gap-0 pb-2 mb-1 border-b border-black/[0.06]">
+                <span className="text-caption font-semibold text-black/40">Module</span>
+                {['Admin', 'HOD', 'Manager', 'Executive', 'Intern'].map(role => (
+                  <span key={role} className="text-caption font-semibold text-black/40 text-center">{role}</span>
+                ))}
+              </div>
+
+              {/* Permission Rows */}
+              {[
+                {
+                  module: 'Client Channels',
+                  icon: MessageSquare,
+                  desc: 'Message & call clients in Inbox',
+                  admin: 'full', hod: 'full', manager: 'full', executive: 'view', others: 'view',
+                },
+                {
+                  module: 'Internal Channels',
+                  icon: Users,
+                  desc: 'Team messaging & huddles',
+                  admin: 'full', hod: 'full', manager: 'full', executive: 'full', others: 'full',
+                },
+                {
+                  module: 'Client Tasks',
+                  icon: ListTodo,
+                  desc: 'Create & manage client tasks',
+                  admin: 'full', hod: 'full', manager: 'full', executive: 'view', others: 'none',
+                },
+                {
+                  module: 'Dataroom',
+                  icon: FolderOpen,
+                  desc: 'Upload & manage client files',
+                  admin: 'full', hod: 'full', manager: 'full', executive: 'view', others: 'view',
+                },
+                {
+                  module: 'Reports',
+                  icon: BarChart3,
+                  desc: 'View & export reports',
+                  admin: 'full', hod: 'full', manager: 'view', executive: 'view', others: 'none',
+                },
+                {
+                  module: 'Adminland',
+                  icon: Settings,
+                  desc: 'Employee mgmt, incidents, billing',
+                  admin: 'full', hod: 'view', manager: 'none', executive: 'none', others: 'none',
+                },
+                {
+                  module: 'Onboarding',
+                  icon: Briefcase,
+                  desc: 'Manage client onboarding',
+                  admin: 'full', hod: 'full', manager: 'full', executive: 'view', others: 'none',
+                },
+              ].map((row) => {
+                const Icon = row.icon;
+                const levels = [row.admin, row.hod, row.manager, row.executive, row.others];
+                return (
+                  <div key={row.module} className="grid grid-cols-[1fr_72px_72px_72px_72px_72px] gap-0 py-3 border-b border-black/[0.03] items-center">
+                    {/* Module info */}
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-black/[0.03] flex items-center justify-center flex-shrink-0">
+                        <Icon className="w-3.5 h-3.5 text-black/40" />
+                      </div>
+                      <div>
+                        <p className="text-body font-medium text-black/75">{row.module}</p>
+                        <p className="text-caption text-black/40">{row.desc}</p>
+                      </div>
+                    </div>
+                    {/* Access levels */}
+                    {levels.map((level, i) => (
+                      <div key={i} className="flex justify-center">
+                        {level === 'full' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600 text-[11px] font-semibold leading-none">
+                            Full
+                          </span>
+                        ) : level === 'view' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-600 text-[11px] font-semibold leading-none">
+                            View
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/[0.03] text-black/25 text-[11px] font-semibold leading-none">
+                            None
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+
+              {/* Legend */}
+              <div className="flex items-center gap-4 mt-4 pt-3 border-t border-black/[0.04]">
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600 text-[11px] font-semibold leading-none">Full</span>
+                  <span className="text-caption text-black/40">Create, edit, delete</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-600 text-[11px] font-semibold leading-none">View</span>
+                  <span className="text-caption text-black/40">Read only</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-black/[0.03] text-black/25 text-[11px] font-semibold leading-none">None</span>
+                  <span className="text-caption text-black/40">No access</span>
+                </div>
+              </div>
+
+              {/* Key Rule Callout */}
+              <div className="mt-4 px-4 py-3 rounded-xl bg-[#F6F7FF] border border-[#204CC7]/10">
+                <div className="flex items-start gap-2.5">
+                  <Shield className="w-4 h-4 text-[#204CC7] mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-body font-medium text-[#204CC7]">Client communication is restricted</p>
+                    <p className="text-caption text-black/50 mt-0.5">Only Admins, HODs, and Managers can message or call clients in Inbox. Executives and other roles have view-only access to client channels, tasks, and files.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-3 border-t border-black/[0.06] flex-shrink-0">
+              <button onClick={() => setShowPermissions(false)}
+                className="w-full px-3 py-2.5 border border-black/10 text-black/70 rounded-xl hover:bg-black/[0.03] transition-all text-caption font-semibold">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Employee Details Drawer */}
       {selectedEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-end">
@@ -1615,7 +1840,10 @@ export function EmployeesNew() {
                 </div>
                 <div className="flex-1">
                   <h3 className="text-h3 font-semibold text-black">{selectedEmployee.name}</h3>
-                  <p className="text-body text-black/50 mt-0.5">
+                  {selectedEmployee.designation && (
+                    <p className="text-body text-black/70 mt-0.5">{selectedEmployee.designation}</p>
+                  )}
+                  <p className={`text-caption text-black/40 ${selectedEmployee.designation ? 'mt-0.5' : 'mt-1'}`}>
                     {selectedEmployee.code} • {selectedEmployee.role}
                   </p>
                 </div>
@@ -1741,25 +1969,34 @@ export function EmployeesNew() {
 
                   {/* Assigned Clients */}
                   <div className="bg-[#F6F7FF] rounded-lg p-4">
-                    <h3 className="text-body font-semibold text-black mb-3">Assigned Clients</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedEmployee.assignedClients.length > 0 ? (
-                        selectedEmployee.assignedClients.map((client) => (
-                          <span
-                            key={client}
-                            className="px-3 py-1.5 bg-[#204CC7]/10 text-[#204CC7] text-caption font-medium rounded-lg"
-                          >
-                            {client}
-                          </span>
-                        ))
-                      ) : (
-                        <p className="text-caption text-black/55">No clients assigned</p>
-                      )}
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-body font-semibold text-black">Assigned Clients</h3>
                       <button onClick={(e) => { e.stopPropagation(); setAssignModalEmployee(selectedEmployee); setAssignSearch(''); }}
-                        className="px-3 py-1.5 text-caption font-medium rounded-lg border border-black/10 text-black/70 hover:bg-black/5 transition-all">
-                        Assign Clients
+                        className="text-caption font-medium text-[#204CC7] hover:text-[#1a3d9f] transition-all">
+                        Manage
                       </button>
                     </div>
+                    {selectedEmployee.assignedClients.filter(c => c !== 'All').length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedEmployee.assignedClients.filter(c => c !== 'All').map((clientName) => {
+                          const clientInfo = AVAILABLE_CLIENTS.find(c => c.name === clientName);
+                          const isPM = clientInfo?.service === 'Performance Marketing';
+                          return (
+                            <span
+                              key={clientName}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-caption font-medium rounded-lg ${
+                                isPM ? 'bg-[#7C3AED]/10 text-[#7C3AED]' : 'bg-[#06B6D4]/10 text-[#06B6D4]'
+                              }`}
+                            >
+                              <div className={`w-1.5 h-1.5 rounded-full ${isPM ? 'bg-[#7C3AED]' : 'bg-[#06B6D4]'}`} />
+                              {clientName}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-caption text-black/45">No clients assigned</p>
+                    )}
                   </div>
 
                   {/* Relationship Status */}

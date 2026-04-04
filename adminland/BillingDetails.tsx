@@ -1,764 +1,820 @@
 'use client';
 import { useState } from 'react';
-import { 
-  Search, 
-  Filter, 
-  Download, 
-  Plus, 
-  Edit3, 
-  Trash2, 
-  Calendar, 
-  DollarSign, 
-  FileText, 
+import {
+  Search,
+  Plus,
+  Calendar,
   TrendingUp,
   Clock,
   CheckCircle2,
   AlertCircle,
-  MoreVertical,
   X,
   ChevronDown,
+  ChevronRight,
   Building2,
-  CreditCard,
   RefreshCw,
-  Send
+  FileText,
+  IndianRupee,
+  Users,
+  Eye,
 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
 
-type BillingType = 'RETAINER' | 'OTS';
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+type BillingType = 'Retainer' | 'One-Time';
 type ServiceType = 'Performance Marketing' | 'Accounts & Taxation';
-type PaymentStatus = 'Paid' | 'Pending' | 'Overdue' | 'Cancelled';
-type InvoiceStatus = 'Sent' | 'Draft' | 'Scheduled';
+type PaymentStatus = 'Paid' | 'Pending' | 'Overdue';
 
-interface BillingRecord {
+interface BillingAccount {
   id: string;
-  clientName: string;
-  companyName: string;
-  billingType: BillingType;
   serviceType: ServiceType;
-  monthlyAmount: number;
-  nextBillingDate: string;
+  billingType: BillingType;
+  amount: number;
   paymentStatus: PaymentStatus;
-  invoiceStatus: InvoiceStatus;
-  contractStartDate: string;
-  contractEndDate: string;
+  nextBillingDate: string;
+  contractStart: string;
+  contractEnd: string;
   accountManager: string;
-  lastPaymentDate: string;
   outstandingAmount: number;
-  totalRevenue: number;
-  notes: string;
 }
 
+interface Business {
+  id: string;
+  name: string;
+  accounts: BillingAccount[];
+}
+
+interface Client {
+  id: string;
+  name: string;
+  email: string;
+  businesses: Business[];
+}
+
+// ── Mock Data ──────────────────────────────────────────────────────────────────
+
+const MOCK_CLIENTS: Client[] = [
+  {
+    id: 'c1',
+    name: 'Rajesh Kumar',
+    email: 'rajesh@techsolutions.in',
+    businesses: [
+      {
+        id: 'b1',
+        name: 'Tech Solutions Pvt Ltd',
+        accounts: [
+          {
+            id: 'a1',
+            serviceType: 'Performance Marketing',
+            billingType: 'Retainer',
+            amount: 75000,
+            paymentStatus: 'Paid',
+            nextBillingDate: '2026-05-01',
+            contractStart: '2025-08-01',
+            contractEnd: '2026-08-01',
+            accountManager: 'Zeel M.',
+            outstandingAmount: 0,
+          },
+          {
+            id: 'a2',
+            serviceType: 'Accounts & Taxation',
+            billingType: 'Retainer',
+            amount: 40000,
+            paymentStatus: 'Pending',
+            nextBillingDate: '2026-04-15',
+            contractStart: '2025-10-01',
+            contractEnd: '2026-10-01',
+            accountManager: 'Zubear S.',
+            outstandingAmount: 40000,
+          },
+        ],
+      },
+      {
+        id: 'b2',
+        name: 'Tech Solutions LLP',
+        accounts: [
+          {
+            id: 'a3',
+            serviceType: 'Accounts & Taxation',
+            billingType: 'One-Time',
+            amount: 25000,
+            paymentStatus: 'Paid',
+            nextBillingDate: '',
+            contractStart: '2026-01-10',
+            contractEnd: '2026-03-10',
+            accountManager: 'Zubear S.',
+            outstandingAmount: 0,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'c2',
+    name: 'Sunita Verma',
+    email: 'sunita@edutech.co.in',
+    businesses: [
+      {
+        id: 'b3',
+        name: 'EduTech Innovations',
+        accounts: [
+          {
+            id: 'a4',
+            serviceType: 'Performance Marketing',
+            billingType: 'Retainer',
+            amount: 120000,
+            paymentStatus: 'Overdue',
+            nextBillingDate: '2026-04-05',
+            contractStart: '2025-06-01',
+            contractEnd: '2026-12-01',
+            accountManager: 'Zeel M.',
+            outstandingAmount: 120000,
+          },
+        ],
+      },
+      {
+        id: 'b4',
+        name: 'EduTech Foundation',
+        accounts: [
+          {
+            id: 'a5',
+            serviceType: 'Accounts & Taxation',
+            billingType: 'Retainer',
+            amount: 35000,
+            paymentStatus: 'Paid',
+            nextBillingDate: '2026-04-20',
+            contractStart: '2025-11-01',
+            contractEnd: '2026-11-01',
+            accountManager: 'Irshad O.',
+            outstandingAmount: 0,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'c3',
+    name: 'Vikram Patel',
+    email: 'vikram@greenenergy.in',
+    businesses: [
+      {
+        id: 'b5',
+        name: 'GreenEnergy Corp',
+        accounts: [
+          {
+            id: 'a6',
+            serviceType: 'Accounts & Taxation',
+            billingType: 'Retainer',
+            amount: 60000,
+            paymentStatus: 'Paid',
+            nextBillingDate: '2026-04-30',
+            contractStart: '2025-07-01',
+            contractEnd: '2026-07-01',
+            accountManager: 'Irshad O.',
+            outstandingAmount: 0,
+          },
+          {
+            id: 'a7',
+            serviceType: 'Performance Marketing',
+            billingType: 'Retainer',
+            amount: 90000,
+            paymentStatus: 'Pending',
+            nextBillingDate: '2026-04-10',
+            contractStart: '2026-01-01',
+            contractEnd: '2027-01-01',
+            accountManager: 'Hooshang B.',
+            outstandingAmount: 90000,
+          },
+        ],
+      },
+      {
+        id: 'b6',
+        name: 'GreenEnergy Solar LLP',
+        accounts: [
+          {
+            id: 'a8',
+            serviceType: 'Performance Marketing',
+            billingType: 'One-Time',
+            amount: 50000,
+            paymentStatus: 'Paid',
+            nextBillingDate: '',
+            contractStart: '2026-02-01',
+            contractEnd: '2026-04-01',
+            accountManager: 'Hooshang B.',
+            outstandingAmount: 0,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'c4',
+    name: 'Meera Nair',
+    email: 'meera@fashionforward.in',
+    businesses: [
+      {
+        id: 'b7',
+        name: 'Fashion Forward Pvt Ltd',
+        accounts: [
+          {
+            id: 'a9',
+            serviceType: 'Performance Marketing',
+            billingType: 'One-Time',
+            amount: 95000,
+            paymentStatus: 'Pending',
+            nextBillingDate: '2026-04-10',
+            contractStart: '2026-01-15',
+            contractEnd: '2026-04-15',
+            accountManager: 'Zeel M.',
+            outstandingAmount: 95000,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'c5',
+    name: 'Karthik Iyer',
+    email: 'karthik@fintechsol.com',
+    businesses: [
+      {
+        id: 'b8',
+        name: 'FinTech Solutions Ltd',
+        accounts: [
+          {
+            id: 'a10',
+            serviceType: 'Performance Marketing',
+            billingType: 'Retainer',
+            amount: 150000,
+            paymentStatus: 'Paid',
+            nextBillingDate: '2026-05-01',
+            contractStart: '2025-09-01',
+            contractEnd: '2027-09-01',
+            accountManager: 'Hooshang B.',
+            outstandingAmount: 0,
+          },
+        ],
+      },
+      {
+        id: 'b9',
+        name: 'FinTech Capital',
+        accounts: [
+          {
+            id: 'a11',
+            serviceType: 'Accounts & Taxation',
+            billingType: 'Retainer',
+            amount: 55000,
+            paymentStatus: 'Paid',
+            nextBillingDate: '2026-04-25',
+            contractStart: '2025-12-01',
+            contractEnd: '2026-12-01',
+            accountManager: 'Zubear S.',
+            outstandingAmount: 0,
+          },
+          {
+            id: 'a12',
+            serviceType: 'Performance Marketing',
+            billingType: 'One-Time',
+            amount: 80000,
+            paymentStatus: 'Overdue',
+            nextBillingDate: '2026-03-20',
+            contractStart: '2026-02-01',
+            contractEnd: '2026-05-01',
+            accountManager: 'Zeel M.',
+            outstandingAmount: 80000,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'c6',
+    name: 'Anil Mehta',
+    email: 'anil@healthcareplus.in',
+    businesses: [
+      {
+        id: 'b10',
+        name: 'HealthCare Plus',
+        accounts: [
+          {
+            id: 'a13',
+            serviceType: 'Accounts & Taxation',
+            billingType: 'One-Time',
+            amount: 45000,
+            paymentStatus: 'Pending',
+            nextBillingDate: '2026-04-25',
+            contractStart: '2026-01-10',
+            contractEnd: '2026-03-10',
+            accountManager: 'Irshad O.',
+            outstandingAmount: 45000,
+          },
+        ],
+      },
+    ],
+  },
+];
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function getAllAccounts(clients: Client[]): (BillingAccount & { clientName: string; businessName: string })[] {
+  return clients.flatMap(c =>
+    c.businesses.flatMap(b =>
+      b.accounts.map(a => ({ ...a, clientName: c.name, businessName: b.name }))
+    )
+  );
+}
+
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
+
+const formatDate = (dateString: string) => {
+  if (!dateString) return '—';
+  return new Date(dateString).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const statusStyle = (s: PaymentStatus) => {
+  switch (s) {
+    case 'Paid': return 'bg-emerald-50 text-emerald-700';
+    case 'Pending': return 'bg-amber-50 text-amber-600';
+    case 'Overdue': return 'bg-red-50 text-red-600';
+  }
+};
+
+const statusIcon = (s: PaymentStatus) => {
+  switch (s) {
+    case 'Paid': return <CheckCircle2 className="w-3 h-3" />;
+    case 'Pending': return <Clock className="w-3 h-3" />;
+    case 'Overdue': return <AlertCircle className="w-3 h-3" />;
+  }
+};
+
+const serviceColor = (s: ServiceType) =>
+  s === 'Performance Marketing'
+    ? { dot: 'bg-[#7C3AED]', bg: 'bg-[#7C3AED]/10 text-[#7C3AED]' }
+    : { dot: 'bg-[#06B6D4]', bg: 'bg-[#06B6D4]/10 text-[#06B6D4]' };
+
+// ── Component ──────────────────────────────────────────────────────────────────
+
 export function BillingDetails() {
+  const [clients] = useState<Client[]>(MOCK_CLIENTS);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedBillingType, setSelectedBillingType] = useState<BillingType | 'all'>('all');
-  const [selectedServiceType, setSelectedServiceType] = useState<ServiceType | 'all'>('all');
-  const [selectedPaymentStatus, setSelectedPaymentStatus] = useState<PaymentStatus | 'all'>('all');
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedRecord, setSelectedRecord] = useState<BillingRecord | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
-  const [selectedRecords, setSelectedRecords] = useState<Set<string>>(new Set());
+  const [filterService, setFilterService] = useState<ServiceType | 'all'>('all');
+  const [filterStatus, setFilterStatus] = useState<PaymentStatus | 'all'>('all');
+  const [filterBilling, setFilterBilling] = useState<BillingType | 'all'>('all');
+  const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
+  const [expandedBusinesses, setExpandedBusinesses] = useState<Set<string>>(new Set());
+  const [detailClient, setDetailClient] = useState<Client | null>(null);
 
-  // Sample billing data
-  const [billingRecords] = useState<BillingRecord[]>([
-    {
-      id: '1',
-      clientName: 'Rajesh Kumar',
-      companyName: 'Tech Solutions Pvt Ltd',
-      billingType: 'RETAINER',
-      serviceType: 'Performance Marketing',
-      monthlyAmount: 75000,
-      nextBillingDate: '2026-02-01',
-      paymentStatus: 'Paid',
-      invoiceStatus: 'Sent',
-      contractStartDate: '2025-08-01',
-      contractEndDate: '2026-08-01',
-      accountManager: 'Priya Sharma',
-      lastPaymentDate: '2026-01-05',
-      outstandingAmount: 0,
-      totalRevenue: 375000,
-      notes: 'Quarterly review scheduled for March 2026'
-    },
-    {
-      id: '2',
-      clientName: 'Anil Mehta',
-      companyName: 'HealthCare Plus',
-      billingType: 'OTS',
-      serviceType: 'Accounts & Taxation',
-      monthlyAmount: 45000,
-      nextBillingDate: '2026-01-25',
-      paymentStatus: 'Pending',
-      invoiceStatus: 'Sent',
-      contractStartDate: '2026-01-10',
-      contractEndDate: '2026-03-10',
-      accountManager: 'Amit Singh',
-      lastPaymentDate: '',
-      outstandingAmount: 45000,
-      totalRevenue: 45000,
-      notes: 'One-time tax filing service'
-    },
-    {
-      id: '3',
-      clientName: 'Sunita Verma',
-      companyName: 'EduTech Innovations',
-      billingType: 'RETAINER',
-      serviceType: 'Performance Marketing',
-      monthlyAmount: 120000,
-      nextBillingDate: '2026-02-05',
-      paymentStatus: 'Overdue',
-      invoiceStatus: 'Sent',
-      contractStartDate: '2025-06-01',
-      contractEndDate: '2026-12-01',
-      accountManager: 'Kavita Reddy',
-      lastPaymentDate: '2025-12-03',
-      outstandingAmount: 120000,
-      totalRevenue: 840000,
-      notes: 'Follow up on overdue payment - contacted on Jan 15'
-    },
-    {
-      id: '4',
-      clientName: 'Vikram Patel',
-      companyName: 'GreenEnergy Corp',
-      billingType: 'RETAINER',
-      serviceType: 'Accounts & Taxation',
-      monthlyAmount: 60000,
-      nextBillingDate: '2026-01-30',
-      paymentStatus: 'Paid',
-      invoiceStatus: 'Sent',
-      contractStartDate: '2025-07-01',
-      contractEndDate: '2026-07-01',
-      accountManager: 'Ravi Kumar',
-      lastPaymentDate: '2026-01-02',
-      outstandingAmount: 0,
-      totalRevenue: 360000,
-      notes: 'Annual contract renewal due July 2026'
-    },
-    {
-      id: '5',
-      clientName: 'Meera Nair',
-      companyName: 'Fashion Forward Pvt Ltd',
-      billingType: 'OTS',
-      serviceType: 'Performance Marketing',
-      monthlyAmount: 95000,
-      nextBillingDate: '2026-02-10',
-      paymentStatus: 'Pending',
-      invoiceStatus: 'Draft',
-      contractStartDate: '2026-01-15',
-      contractEndDate: '2026-04-15',
-      accountManager: 'Priya Sharma',
-      lastPaymentDate: '',
-      outstandingAmount: 95000,
-      totalRevenue: 95000,
-      notes: 'Campaign launch for Spring collection'
-    },
-    {
-      id: '6',
-      clientName: 'Karthik Iyer',
-      companyName: 'FinTech Solutions Ltd',
-      billingType: 'RETAINER',
-      serviceType: 'Performance Marketing',
-      monthlyAmount: 150000,
-      nextBillingDate: '2026-02-01',
-      paymentStatus: 'Paid',
-      invoiceStatus: 'Sent',
-      contractStartDate: '2025-09-01',
-      contractEndDate: '2027-09-01',
-      accountManager: 'Amit Singh',
-      lastPaymentDate: '2026-01-01',
-      outstandingAmount: 0,
-      totalRevenue: 600000,
-      notes: '2-year contract, premium tier client'
-    },
-  ]);
-
-  // Filter records
-  const filteredRecords = billingRecords.filter(record => {
-    const matchesSearch = 
-      record.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      record.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      record.accountManager.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesBillingType = selectedBillingType === 'all' || record.billingType === selectedBillingType;
-    const matchesServiceType = selectedServiceType === 'all' || record.serviceType === selectedServiceType;
-    const matchesPaymentStatus = selectedPaymentStatus === 'all' || record.paymentStatus === selectedPaymentStatus;
-
-    return matchesSearch && matchesBillingType && matchesServiceType && matchesPaymentStatus;
-  });
-
-  // Calculate stats
-  const stats = {
-    totalClients: filteredRecords.length,
-    retainerClients: filteredRecords.filter(r => r.billingType === 'RETAINER').length,
-    otsClients: filteredRecords.filter(r => r.billingType === 'OTS').length,
-    totalMRR: filteredRecords
-      .filter(r => r.billingType === 'RETAINER')
-      .reduce((sum, r) => sum + r.monthlyAmount, 0),
-    pendingAmount: filteredRecords
-      .filter(r => r.paymentStatus === 'Pending' || r.paymentStatus === 'Overdue')
-      .reduce((sum, r) => sum + r.outstandingAmount, 0),
-    overdueCount: filteredRecords.filter(r => r.paymentStatus === 'Overdue').length,
+  // ── Filtering ──
+  const matchesAccount = (a: BillingAccount) => {
+    if (filterService !== 'all' && a.serviceType !== filterService) return false;
+    if (filterStatus !== 'all' && a.paymentStatus !== filterStatus) return false;
+    if (filterBilling !== 'all' && a.billingType !== filterBilling) return false;
+    return true;
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  const filteredClients = clients
+    .filter(c => {
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const nameMatch = c.name.toLowerCase().includes(q);
+        const bizMatch = c.businesses.some(b => b.name.toLowerCase().includes(q));
+        if (!nameMatch && !bizMatch) return false;
+      }
+      return c.businesses.some(b => b.accounts.some(matchesAccount));
+    });
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
+  // ── Stats ──
+  const allAccounts = getAllAccounts(clients);
+  const totalClients = clients.length;
+  const totalBusinesses = clients.reduce((s, c) => s + c.businesses.length, 0);
+  const totalAccounts = allAccounts.length;
+  const mrr = allAccounts.filter(a => a.billingType === 'Retainer').reduce((s, a) => s + a.amount, 0);
+  const pendingAmount = allAccounts.filter(a => a.paymentStatus === 'Pending' || a.paymentStatus === 'Overdue').reduce((s, a) => s + a.outstandingAmount, 0);
+  const overdueCount = allAccounts.filter(a => a.paymentStatus === 'Overdue').length;
+
+  // ── Expand/collapse ──
+  const toggleClient = (id: string) => {
+    setExpandedClients(prev => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
     });
   };
 
-  const getPaymentStatusColor = (status: PaymentStatus) => {
-    switch (status) {
-      case 'Paid':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      case 'Pending':
-        return 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'Overdue':
-        return 'bg-red-50 text-red-700 border-red-200';
-      case 'Cancelled':
-        return 'bg-gray-50 text-gray-700 border-gray-200';
-    }
+  const toggleBusiness = (id: string) => {
+    setExpandedBusinesses(prev => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
   };
 
-  const getBillingTypeColor = (type: BillingType) => {
-    return type === 'RETAINER' 
-      ? 'bg-[#204CC7]/10 text-[#204CC7] border-[#204CC7]/20' 
-      : 'bg-purple-50 text-purple-700 border-purple-200';
-  };
-
-  const handleSelectRecord = (id: string) => {
-    const newSelected = new Set(selectedRecords);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
-    } else {
-      newSelected.add(id);
-    }
-    setSelectedRecords(newSelected);
-  };
-
-  const handleSelectAll = () => {
-    if (selectedRecords.size === filteredRecords.length) {
-      setSelectedRecords(new Set());
-    } else {
-      setSelectedRecords(new Set(filteredRecords.map(r => r.id)));
-    }
-  };
+  const activeFilterCount = [filterService, filterStatus, filterBilling].filter(v => v !== 'all').length;
 
   return (
     <div className="space-y-5">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-h1 font-semibold text-black/90">Billing Details</h1>
-          <p className="text-black/55 text-body mt-1">Manage client billing and invoicing across all services</p>
+          <h1 className="text-h1 font-semibold text-black/90">Billing</h1>
+          <p className="text-black/50 text-body mt-1">Manage clients, businesses, and billing accounts</p>
         </div>
-        <button 
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#204CC7] text-white rounded-xl hover:bg-[#1a3da0] transition-all"
-        >
+        <button className="flex items-center gap-2 px-4 py-2.5 bg-[#204CC7] text-white rounded-xl text-body font-medium hover:bg-[#1a3da0] transition-all">
           <Plus className="w-4 h-4" />
-          Add Billing Record
+          Add Billing
         </button>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-        <div className="bg-white border border-black/5 rounded-xl p-4 hover:border-black/10 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-black/50 text-caption">Total Clients</span>
-            <Building2 className="w-4 h-4 text-black/20" />
+      {/* Stats */}
+      <div className="grid grid-cols-6 gap-4">
+        {[
+          { label: 'Total Clients', value: totalClients, sub: 'Active clients', icon: <Users className="w-4 h-4 text-black/20" />, color: 'text-black/90' },
+          { label: 'Businesses', value: totalBusinesses, sub: 'Across all clients', icon: <Building2 className="w-4 h-4 text-black/20" />, color: 'text-black/90' },
+          { label: 'Billing Accounts', value: totalAccounts, sub: 'PM & A&T combined', icon: <FileText className="w-4 h-4 text-black/20" />, color: 'text-black/90' },
+          { label: 'Monthly Recurring', value: formatCurrency(mrr), sub: 'From retainers', icon: <TrendingUp className="w-4 h-4 text-emerald-400" />, color: 'text-emerald-600' },
+          { label: 'Pending Amount', value: formatCurrency(pendingAmount), sub: 'Outstanding', icon: <Clock className="w-4 h-4 text-amber-400" />, color: 'text-amber-600' },
+          { label: 'Overdue', value: overdueCount, sub: 'Requires follow-up', icon: <AlertCircle className="w-4 h-4 text-red-400" />, color: 'text-red-600' },
+        ].map(s => (
+          <div key={s.label} className="bg-white border border-black/[0.06] rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-black/50 text-caption">{s.label}</span>
+              {s.icon}
+            </div>
+            <div className={`text-h2 font-semibold ${s.color}`}>{s.value}</div>
+            <div className="text-caption text-black/30 mt-1">{s.sub}</div>
           </div>
-          <div className="text-h1 font-semibold text-black/90">{stats.totalClients}</div>
-          <div className="text-caption text-black/30 mt-1">Active billing records</div>
-        </div>
-
-        <div className="bg-white border border-black/5 rounded-xl p-4 hover:border-black/10 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-black/50 text-caption">Retainer</span>
-            <RefreshCw className="w-4 h-4 text-[#204CC7]/40" />
-          </div>
-          <div className="text-h1 font-semibold text-[#204CC7]">{stats.retainerClients}</div>
-          <div className="text-caption text-black/30 mt-1">Recurring contracts</div>
-        </div>
-
-        <div className="bg-white border border-black/5 rounded-xl p-4 hover:border-black/10 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-black/50 text-caption">One-Time</span>
-            <FileText className="w-4 h-4 text-purple-400" />
-          </div>
-          <div className="text-h1 font-semibold text-purple-600">{stats.otsClients}</div>
-          <div className="text-caption text-black/30 mt-1">OTS projects</div>
-        </div>
-
-        <div className="bg-white border border-black/5 rounded-xl p-4 hover:border-black/10 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-black/50 text-caption">Monthly Recurring</span>
-            <TrendingUp className="w-4 h-4 text-emerald-400" />
-          </div>
-          <div className="text-h1 font-semibold text-emerald-600">{formatCurrency(stats.totalMRR)}</div>
-          <div className="text-caption text-black/30 mt-1">MRR from retainers</div>
-        </div>
-
-        <div className="bg-white border border-black/5 rounded-xl p-4 hover:border-black/10 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-black/50 text-caption">Pending Amount</span>
-            <Clock className="w-4 h-4 text-amber-400" />
-          </div>
-          <div className="text-h1 font-semibold text-amber-600">{formatCurrency(stats.pendingAmount)}</div>
-          <div className="text-caption text-black/30 mt-1">Outstanding payments</div>
-        </div>
-
-        <div className="bg-white border border-black/5 rounded-xl p-4 hover:border-black/10 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-black/50 text-caption">Overdue</span>
-            <AlertCircle className="w-4 h-4 text-red-400" />
-          </div>
-          <div className="text-h1 font-semibold text-red-600">{stats.overdueCount}</div>
-          <div className="text-caption text-black/30 mt-1">Requires follow-up</div>
-        </div>
+        ))}
       </div>
 
-      {/* Filters and Search */}
-      <div className="bg-white border border-black/5 rounded-xl p-4">
-        <div className="flex flex-col lg:flex-row gap-3">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-black/55" />
-            <input
-              type="text"
-              placeholder="Search by client, company, or account manager..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-96 pl-8 pr-7 py-2 bg-white border border-black/10 rounded-lg text-caption text-black placeholder-black/40 focus:outline-none focus:border-[#204CC7] focus:ring-2 focus:ring-[#204CC7]/10 transition-all"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-black/55 hover:text-black/70 transition-colors"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-
-          {/* Filter Toggle */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`px-3 py-2 border text-caption font-medium rounded-lg transition-colors flex items-center gap-1.5 ${
-              showFilters 
-                ? 'bg-[#204CC7]/10 text-[#204CC7] border-[#204CC7]/20' 
-                : 'bg-white text-black/70 border-black/10 hover:bg-black/5'
-            }`}
-          >
-            <Filter className="w-3.5 h-3.5" />
-            Filters
-            {(selectedBillingType !== 'all' || selectedServiceType !== 'all' || selectedPaymentStatus !== 'all') && (
-              <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
-            )}
-          </button>
-
-          {/* Export */}
-          <button className="px-3 py-2 bg-white border border-black/10 text-black/70 text-caption font-medium rounded-lg hover:bg-black/5 transition-colors flex items-center gap-1.5">
-            <Download className="w-3.5 h-3.5" />
-            Export
-          </button>
-
-          {/* Bulk Actions (shown when records are selected) */}
-          {selectedRecords.size > 0 && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-[#204CC7]/10 border border-[#204CC7]/20 rounded-lg">
-              <span className="text-caption text-[#204CC7] font-medium">
-                {selectedRecords.size} selected
-              </span>
-              <button className="ml-1 p-1 hover:bg-[#204CC7]/20 rounded transition-all">
-                <Send className="w-3.5 h-3.5 text-[#204CC7]" />
-              </button>
-              <button 
-                onClick={() => setSelectedRecords(new Set())}
-                className="p-1 hover:bg-[#204CC7]/20 rounded transition-all"
-              >
-                <X className="w-3.5 h-3.5 text-[#204CC7]" />
-              </button>
-            </div>
+      {/* Search + Filters */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-black/40" />
+          <input
+            type="text"
+            placeholder="Search clients or businesses..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-8 py-2.5 bg-white border border-black/10 rounded-xl text-body text-black placeholder-black/40 focus:outline-none focus:border-[#204CC7] focus:ring-2 focus:ring-[#204CC7]/10 transition-all"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2">
+              <X className="w-3 h-3 text-black/40" />
+            </button>
           )}
         </div>
 
-        {/* Expanded Filters */}
-        {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 pt-4 border-t border-black/5">
-            <div>
-              <label className="block text-caption text-black/50 mb-2">Billing Type</label>
-              <select
-                value={selectedBillingType}
-                onChange={(e) => setSelectedBillingType(e.target.value as BillingType | 'all')}
-                className="w-full px-3 py-2 bg-black/5 border border-transparent rounded-xl text-body focus:bg-white focus:border-black/10 focus:outline-none transition-all"
-              >
-                <option value="all">All Types</option>
-                <option value="RETAINER">Retainer</option>
-                <option value="OTS">One-Time Service</option>
-              </select>
-            </div>
+        <select
+          value={filterService}
+          onChange={e => setFilterService(e.target.value as ServiceType | 'all')}
+          className="px-3 py-2.5 bg-white border border-black/10 rounded-xl text-body text-black/70 focus:outline-none focus:border-[#204CC7] transition-all appearance-none cursor-pointer pr-8"
+          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+        >
+          <option value="all">All Services</option>
+          <option value="Performance Marketing">Performance Marketing</option>
+          <option value="Accounts & Taxation">Accounts & Taxation</option>
+        </select>
 
-            <div>
-              <label className="block text-caption text-black/50 mb-2">Service Type</label>
-              <select
-                value={selectedServiceType}
-                onChange={(e) => setSelectedServiceType(e.target.value as ServiceType | 'all')}
-                className="w-full px-3 py-2 bg-black/5 border border-transparent rounded-xl text-body focus:bg-white focus:border-black/10 focus:outline-none transition-all"
-              >
-                <option value="all">All Services</option>
-                <option value="Performance Marketing">Performance Marketing</option>
-                <option value="Accounts & Taxation">Accounts & Taxation</option>
-              </select>
-            </div>
+        <select
+          value={filterBilling}
+          onChange={e => setFilterBilling(e.target.value as BillingType | 'all')}
+          className="px-3 py-2.5 bg-white border border-black/10 rounded-xl text-body text-black/70 focus:outline-none focus:border-[#204CC7] transition-all appearance-none cursor-pointer pr-8"
+          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+        >
+          <option value="all">All Types</option>
+          <option value="Retainer">Retainer</option>
+          <option value="One-Time">One-Time</option>
+        </select>
 
-            <div>
-              <label className="block text-caption text-black/50 mb-2">Payment Status</label>
-              <select
-                value={selectedPaymentStatus}
-                onChange={(e) => setSelectedPaymentStatus(e.target.value as PaymentStatus | 'all')}
-                className="w-full px-3 py-2 bg-black/5 border border-transparent rounded-xl text-body focus:bg-white focus:border-black/10 focus:outline-none transition-all"
-              >
-                <option value="all">All Statuses</option>
-                <option value="Paid">Paid</option>
-                <option value="Pending">Pending</option>
-                <option value="Overdue">Overdue</option>
-                <option value="Cancelled">Cancelled</option>
-              </select>
-            </div>
+        <select
+          value={filterStatus}
+          onChange={e => setFilterStatus(e.target.value as PaymentStatus | 'all')}
+          className="px-3 py-2.5 bg-white border border-black/10 rounded-xl text-body text-black/70 focus:outline-none focus:border-[#204CC7] transition-all appearance-none cursor-pointer pr-8"
+          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+        >
+          <option value="all">All Statuses</option>
+          <option value="Paid">Paid</option>
+          <option value="Pending">Pending</option>
+          <option value="Overdue">Overdue</option>
+        </select>
+
+        {activeFilterCount > 0 && (
+          <button
+            onClick={() => { setFilterService('all'); setFilterBilling('all'); setFilterStatus('all'); }}
+            className="text-caption font-medium text-[#204CC7] hover:text-[#1a3d9f] transition-all"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {/* Client List */}
+      <div className="bg-white border border-black/[0.06] rounded-xl overflow-hidden">
+        {filteredClients.length === 0 ? (
+          <div className="text-center py-16">
+            <Building2 className="w-10 h-10 text-black/10 mx-auto mb-2" />
+            <p className="text-black/50 text-body">No clients match your search</p>
+            <p className="text-black/30 text-caption mt-1">Try adjusting your filters</p>
+          </div>
+        ) : (
+          <div>
+            {filteredClients.map((client, ci) => {
+              const isExpanded = expandedClients.has(client.id);
+              const clientAccounts = client.businesses.flatMap(b => b.accounts);
+              const clientTotal = clientAccounts.reduce((s, a) => s + a.amount, 0);
+              const clientOutstanding = clientAccounts.reduce((s, a) => s + a.outstandingAmount, 0);
+              const hasOverdue = clientAccounts.some(a => a.paymentStatus === 'Overdue');
+              const hasPending = clientAccounts.some(a => a.paymentStatus === 'Pending');
+
+              return (
+                <div key={client.id} className={ci > 0 ? 'border-t border-black/[0.06]' : ''}>
+                  {/* Client Row */}
+                  <button
+                    onClick={() => toggleClient(client.id)}
+                    className="w-full flex items-center gap-4 px-5 py-4 hover:bg-black/[0.015] transition-all text-left"
+                  >
+                    <div className={`w-5 h-5 flex items-center justify-center transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                      <ChevronRight className="w-4 h-4 text-black/30" />
+                    </div>
+
+                    <div className="w-9 h-9 bg-[#204CC7]/[0.07] rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-[#204CC7] text-caption font-semibold">{client.name.charAt(0)}</span>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-body font-semibold text-black">{client.name}</span>
+                        <span className="text-caption text-black/30">{client.email}</span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <span className="text-caption text-black/45">
+                          {client.businesses.length} business{client.businesses.length !== 1 ? 'es' : ''}
+                        </span>
+                        <span className="text-black/10">·</span>
+                        <span className="text-caption text-black/45">
+                          {clientAccounts.length} account{clientAccounts.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 flex-shrink-0">
+                      {hasOverdue && (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-50 text-red-600 text-[11px] font-semibold">
+                          <AlertCircle className="w-3 h-3" />
+                          Overdue
+                        </span>
+                      )}
+                      {hasPending && !hasOverdue && (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 text-amber-600 text-[11px] font-semibold">
+                          <Clock className="w-3 h-3" />
+                          Pending
+                        </span>
+                      )}
+                      {clientOutstanding > 0 && (
+                        <div className="text-right">
+                          <p className="text-caption text-black/40">Outstanding</p>
+                          <p className="text-body font-semibold text-red-600">{formatCurrency(clientOutstanding)}</p>
+                        </div>
+                      )}
+                      <div className="text-right">
+                        <p className="text-caption text-black/40">Total billing</p>
+                        <p className="text-body font-semibold text-black/80">{formatCurrency(clientTotal)}</p>
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDetailClient(client); }}
+                        className="w-8 h-8 rounded-lg hover:bg-black/5 flex items-center justify-center transition-all"
+                        title="View details"
+                      >
+                        <Eye className="w-4 h-4 text-black/30" />
+                      </button>
+                    </div>
+                  </button>
+
+                  {/* Expanded: Business list */}
+                  {isExpanded && (
+                    <div className="pb-2">
+                      {client.businesses.map(biz => {
+                        const filteredAccounts = biz.accounts.filter(matchesAccount);
+                        if (filteredAccounts.length === 0) return null;
+                        const bizExpanded = expandedBusinesses.has(biz.id);
+
+                        return (
+                          <div key={biz.id} className="mx-5 mb-2">
+                            {/* Business header */}
+                            <button
+                              onClick={() => toggleBusiness(biz.id)}
+                              className="w-full flex items-center gap-3 px-4 py-3 bg-black/[0.02] hover:bg-black/[0.04] rounded-xl transition-all text-left"
+                            >
+                              <div className={`transition-transform ${bizExpanded ? 'rotate-90' : ''}`}>
+                                <ChevronRight className="w-3.5 h-3.5 text-black/30" />
+                              </div>
+                              <Building2 className="w-4 h-4 text-black/30" />
+                              <span className="text-body font-medium text-black/80">{biz.name}</span>
+                              <span className="text-caption text-black/35 ml-1">
+                                {filteredAccounts.length} account{filteredAccounts.length !== 1 ? 's' : ''}
+                              </span>
+                              <div className="flex-1" />
+                              <div className="flex items-center gap-1.5">
+                                {filteredAccounts.map(a => (
+                                  <div key={a.id} className={`w-1.5 h-1.5 rounded-full ${serviceColor(a.serviceType).dot}`} title={a.serviceType} />
+                                ))}
+                              </div>
+                            </button>
+
+                            {/* Account cards */}
+                            {bizExpanded && (
+                              <div className="mt-2 space-y-2 pl-8">
+                                {filteredAccounts.map(acc => {
+                                  const sc = serviceColor(acc.serviceType);
+                                  return (
+                                    <div key={acc.id} className="flex items-center gap-4 px-4 py-3 bg-white border border-black/[0.06] rounded-xl">
+                                      {/* Service badge */}
+                                      <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${sc.bg}`}>
+                                        <div className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
+                                        {acc.serviceType === 'Performance Marketing' ? 'PM' : 'A&T'}
+                                      </div>
+
+                                      {/* Billing type */}
+                                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium ${
+                                        acc.billingType === 'Retainer'
+                                          ? 'bg-[#204CC7]/[0.07] text-[#204CC7]'
+                                          : 'bg-black/[0.04] text-black/50'
+                                      }`}>
+                                        {acc.billingType === 'Retainer' ? <RefreshCw className="w-3 h-3" /> : <FileText className="w-3 h-3" />}
+                                        {acc.billingType}
+                                      </span>
+
+                                      {/* Amount */}
+                                      <div className="flex items-center gap-1">
+                                        <IndianRupee className="w-3 h-3 text-black/30" />
+                                        <span className="text-body font-semibold text-black/80">{formatCurrency(acc.amount)}</span>
+                                        {acc.billingType === 'Retainer' && <span className="text-caption text-black/30">/mo</span>}
+                                      </div>
+
+                                      <div className="flex-1" />
+
+                                      {/* Next billing */}
+                                      {acc.nextBillingDate && (
+                                        <div className="flex items-center gap-1.5 text-caption text-black/45">
+                                          <Calendar className="w-3 h-3" />
+                                          {formatDate(acc.nextBillingDate)}
+                                        </div>
+                                      )}
+
+                                      {/* Manager */}
+                                      <span className="text-caption text-black/45">{acc.accountManager}</span>
+
+                                      {/* Status */}
+                                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${statusStyle(acc.paymentStatus)}`}>
+                                        {statusIcon(acc.paymentStatus)}
+                                        {acc.paymentStatus}
+                                      </span>
+
+                                      {/* Outstanding */}
+                                      {acc.outstandingAmount > 0 && (
+                                        <span className="text-caption font-semibold text-red-600">
+                                          {formatCurrency(acc.outstandingAmount)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Billing Records Table */}
-      <div className="bg-white border border-black/5 rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-black/5 border-b border-black/5">
-              <tr>
-                <th className="text-left px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={selectedRecords.size === filteredRecords.length && filteredRecords.length > 0}
-                    onChange={handleSelectAll}
-                    className="w-4 h-4 rounded border-black/20 text-[#204CC7] focus:ring-[#204CC7]"
-                  />
-                </th>
-                <th className="text-left px-4 py-3 text-caption font-medium text-black/50">Client / Company</th>
-                <th className="text-left px-4 py-3 text-caption font-medium text-black/50">Billing Type</th>
-                <th className="text-left px-4 py-3 text-caption font-medium text-black/50">Service</th>
-                <th className="text-left px-4 py-3 text-caption font-medium text-black/50">Amount</th>
-                <th className="text-left px-4 py-3 text-caption font-medium text-black/50">Next Billing</th>
-                <th className="text-left px-4 py-3 text-caption font-medium text-black/50">Payment Status</th>
-                <th className="text-left px-4 py-3 text-caption font-medium text-black/50">Outstanding</th>
-                <th className="text-left px-4 py-3 text-caption font-medium text-black/50">Account Manager</th>
-                <th className="text-left px-4 py-3 text-caption font-medium text-black/50">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-black/5">
-              {filteredRecords.map((record) => (
-                <tr 
-                  key={record.id}
-                  className="hover:bg-black/[0.02] transition-colors"
-                >
-                  <td className="px-4 py-4">
-                    <input
-                      type="checkbox"
-                      checked={selectedRecords.has(record.id)}
-                      onChange={() => handleSelectRecord(record.id)}
-                      className="w-4 h-4 rounded border-black/20 text-[#204CC7] focus:ring-[#204CC7]"
-                    />
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="flex flex-col">
-                      <span className="text-body font-medium text-black/90">{record.clientName}</span>
-                      <span className="text-caption text-black/55">{record.companyName}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-caption font-medium border ${getBillingTypeColor(record.billingType)}`}>
-                      {record.billingType === 'RETAINER' ? <RefreshCw className="w-3 h-3" /> : <FileText className="w-3 h-3" />}
-                      {record.billingType}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className="text-body text-black/60">{record.serviceType}</span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className="text-body font-medium text-black/90">{formatCurrency(record.monthlyAmount)}</span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-1.5 text-body text-black/60">
-                      <Calendar className="w-3.5 h-3.5 text-black/30" />
-                      {formatDate(record.nextBillingDate)}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-caption font-medium border ${getPaymentStatusColor(record.paymentStatus)}`}>
-                      {record.paymentStatus === 'Paid' ? <CheckCircle2 className="w-3 h-3" /> : 
-                       record.paymentStatus === 'Overdue' ? <AlertCircle className="w-3 h-3" /> : 
-                       <Clock className="w-3 h-3" />}
-                      {record.paymentStatus}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className={`text-body font-medium ${record.outstandingAmount > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                      {record.outstandingAmount > 0 ? formatCurrency(record.outstandingAmount) : '₹0'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className="text-body text-black/60">{record.accountManager}</span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-1">
-                      <button 
-                        onClick={() => {
-                          setSelectedRecord(record);
-                          setShowEditModal(true);
-                        }}
-                        className="p-2 hover:bg-black/5 rounded-lg transition-all group"
-                        title="Edit"
-                      >
-                        <Edit3 className="w-4 h-4 text-black/30 group-hover:text-[#204CC7]" />
-                      </button>
-                      <button 
-                        className="p-2 hover:bg-black/5 rounded-lg transition-all group"
-                        title="More options"
-                      >
-                        <MoreVertical className="w-4 h-4 text-black/30 group-hover:text-black/60" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {filteredRecords.length === 0 && (
-            <div className="text-center py-12">
-              <FileText className="w-12 h-12 text-black/10 mx-auto mb-3" />
-              <p className="text-black/55 text-body">No billing records found</p>
-              <p className="text-black/30 text-caption mt-1">Try adjusting your filters or search query</p>
+      {/* Client Detail Drawer */}
+      {detailClient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-end">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setDetailClient(null)} />
+          <div className="relative w-full max-w-lg h-full bg-white shadow-2xl overflow-y-auto" style={{ animation: 'slideIn 0.2s ease-out' }}>
+            {/* Drawer Header */}
+            <div className="sticky top-0 bg-white border-b border-black/[0.06] px-6 py-4 flex items-center justify-between z-10">
+              <h2 className="text-h2 font-semibold text-black">Client Overview</h2>
+              <button onClick={() => setDetailClient(null)} className="w-8 h-8 rounded-lg border border-black/10 hover:bg-black/5 flex items-center justify-center transition-all">
+                <X className="w-4 h-4 text-black/50" />
+              </button>
             </div>
-          )}
-        </div>
-      </div>
 
-      {/* Add/Edit Modal */}
-      <BillingModal
-        isOpen={showAddModal || showEditModal}
-        onClose={() => {
-          setShowAddModal(false);
-          setShowEditModal(false);
-          setSelectedRecord(null);
-        }}
-        record={selectedRecord}
-        isEdit={showEditModal}
-      />
-    </div>
-  );
-}
-
-// Billing Modal Component
-interface BillingModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  record: BillingRecord | null;
-  isEdit: boolean;
-}
-
-function BillingModal({ isOpen, onClose, record, isEdit }: BillingModalProps) {
-  const [formData, setFormData] = useState({
-    clientName: record?.clientName || '',
-    companyName: record?.companyName || '',
-    billingType: record?.billingType || 'RETAINER' as BillingType,
-    serviceType: record?.serviceType || 'Performance Marketing' as ServiceType,
-    monthlyAmount: record?.monthlyAmount || 0,
-    nextBillingDate: record?.nextBillingDate || '',
-    paymentStatus: record?.paymentStatus || 'Pending' as PaymentStatus,
-    contractStartDate: record?.contractStartDate || '',
-    contractEndDate: record?.contractEndDate || '',
-    accountManager: record?.accountManager || '',
-    notes: record?.notes || '',
-  });
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? 'Edit Billing Record' : 'Add New Billing Record'}</DialogTitle>
-          <DialogDescription>
-            {isEdit ? 'Update billing information for this client' : 'Create a new billing record for a client'}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
-          {/* Client Information */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-body font-medium text-black/70 mb-2">Client Name</label>
-              <input
-                type="text"
-                value={formData.clientName}
-                onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
-                className="w-full px-3 py-2 bg-black/5 border border-transparent rounded-xl text-body focus:bg-white focus:border-black/10 focus:outline-none transition-all"
-                placeholder="Enter client name"
-              />
-            </div>
-            <div>
-              <label className="block text-body font-medium text-black/70 mb-2">Company Name</label>
-              <input
-                type="text"
-                value={formData.companyName}
-                onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
-                className="w-full px-3 py-2 bg-black/5 border border-transparent rounded-xl text-body focus:bg-white focus:border-black/10 focus:outline-none transition-all"
-                placeholder="Enter company name"
-              />
-            </div>
-          </div>
-
-          {/* Billing Details */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-body font-medium text-black/70 mb-2">Billing Type</label>
-              <select
-                value={formData.billingType}
-                onChange={(e) => setFormData({ ...formData, billingType: e.target.value as BillingType })}
-                className="w-full px-3 py-2 bg-black/5 border border-transparent rounded-xl text-body focus:bg-white focus:border-black/10 focus:outline-none transition-all"
-              >
-                <option value="RETAINER">Retainer</option>
-                <option value="OTS">One-Time Service (OTS)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-body font-medium text-black/70 mb-2">Service Type</label>
-              <select
-                value={formData.serviceType}
-                onChange={(e) => setFormData({ ...formData, serviceType: e.target.value as ServiceType })}
-                className="w-full px-3 py-2 bg-black/5 border border-transparent rounded-xl text-body focus:bg-white focus:border-black/10 focus:outline-none transition-all"
-              >
-                <option value="Performance Marketing">Performance Marketing</option>
-                <option value="Accounts & Taxation">Accounts & Taxation</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Financial Details */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-body font-medium text-black/70 mb-2">
-                {formData.billingType === 'RETAINER' ? 'Monthly Amount' : 'Project Amount'}
-              </label>
-              <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/30" />
-                <input
-                  type="number"
-                  value={formData.monthlyAmount}
-                  onChange={(e) => setFormData({ ...formData, monthlyAmount: Number(e.target.value) })}
-                  className="w-full pl-10 pr-3 py-2 bg-black/5 border border-transparent rounded-xl text-body focus:bg-white focus:border-black/10 focus:outline-none transition-all"
-                  placeholder="0"
-                />
+            <div className="p-6 space-y-5">
+              {/* Client Info */}
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-[#204CC7]/[0.07] rounded-xl flex items-center justify-center">
+                  <span className="text-[#204CC7] text-h2 font-semibold">{detailClient.name.charAt(0)}</span>
+                </div>
+                <div>
+                  <h3 className="text-h3 font-semibold text-black">{detailClient.name}</h3>
+                  <p className="text-body text-black/45 mt-0.5">{detailClient.email}</p>
+                </div>
               </div>
-            </div>
-            <div>
-              <label className="block text-body font-medium text-black/70 mb-2">Payment Status</label>
-              <select
-                value={formData.paymentStatus}
-                onChange={(e) => setFormData({ ...formData, paymentStatus: e.target.value as PaymentStatus })}
-                className="w-full px-3 py-2 bg-black/5 border border-transparent rounded-xl text-body focus:bg-white focus:border-black/10 focus:outline-none transition-all"
-              >
-                <option value="Paid">Paid</option>
-                <option value="Pending">Pending</option>
-                <option value="Overdue">Overdue</option>
-                <option value="Cancelled">Cancelled</option>
-              </select>
-            </div>
-          </div>
 
-          {/* Contract Dates */}
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-body font-medium text-black/70 mb-2">Contract Start</label>
-              <input
-                type="date"
-                value={formData.contractStartDate}
-                onChange={(e) => setFormData({ ...formData, contractStartDate: e.target.value })}
-                className="w-full px-3 py-2 bg-black/5 border border-transparent rounded-xl text-body focus:bg-white focus:border-black/10 focus:outline-none transition-all"
-              />
-            </div>
-            <div>
-              <label className="block text-body font-medium text-black/70 mb-2">Contract End</label>
-              <input
-                type="date"
-                value={formData.contractEndDate}
-                onChange={(e) => setFormData({ ...formData, contractEndDate: e.target.value })}
-                className="w-full px-3 py-2 bg-black/5 border border-transparent rounded-xl text-body focus:bg-white focus:border-black/10 focus:outline-none transition-all"
-              />
-            </div>
-            <div>
-              <label className="block text-body font-medium text-black/70 mb-2">Next Billing Date</label>
-              <input
-                type="date"
-                value={formData.nextBillingDate}
-                onChange={(e) => setFormData({ ...formData, nextBillingDate: e.target.value })}
-                className="w-full px-3 py-2 bg-black/5 border border-transparent rounded-xl text-body focus:bg-white focus:border-black/10 focus:outline-none transition-all"
-              />
-            </div>
-          </div>
+              {/* Summary Cards */}
+              {(() => {
+                const allAcc = detailClient.businesses.flatMap(b => b.accounts);
+                const totalBilling = allAcc.reduce((s, a) => s + a.amount, 0);
+                const totalOut = allAcc.reduce((s, a) => s + a.outstandingAmount, 0);
+                return (
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-[#F6F7FF] rounded-xl p-3 text-center">
+                      <p className="text-caption text-black/45">Businesses</p>
+                      <p className="text-h3 font-semibold text-black mt-1">{detailClient.businesses.length}</p>
+                    </div>
+                    <div className="bg-[#F6F7FF] rounded-xl p-3 text-center">
+                      <p className="text-caption text-black/45">Total Billing</p>
+                      <p className="text-h3 font-semibold text-black mt-1">{formatCurrency(totalBilling)}</p>
+                    </div>
+                    <div className={`rounded-xl p-3 text-center ${totalOut > 0 ? 'bg-red-50' : 'bg-emerald-50'}`}>
+                      <p className="text-caption text-black/45">Outstanding</p>
+                      <p className={`text-h3 font-semibold mt-1 ${totalOut > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                        {totalOut > 0 ? formatCurrency(totalOut) : '₹0'}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
 
-          {/* Account Manager */}
-          <div>
-            <label className="block text-body font-medium text-black/70 mb-2">Account Manager</label>
-            <input
-              type="text"
-              value={formData.accountManager}
-              onChange={(e) => setFormData({ ...formData, accountManager: e.target.value })}
-              className="w-full px-3 py-2 bg-black/5 border border-transparent rounded-xl text-body focus:bg-white focus:border-black/10 focus:outline-none transition-all"
-              placeholder="Assign account manager"
-            />
-          </div>
+              {/* Businesses + Accounts */}
+              {detailClient.businesses.map(biz => (
+                <div key={biz.id}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Building2 className="w-4 h-4 text-black/35" />
+                    <h4 className="text-body font-semibold text-black">{biz.name}</h4>
+                    <span className="text-caption text-black/30">{biz.accounts.length} account{biz.accounts.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {biz.accounts.map(acc => {
+                      const sc = serviceColor(acc.serviceType);
+                      return (
+                        <div key={acc.id} className="bg-[#F6F7FF] rounded-xl p-4 space-y-3">
+                          {/* Service + Type + Status row */}
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${sc.bg}`}>
+                              <div className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
+                              {acc.serviceType}
+                            </span>
+                            <span className={`px-2 py-1 rounded-lg text-[11px] font-medium ${
+                              acc.billingType === 'Retainer' ? 'bg-[#204CC7]/[0.07] text-[#204CC7]' : 'bg-black/[0.04] text-black/50'
+                            }`}>
+                              {acc.billingType}
+                            </span>
+                            <div className="flex-1" />
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${statusStyle(acc.paymentStatus)}`}>
+                              {statusIcon(acc.paymentStatus)}
+                              {acc.paymentStatus}
+                            </span>
+                          </div>
 
-          {/* Notes */}
-          <div>
-            <label className="block text-body font-medium text-black/70 mb-2">Notes</label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              rows={3}
-              className="w-full px-3 py-2 bg-black/5 border border-transparent rounded-xl text-body focus:bg-white focus:border-black/10 focus:outline-none transition-all resize-none"
-              placeholder="Add any additional notes..."
-            />
+                          {/* Details grid */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <p className="text-caption text-black/40 mb-1">Amount</p>
+                              <p className="text-body font-semibold text-black/80">
+                                {formatCurrency(acc.amount)}
+                                {acc.billingType === 'Retainer' && <span className="text-caption text-black/30 font-normal"> /mo</span>}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-caption text-black/40 mb-1">Outstanding</p>
+                              <p className={`text-body font-semibold ${acc.outstandingAmount > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                {acc.outstandingAmount > 0 ? formatCurrency(acc.outstandingAmount) : '₹0'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-caption text-black/40 mb-1">Account Manager</p>
+                              <p className="text-body text-black/70">{acc.accountManager}</p>
+                            </div>
+                            {acc.nextBillingDate && (
+                              <div>
+                                <p className="text-caption text-black/40 mb-1">Next Billing</p>
+                                <p className="text-body text-black/70">{formatDate(acc.nextBillingDate)}</p>
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-caption text-black/40 mb-1">Contract</p>
+                              <p className="text-body text-black/70">{formatDate(acc.contractStart)} — {formatDate(acc.contractEnd)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-
-        {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-black/5">
-          <button
-            onClick={onClose}
-            className="px-4 py-2.5 text-black/60 hover:bg-black/5 rounded-xl transition-all"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => {
-              // Handle save logic here
-              onClose();
-            }}
-            className="px-4 py-2.5 bg-[#204CC7] text-white rounded-xl hover:bg-[#1a3da0] transition-all"
-          >
-            {isEdit ? 'Update Record' : 'Create Record'}
-          </button>
-        </div>
-      </DialogContent>
-    </Dialog>
+      )}
+    </div>
   );
 }

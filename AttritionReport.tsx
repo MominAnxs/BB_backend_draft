@@ -148,32 +148,6 @@ export function AttritionReport() {
 
   return (
     <div className="space-y-7">
-      {/* Header with Filters */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-black/90" style={{ fontSize: '20px', fontWeight: 700 }}>Client Attrition Report</h2>
-          <p className="text-black/65 mt-1" style={{ fontSize: '14px' }}>Track churned clients and identify retention opportunities</p>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-black/60" aria-hidden="true" />
-          <select
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value as any)}
-            className="appearance-none bg-white pl-3 pr-8 py-1.5 rounded-full text-xs font-medium text-black/70 border border-black/10 hover:border-black/20 focus:outline-none focus:border-black/30 transition-all cursor-pointer"
-          >
-            <option value="ytd">YTD</option>
-            <option value="mtd">MTD</option>
-            <option value="weekly">Weekly</option>
-            <option value="daily">Daily</option>
-            <option value="q1">Q1</option>
-            <option value="q2">Q2</option>
-            <option value="q3">Q3</option>
-            <option value="q4">Q4</option>
-          </select>
-          <ChevronDown className="w-3.5 h-3.5 text-black/60 -ml-7 pointer-events-none" aria-hidden="true" />
-        </div>
-      </div>
 
       {/* Key Metrics Cards */}
       <div className="grid grid-cols-4 gap-5">

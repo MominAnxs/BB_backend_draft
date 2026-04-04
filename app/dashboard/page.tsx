@@ -1,5 +1,5 @@
 "use client";
-import { Dashboard } from '@/Dashboard';
+import { ReportingModule } from '@/adminland/ReportingModule';
 export default function DashboardPage() {
-  return <Dashboard />;
+  return <ReportingModule />;
 }

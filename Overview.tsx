@@ -14,7 +14,7 @@ export function Overview({ globalDateRange = 'ytd', globalDepartment = 'All' }: 
   const router = useRouter();
   const pathname = usePathname();
   const isAdminland = pathname.startsWith('/adminland');
-  const baseRoute = isAdminland ? '/adminland/reports' : '/dashboard';
+  const baseRoute = isAdminland ? '/adminland/reports' : '/home';
   const onNavigate = (tab: 'attrition' | 'cla' | 'growth' | 'sales') => {
     const map: Record<string, string> = { attrition: `${baseRoute}/attrition`, cla: `${baseRoute}/cla`, growth: `${baseRoute}/growth-pl`, sales: `${baseRoute}/sales` };
     router.push(map[tab]);

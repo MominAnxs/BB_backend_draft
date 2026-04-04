@@ -1,40 +1,43 @@
 # dependencies
-/node_modules
+node_modules/
 
 # next.js build output
-/.next/
-/out/
+.next/
+out/
 
 # production
-/build
+build/
+dist/
 
-# misc
-.DS_Store
-*.pem
-
-# debug
+# logs
+logs/
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
 
-# local env files
-.env*
-!.env.example
+# env files (keep secrets out of Git, shocking concept)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# vercel
-.vercel
+# prisma
+prisma/dev.db
+prisma/dev.db-journal
 
-# typescript
-*.tsbuildinfo
+# OS junk
+.DS_Store
+Thumbs.db
 
-# logs
-logs
-*.log
-
-# IDE
+# IDE / editors
 .vscode/
 .idea/
 
-# OS
-Thumbs.db
+# cache
+.cache/
+.turbo/
+
+# misc
+coverage/

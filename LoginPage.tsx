@@ -24,7 +24,7 @@ export function LoginPage() {
     // Simulate SSO auth
     setTimeout(() => {
       setIsLoading(false);
-      router.push('/dashboard');
+      router.push('/home');
     }, 1200);
   }
 
@@ -34,7 +34,7 @@ export function LoginPage() {
     // Simulate Google SSO redirect
     setTimeout(() => {
       setIsLoading(false);
-      router.push('/dashboard');
+      router.push('/home');
     }, 1500);
   }
 
