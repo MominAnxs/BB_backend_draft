@@ -197,13 +197,21 @@ const hiringFunnelData = [
   { stage: 'Hired', value: 0, fill: '#DBEAFE' },
 ];
 
-// Performance chart data — stacked bar showing hires by type
+// Performance chart data — stacked by status (Active / Fired / Resigned)
 const perfChartData = performanceData.map(row => ({
   month: row.month.replace('-25', "'25").replace('-26', "'26"),
+  // Stacked area values
   Active: row.poojaActive + row.priyankaActive + row.ravinaActive,
   Fired: row.poojaFired + row.ravinaFired,
   Resigned: row.poojaResigned + row.ravinaResigned,
+  // Per-person detail for tooltip
+  poojaActive: row.poojaActive, poojaFired: row.poojaFired, poojaResigned: row.poojaResigned, poojaTotal: row.poojaTotal,
+  priyankaActive: row.priyankaActive,
+  ravinaActive: row.ravinaActive, ravinaFired: row.ravinaFired, ravinaResigned: row.ravinaResigned, ravinaTotal: row.ravinaTotal,
+  grandTotal: row.grandTotal,
 }));
+
+const PERSON_COLORS = { Pooja: '#7C3AED', Priyanka: '#F59E0B', Ravina: '#06B6D4' };
 
 // Incidents chart data
 const incidentChartData = [
@@ -294,19 +302,57 @@ export function HRReport({ activeSection = 'overview' }: { activeSection?: HRSec
     );
   };
 
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
+  // Custom tooltip — per-person with status breakdown
+  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string; payload?: Record<string, number> }>; label?: string }) => {
     if (!active || !payload?.length) return null;
+    const d = payload[0]?.payload as Record<string, number> | undefined;
+    if (!d) return null;
+
+    const statusRows = [
+      { label: 'Active', value: d.Active, color: '#00C875' },
+      { label: 'Fired', value: d.Fired, color: '#E2445C' },
+      { label: 'Resigned', value: d.Resigned, color: '#FDAB3D' },
+    ].filter(s => s.value > 0);
+
+    const persons = [
+      { name: 'Pooja', color: '#7C3AED', active: d.poojaActive, fired: d.poojaFired, resigned: d.poojaResigned, total: d.poojaTotal },
+      { name: 'Priyanka', color: '#F59E0B', active: d.priyankaActive, fired: 0, resigned: 0, total: d.priyankaActive },
+      { name: 'Ravina', color: '#06B6D4', active: d.ravinaActive, fired: d.ravinaFired, resigned: d.ravinaResigned, total: d.ravinaTotal },
+    ].filter(p => p.total > 0);
+
     return (
-      <div className="bg-white rounded-xl shadow-lg border border-black/[0.06] px-4 py-3 text-caption">
-        <p className="font-semibold text-black/70 mb-1.5">{label}</p>
-        {payload.map((entry, i) => (
-          <div key={i} className="flex items-center gap-2 py-0.5">
-            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
-            <span className="text-black/50">{entry.name}:</span>
-            <span className="font-semibold text-black/70 ml-auto">{entry.value}</span>
-          </div>
-        ))}
+      <div className="bg-white rounded-xl shadow-lg border border-black/[0.06] px-4 py-3 text-caption" style={{ minWidth: 210 }}>
+        <div className="flex items-center justify-between mb-2.5">
+          <p className="font-semibold text-black/75">{label}</p>
+          <span className="font-bold text-[#204CC7]">{d.grandTotal} hires</span>
+        </div>
+        {/* Status summary */}
+        <div className="flex items-center gap-3 mb-2.5 pb-2.5 border-b border-black/[0.06]">
+          {statusRows.map((s, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+              <span className="text-black/50">{s.value}</span>
+              <span className="text-black/30">{s.label.toLowerCase()}</span>
+            </div>
+          ))}
+        </div>
+        {/* Per-person breakdown */}
+        <div className="space-y-1.5">
+          {persons.map((p, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
+              <span className="text-black/55 font-medium">{p.name}</span>
+              <span className="ml-auto text-black/40 text-[11px]">
+                {[
+                  p.active > 0 ? `${p.active}A` : '',
+                  p.fired > 0 ? `${p.fired}F` : '',
+                  p.resigned > 0 ? `${p.resigned}R` : '',
+                ].filter(Boolean).join(' · ')}
+              </span>
+              <span className="font-bold text-black/60 w-5 text-right">{p.total}</span>
+            </div>
+          ))}
+        </div>
       </div>
     );
   };
@@ -737,17 +783,40 @@ export function HRReport({ activeSection = 'overview' }: { activeSection?: HRSec
           {perfView === 'chart' ? (
             <div className="rounded-xl border border-black/[0.06] bg-white p-5">
               <ResponsiveContainer width="100%" height={320}>
-                <BarChart data={perfChartData} margin={{ left: 0, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="month" tick={{ fontSize: 13, fill: '#999' }} />
-                  <YAxis tick={{ fontSize: 13, fill: '#999' }} />
+                <AreaChart data={perfChartData} margin={{ left: 0, right: 10, top: 5, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gradActive" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#00C875" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="#00C875" stopOpacity={0.05} />
+                    </linearGradient>
+                    <linearGradient id="gradFired" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#E2445C" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="#E2445C" stopOpacity={0.05} />
+                    </linearGradient>
+                    <linearGradient id="gradResigned" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#FDAB3D" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="#FDAB3D" stopOpacity={0.05} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fontSize: 13, fill: 'rgba(0,0,0,0.45)' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 13, fill: 'rgba(0,0,0,0.35)' }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 13 }} />
-                  <Bar dataKey="Active" stackId="a" fill="#00C875" barSize={28} />
-                  <Bar dataKey="Fired" stackId="a" fill="#E2445C" />
-                  <Bar dataKey="Resigned" stackId="a" fill="#FDAB3D" radius={[4, 4, 0, 0]} />
-                </BarChart>
+                  <Area type="monotone" dataKey="Active" stackId="1" stroke="#00C875" strokeWidth={2} fill="url(#gradActive)" />
+                  <Area type="monotone" dataKey="Fired" stackId="1" stroke="#E2445C" strokeWidth={2} fill="url(#gradFired)" />
+                  <Area type="monotone" dataKey="Resigned" stackId="1" stroke="#FDAB3D" strokeWidth={2} fill="url(#gradResigned)" />
+                </AreaChart>
               </ResponsiveContainer>
+              <div className="flex items-center justify-center gap-5 mt-3 pt-3 border-t border-black/[0.04]">
+                {[{ name: 'Active', color: '#00C875' }, { name: 'Fired', color: '#E2445C' }, { name: 'Resigned', color: '#FDAB3D' }].map(s => (
+                  <div key={s.name} className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} />
+                    <span className="text-caption text-black/50">{s.name}</span>
+                  </div>
+                ))}
+                <div className="w-px h-3 bg-black/[0.08] mx-1" />
+                <span className="text-[11px] text-black/30">Hover for per-person detail</span>
+              </div>
             </div>
           ) : (
             <div className="rounded-xl border border-black/[0.06] bg-white overflow-hidden">

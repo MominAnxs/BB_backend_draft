@@ -1,9 +1,107 @@
 'use client';
-import { Users, Briefcase, TrendingUp, ChevronDown, ArrowUp, Target, Percent, TrendingDown, AlertCircle, CheckCircle, User, Lightbulb, ChevronRight } from 'lucide-react';
-import { useState } from 'react';
+import { Users, Briefcase, TrendingUp, ChevronDown, ArrowUp, Target, Percent, TrendingDown, AlertCircle, CheckCircle, User, Lightbulb, ChevronRight, Award, AlertTriangle, ArrowRight } from 'lucide-react';
+import { useState, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter, usePathname } from 'next/navigation';
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { marginReportData } from '@/lib/data/margin-report-data';
+import { clientMarginData, type ClientMarginEntry } from '@/lib/data/client-margin-data';
+
+// ── CLA/NTF Data ──────────────────────────────────────────────────────────────
+
+interface ClientNomination {
+  client: string;
+  reason: string;
+  claStatus: 'sureshot' | 'can-be-saved';
+  responsible: string;
+}
+
+interface EmployeeNomination {
+  employee: string;
+  initials: string;
+  color: string;
+  reason: string;
+  dateAdded: string;
+  clients: string[];
+}
+
+const clientNominations: ClientNomination[] = [
+  { client: 'Bio Basket', reason: 'ROAS dropped 40% over 2 months, unresponsive to strategy changes', claStatus: 'sureshot', responsible: 'Chinmay P.' },
+  { client: 'Valiente Caps', reason: 'Budget cuts planned, considering in-house marketing', claStatus: 'can-be-saved', responsible: 'Harshal R.' },
+  { client: 'Green Valley Enterprises', reason: 'Missed 2 compliance deadlines, trust eroding', claStatus: 'can-be-saved', responsible: 'Zubear S.' },
+  { client: 'FRR (BLOGS)', reason: 'No engagement in 30 days, all tasks stalled', claStatus: 'sureshot', responsible: 'Mihir L.' },
+  { client: 'Meeami Fashion', reason: 'Competitor offering lower rates, exploring options', claStatus: 'can-be-saved', responsible: 'Chinmay P.' },
+];
+
+const employeeNominations: EmployeeNomination[] = [
+  { employee: 'Harshal R.', initials: 'HR', color: '#10B981', reason: 'Consistent missed deadlines across accounts', dateAdded: '01 Apr', clients: ['Bio Basket', 'Valiente Caps', '99 Pancakes'] },
+  { employee: 'Mihir L.', initials: 'ML', color: '#F59E0B', reason: 'Slow response time, client escalations rising', dateAdded: '28 Mar', clients: ['FRR (BLOGS)', 'Green Valley'] },
+  { employee: 'Chinmay P.', initials: 'CP', color: '#7C3AED', reason: 'Below target ROAS on 3 accounts', dateAdded: '25 Mar', clients: ['Bio Basket', 'Meeami Fashion', 'Valiente Caps', 'July Issue'] },
+  { employee: 'Zubear S.', initials: 'ZS', color: '#06B6D4', reason: 'Compliance filings delayed twice in Q1', dateAdded: '30 Mar', clients: ['Green Valley', 'Bilawala & Co'] },
+];
+
+const CIRCLE_COLORS = ['bg-blue-100 text-blue-600', 'bg-emerald-100 text-emerald-600', 'bg-amber-100 text-amber-600', 'bg-rose-100 text-rose-600', 'bg-purple-100 text-purple-600', 'bg-cyan-100 text-cyan-600'];
+
+function ClientCirclesGroup({ clients }: { clients: string[] }) {
+  const groupRef = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState(false);
+  const [coords, setCoords] = useState({ x: 0, y: 0 });
+
+  const showTip = useCallback(() => {
+    if (groupRef.current) {
+      const r = groupRef.current.getBoundingClientRect();
+      setCoords({ x: r.left + r.width / 2, y: r.top });
+    }
+    setHover(true);
+  }, []);
+
+  return (
+    <>
+      <div
+        ref={groupRef}
+        onMouseEnter={showTip}
+        onMouseLeave={() => setHover(false)}
+        className="flex items-center -space-x-1.5 cursor-default"
+        aria-label={`Clients: ${clients.join(', ')}`}
+      >
+        {clients.slice(0, 3).map((client, ci) => (
+          <div key={ci} className={`w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-caption font-bold ${CIRCLE_COLORS[ci % CIRCLE_COLORS.length]}`}>
+            {client.charAt(0)}
+          </div>
+        ))}
+        {clients.length > 3 && (
+          <div className="w-7 h-7 rounded-full bg-gray-100 border-2 border-white flex items-center justify-center text-caption font-bold text-black/55">
+            +{clients.length - 3}
+          </div>
+        )}
+      </div>
+      {hover && typeof document !== 'undefined' && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            left: coords.x,
+            top: coords.y - 8,
+            transform: 'translate(-50%, -100%)',
+            zIndex: 9999,
+            pointerEvents: 'none',
+          }}
+        >
+          <div className="px-3 py-2 rounded-lg bg-gray-900 text-white shadow-lg max-w-[240px]">
+            <p className="text-caption font-semibold text-white/50 uppercase tracking-wide mb-1">Assigned Clients</p>
+            <div className="flex flex-col gap-0.5">
+              {clients.map((c, i) => (
+                <span key={i} className="text-caption font-medium leading-snug">{c}</span>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 interface OverviewProps {
   globalDateRange?: 'ytd' | 'mtd' | 'weekly' | 'daily' | 'q1' | 'q2' | 'q3' | 'q4';
@@ -14,7 +112,7 @@ export function Overview({ globalDateRange = 'ytd', globalDepartment = 'All' }: 
   const router = useRouter();
   const pathname = usePathname();
   const isAdminland = pathname.startsWith('/adminland');
-  const baseRoute = isAdminland ? '/adminland/reports' : '/home';
+  const baseRoute = isAdminland ? '/adminland/overview' : '/home';
   const onNavigate = (tab: 'attrition' | 'cla' | 'growth' | 'sales') => {
     const map: Record<string, string> = { attrition: `${baseRoute}/attrition`, cla: `${baseRoute}/cla`, growth: `${baseRoute}/growth-pl`, sales: `${baseRoute}/sales` };
     router.push(map[tab]);
@@ -65,6 +163,12 @@ export function Overview({ globalDateRange = 'ytd', globalDepartment = 'All' }: 
   const semAOV = 72000;
   const semCurrentRevenue = 3200000;
   const semCurrentCost = semCurrentRevenue * (1 - semMargin / 100);
+
+  // Gross Margins (blended)
+  const grossRevenue = financeCurrentRevenue + semCurrentRevenue;
+  const grossCost = financeCurrentCost + semCurrentCost;
+  const grossMargin = grossRevenue - grossCost;
+  const grossMarginPercent = (grossMargin / grossRevenue) * 100;
 
   // Resource Utilization - Monthly capacity tracking (160 hrs/month per FTE)
   const resourceData = [
@@ -243,6 +347,50 @@ export function Overview({ globalDateRange = 'ytd', globalDepartment = 'All' }: 
   const toggleSection = (id: string) => setExpandedSections(prev => ({ ...prev, [id]: !prev[id] }));
   const [selectedMarginService, setSelectedMarginService] = useState<'All' | 'Finance' | 'Performance Marketing'>('All');
 
+  // Client-wise margin report states
+  const [clientMarginView, setClientMarginView] = useState<'service' | 'hod'>('service');
+  const [expandedClientGroup, setExpandedClientGroup] = useState<string | null>(null);
+  const [clientMarginSort, setClientMarginSort] = useState<'marginPercent' | 'billingPerMonth'>('marginPercent');
+  const [clientMarginSortDir, setClientMarginSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const sortedClientMargins = [...clientMarginData].sort((a, b) => {
+    const multiplier = clientMarginSortDir === 'desc' ? -1 : 1;
+    return (a[clientMarginSort] - b[clientMarginSort]) * multiplier;
+  });
+
+  const clientMarginByService = (() => {
+    const groups: Record<string, ClientMarginEntry[]> = {};
+    sortedClientMargins.forEach(c => {
+      if (!groups[c.service]) groups[c.service] = [];
+      groups[c.service].push(c);
+    });
+    return groups;
+  })();
+
+  const clientMarginByHOD = (() => {
+    const groups: Record<string, ClientMarginEntry[]> = {};
+    sortedClientMargins.forEach(c => {
+      if (!groups[c.hod]) groups[c.hod] = [];
+      groups[c.hod].push(c);
+    });
+    return groups;
+  })();
+
+  const toggleClientMarginSort = (col: typeof clientMarginSort) => {
+    if (clientMarginSort === col) {
+      setClientMarginSortDir(prev => prev === 'desc' ? 'asc' : 'desc');
+    } else {
+      setClientMarginSort(col);
+      setClientMarginSortDir('desc');
+    }
+  };
+
+  const formatClientCurrency = (v: number) => {
+    if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
+    if (v >= 1000) return `₹${(v / 1000).toFixed(0)}K`;
+    return `₹${v}`;
+  };
+
   // Client Relationship by HOD
   const hodRelationships = [
     {
@@ -340,10 +488,60 @@ export function Overview({ globalDateRange = 'ytd', globalDepartment = 'All' }: 
   const companyHoursUnallocated = companyHoursAvailable - companyHoursAllocated;
   const companyUnutilizedPercent = (companyHoursUnallocated / companyHoursAvailable) * 100;
 
+  // ── Role-wise Margins ──────────────────────────────────────────────────────
+  const [roleMarginService, setRoleMarginService] = useState<'all' | 'at' | 'sem'>('all');
+
+  // Role-wise data per service
+  // A&T has staffing model: In-house, Outside, Remote executives
+  // SEM: all executives are in-house (no staffing model)
+  const roleDataAT = [
+    { role: 'COO', revenue: 520000, cost: 385000, profit: 135000, margin: 26.0 },
+    { role: 'HOD', revenue: 680000, cost: 480000, profit: 200000, margin: 29.4 },
+    { role: 'Managers', revenue: 1250000, cost: 920000, profit: 330000, margin: 26.4 },
+    { role: 'In-house Executives', revenue: 2850000, cost: 2113000, profit: 737000, margin: 25.9 },
+    { role: 'Outside Executives', revenue: 420000, cost: 290600, profit: 129400, margin: 30.8 },
+    { role: 'Remote Executives', revenue: 980000, cost: 731400, profit: 248600, margin: 25.4 },
+  ];
+
+  const roleDataSEM = [
+    { role: 'COO', revenue: 480000, cost: 365000, profit: 115000, margin: 24.0 },
+    { role: 'HOD', revenue: 720000, cost: 520000, profit: 200000, margin: 27.8 },
+    { role: 'Managers', revenue: 1360000, cost: 1050000, profit: 310000, margin: 22.8 },
+    { role: 'In-house Executives', revenue: 4120000, cost: 3241600, profit: 878400, margin: 21.3 },
+    { role: 'Outside Executives', revenue: 440000, cost: 324200, profit: 115800, margin: 26.3 },
+    { role: 'Remote Executives', revenue: 1120000, cost: 886600, profit: 233400, margin: 20.8 },
+  ];
+
+  const roleDataAll = roleDataAT.map((at, i) => ({
+    role: at.role,
+    revenue: at.revenue + roleDataSEM[i].revenue,
+    cost: at.cost + roleDataSEM[i].cost,
+    profit: at.profit + roleDataSEM[i].profit,
+    margin: parseFloat((((at.profit + roleDataSEM[i].profit) / (at.revenue + roleDataSEM[i].revenue)) * 100).toFixed(1)),
+  }));
+
+  const activeRoleData = roleMarginService === 'at' ? roleDataAT : roleMarginService === 'sem' ? roleDataSEM : roleDataAll;
+  const roleTotal = activeRoleData.reduce((acc, r) => ({ revenue: acc.revenue + r.revenue, cost: acc.cost + r.cost, profit: acc.profit + r.profit }), { revenue: 0, cost: 0, profit: 0 });
+  const roleTotalMargin = roleTotal.revenue > 0 ? (roleTotal.profit / roleTotal.revenue) * 100 : 0;
+
+  // In-house vs Outside breakdown (A&T only — staffing model)
+  const inhouseAT = roleDataAT.filter(r => ['COO', 'HOD', 'Managers', 'In-house Executives'].includes(r.role));
+  const outsideAT = roleDataAT.filter(r => ['Outside Executives', 'Remote Executives'].includes(r.role));
+  const inhouseTotalAT = inhouseAT.reduce((a, r) => ({ revenue: a.revenue + r.revenue, cost: a.cost + r.cost, profit: a.profit + r.profit }), { revenue: 0, cost: 0, profit: 0 });
+  const outsideTotalAT = outsideAT.reduce((a, r) => ({ revenue: a.revenue + r.revenue, cost: a.cost + r.cost, profit: a.profit + r.profit }), { revenue: 0, cost: 0, profit: 0 });
+  const inhouseMarginAT = inhouseTotalAT.revenue > 0 ? (inhouseTotalAT.profit / inhouseTotalAT.revenue) * 100 : 0;
+  const outsideMarginAT = outsideTotalAT.revenue > 0 ? (outsideTotalAT.profit / outsideTotalAT.revenue) * 100 : 0;
+
+  const formatRoleCurrency = (v: number) => {
+    if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
+    if (v >= 1000) return `₹${(v / 1000).toFixed(0)}K`;
+    return `₹${v}`;
+  };
+
   return (
     <div className="space-y-7" role="region" aria-label="Dashboard overview">
       {/* Key Metrics */}
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-4 gap-5">
         {/* Total Revenue */}
         <button
           onClick={onNavigateToAdminland}
@@ -426,6 +624,31 @@ export function Overview({ globalDateRange = 'ytd', globalDepartment = 'All' }: 
             <div className="flex items-center justify-between">
               <span className="text-black/60 text-caption">Lost</span>
               <span className="text-rose-500 text-caption font-semibold">-{clientsLost}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Gross Margins */}
+        <div className="bg-white rounded-xl p-6 border border-black/5 hover:border-black/10 hover:shadow-sm transition-all">
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+              <Percent className="w-4 h-4 text-[#204CC7]" aria-hidden="true" />
+            </div>
+            <span className="text-black/60 text-caption font-medium">Gross Margins</span>
+          </div>
+          <div className="text-black/90 text-h1">{grossMarginPercent.toFixed(1)}%</div>
+          <div className="flex items-center gap-1.5 mt-1.5 mb-4">
+            <span className="text-emerald-600 text-caption font-semibold">₹{(grossMargin / 100000).toFixed(1)}L</span>
+            <span className="text-black/60 text-caption">gross profit</span>
+          </div>
+          <div className="pt-4 border-t border-black/5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-black/60 text-caption">A&T</span>
+              <span className="text-black/80 text-caption font-semibold">{financeMargin}%</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-black/60 text-caption">SEM</span>
+              <span className="text-black/80 text-caption font-semibold">{semMargin}%</span>
             </div>
           </div>
         </div>
@@ -665,22 +888,22 @@ export function Overview({ globalDateRange = 'ytd', globalDepartment = 'All' }: 
                 <th className="px-5 py-3 text-left text-black/65 text-caption font-medium">Service / Teams</th>
                 <th className="px-5 py-3 text-center">
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500 text-white rounded-md text-xs font-medium">
-                    Hours Allocated
+                    Hours to be Allocated
                   </span>
                 </th>
                 <th className="px-5 py-3 text-center">
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500 text-white rounded-md text-xs font-medium">
-                    Hours Available
+                    Allocated Hours
                   </span>
                 </th>
                 <th className="px-5 py-3 text-center">
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500 text-white rounded-md text-xs font-medium">
-                    Total Hr. Unallocated
+                    Available Hours
                   </span>
                 </th>
                 <th className="px-5 py-3 text-center">
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500 text-white rounded-md text-xs font-medium">
-                    Total Hrs. Unutilized (%)
+                    Available Hours %
                   </span>
                 </th>
               </tr>
@@ -700,9 +923,9 @@ export function Overview({ globalDateRange = 'ytd', globalDepartment = 'All' }: 
                         <span className="text-black/90 text-body font-medium">{service.service}</span>
                       </div>
                     </td>
+                    <td className="px-5 py-3 text-center text-black/70 text-body font-normal">{service.totalHrUnallocated.toLocaleString()}</td>
                     <td className="px-5 py-3 text-center text-black/70 text-body font-normal">{service.hoursAllocated.toLocaleString()}</td>
                     <td className="px-5 py-3 text-center text-black/70 text-body font-normal">{service.hoursAvailable.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-center text-black/70 text-body font-normal">{service.totalHrUnallocated.toLocaleString()}</td>
                     <td className="px-5 py-3 text-center text-black/70 text-body font-normal">{service.totalHrsUnutilizedPercent.toFixed(1)}%</td>
                   </tr>,
                   ...(expandedService === service.service ? service.subCategories.flatMap((subCat) => [
@@ -722,9 +945,9 @@ export function Overview({ globalDateRange = 'ytd', globalDepartment = 'All' }: 
                             <span className="text-black/70 text-caption font-medium">{subCat.name}</span>
                           </div>
                         </td>
+                        <td className="px-5 py-2 text-center text-black/65">{subCat.totalHrUnallocated.toLocaleString()}</td>
                         <td className="px-5 py-2 text-center text-black/65">{subCat.hoursAllocated.toLocaleString()}</td>
                         <td className="px-5 py-2 text-center text-black/65">{subCat.hoursAvailable.toLocaleString()}</td>
-                        <td className="px-5 py-2 text-center text-black/65">{subCat.totalHrUnallocated.toLocaleString()}</td>
                         <td className="px-5 py-2 text-center text-black/65">{subCat.totalHrsUnutilizedPercent.toFixed(1)}%</td>
                       </tr>,
                       ...(expandedSubCategory === `${service.service}-${subCat.name}` ? subCat.employees.map((emp) => (
@@ -732,9 +955,9 @@ export function Overview({ globalDateRange = 'ytd', globalDepartment = 'All' }: 
                           <td className="px-5 py-2 pl-16">
                             <span className="text-black/65 text-caption">{emp.name}</span>
                           </td>
+                          <td className="px-5 py-2 text-center text-black/65">{emp.totalHrUnallocated.toLocaleString()}</td>
                           <td className="px-5 py-2 text-center text-black/65">{emp.hoursAllocated.toLocaleString()}</td>
                           <td className="px-5 py-2 text-center text-black/65">{emp.hoursAvailable.toLocaleString()}</td>
-                          <td className="px-5 py-2 text-center text-black/65">{emp.totalHrUnallocated.toLocaleString()}</td>
                           <td className="px-5 py-2 text-center text-black/65">{emp.totalHrsUnutilizedPercent.toFixed(1)}%</td>
                         </tr>
                       )) : [])
@@ -826,11 +1049,21 @@ export function Overview({ globalDateRange = 'ytd', globalDepartment = 'All' }: 
       </div>
 
       {/* Client Relationship by HOD */}
-      <div className="bg-white rounded-xl border border-black/5">
+      <div
+        className="bg-white rounded-xl border border-black/5 cursor-pointer hover:border-black/[0.12] hover:shadow-sm transition-all group/crh"
+        onClick={() => router.push('/adminland/relationships')}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push('/adminland/relationships'); } }}
+        tabIndex={0}
+        role="link"
+        aria-label="Client Relationship Overview by HOD — click to view details"
+      >
         <div className="px-5 py-4 border-b border-black/5 flex items-center justify-between">
-          <div>
-            <h3 className="text-black/90 text-body font-semibold">Client Relationship Overview by HOD</h3>
-            <p className="text-black/50 mt-0.5 text-caption">Relationship health distribution across department heads</p>
+          <div className="flex items-center gap-2.5">
+            <div>
+              <h3 className="text-black/90 text-body font-semibold">Client Relationship Overview by HOD</h3>
+              <p className="text-black/50 mt-0.5 text-caption">Relationship health distribution across department heads</p>
+            </div>
+            <ArrowRight className="w-3.5 h-3.5 text-black/25 opacity-0 group-hover/crh:opacity-100 transition-opacity" aria-hidden="true" />
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
@@ -907,6 +1140,174 @@ export function Overview({ globalDateRange = 'ytd', globalDepartment = 'All' }: 
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* ═══ Role-wise Margins Breakdown ═══ */}
+      <div className="bg-white rounded-xl border border-black/[0.06] overflow-hidden">
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-black/[0.04] flex items-center justify-between">
+          <div>
+            <h3 className="text-body font-semibold text-black/85">Role-wise Margins Breakdown</h3>
+            <p className="text-caption text-black/45 mt-0.5">Profitability by organisational role</p>
+          </div>
+          {/* Service toggle */}
+          <div className="flex items-center bg-black/[0.03] rounded-lg p-0.5" role="tablist" aria-label="Filter by service">
+            {([
+              { key: 'all', label: 'All Services' },
+              { key: 'at', label: 'A&T' },
+              { key: 'sem', label: 'SEM' },
+            ] as const).map(tab => (
+              <button
+                key={tab.key}
+                role="tab"
+                aria-selected={roleMarginService === tab.key}
+                onClick={() => setRoleMarginService(tab.key)}
+                className={`px-3 py-1.5 rounded-md text-caption font-medium transition-all ${
+                  roleMarginService === tab.key
+                    ? 'bg-white text-black/85 shadow-sm'
+                    : 'text-black/45 hover:text-black/65'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex">
+          {/* ── Table ── */}
+          <div className={`${roleMarginService === 'at' ? 'flex-1 border-r border-black/[0.04]' : 'w-full'} overflow-x-auto`}>
+            <table className="w-full" role="table" aria-label="Role-wise margins breakdown">
+              <thead>
+                <tr className="border-b border-black/[0.04] bg-black/[0.015]">
+                  <th scope="col" className="px-5 py-2.5 text-left text-caption font-semibold text-black/50 uppercase tracking-wide">Role</th>
+                  <th scope="col" className="px-5 py-2.5 text-right text-caption font-semibold text-black/50 uppercase tracking-wide">Revenue</th>
+                  <th scope="col" className="px-5 py-2.5 text-right text-caption font-semibold text-black/50 uppercase tracking-wide">Cost</th>
+                  <th scope="col" className="px-5 py-2.5 text-right text-caption font-semibold text-black/50 uppercase tracking-wide">Profit</th>
+                  <th scope="col" className="px-5 py-2.5 text-right text-caption font-semibold text-black/50 uppercase tracking-wide">Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeRoleData.map((row) => {
+                  const isTopMargin = row.margin >= 28;
+                  const isLowMargin = row.margin < 22;
+                  return (
+                    <tr key={row.role} className="border-b border-black/[0.03] last:border-0 hover:bg-black/[0.008] transition-colors">
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                            row.role === 'COO' ? 'bg-[#204CC7]' :
+                            row.role === 'HOD' ? 'bg-[#7C3AED]' :
+                            row.role === 'Managers' ? 'bg-[#06B6D4]' :
+                            row.role === 'In-house Executives' ? 'bg-[#00C875]' :
+                            row.role === 'Outside Executives' ? 'bg-[#FDAB3D]' :
+                            'bg-[#F59E0B]'
+                          }`} />
+                          <span className="text-body font-medium text-black/80">{row.role}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 text-right text-body text-black/70">{formatRoleCurrency(row.revenue)}</td>
+                      <td className="px-5 py-3 text-right text-body text-black/70">{formatRoleCurrency(row.cost)}</td>
+                      <td className="px-5 py-3 text-right text-body font-medium text-black/80">{formatRoleCurrency(row.profit)}</td>
+                      <td className="px-5 py-3 text-right">
+                        <span className={`text-body font-semibold ${
+                          isTopMargin ? 'text-emerald-600' : isLowMargin ? 'text-rose-500' : 'text-black/75'
+                        }`}>
+                          {row.margin.toFixed(1)}%
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-black/[0.02] border-t border-black/[0.06]">
+                  <td className="px-5 py-3">
+                    <span className="text-body font-semibold text-black/85">Total</span>
+                  </td>
+                  <td className="px-5 py-3 text-right text-body font-semibold text-black/85">{formatRoleCurrency(roleTotal.revenue)}</td>
+                  <td className="px-5 py-3 text-right text-body font-semibold text-black/85">{formatRoleCurrency(roleTotal.cost)}</td>
+                  <td className="px-5 py-3 text-right text-body font-semibold text-black/85">{formatRoleCurrency(roleTotal.profit)}</td>
+                  <td className="px-5 py-3 text-right">
+                    <span className="text-body font-bold text-[#204CC7]">{roleTotalMargin.toFixed(1)}%</span>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* ── In-house vs Outside comparison (A&T only) ── */}
+          {roleMarginService === 'at' && (
+            <div className="w-[320px] flex-shrink-0 p-5 flex flex-col justify-center">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#06B6D4]" />
+                <p className="text-caption font-semibold text-black/65 uppercase tracking-wide">Staffing Model Comparison</p>
+              </div>
+
+              {/* In-house card */}
+              <div className="rounded-xl border border-black/[0.06] p-4 mb-3">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-caption font-semibold text-black/70">In-house</span>
+                  <span className="text-caption font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700">{inhouseMarginAT.toFixed(1)}% margin</span>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-caption text-black/50">Revenue</span>
+                    <span className="text-caption font-medium text-black/75">{formatRoleCurrency(inhouseTotalAT.revenue)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-caption text-black/50">Cost</span>
+                    <span className="text-caption font-medium text-black/75">{formatRoleCurrency(inhouseTotalAT.cost)}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-black/[0.04]">
+                    <span className="text-caption font-medium text-black/60">Profit</span>
+                    <span className="text-caption font-semibold text-emerald-600">{formatRoleCurrency(inhouseTotalAT.profit)}</span>
+                  </div>
+                </div>
+                {/* Margin bar */}
+                <div className="mt-3 h-1.5 rounded-full bg-black/[0.04] overflow-hidden">
+                  <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${inhouseMarginAT}%` }} />
+                </div>
+              </div>
+
+              {/* Outside + Remote card */}
+              <div className="rounded-xl border border-[#FDAB3D]/20 bg-[#FDAB3D]/[0.02] p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-caption font-semibold text-black/70">Outside + Remote</span>
+                  <span className="text-caption font-semibold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700">{outsideMarginAT.toFixed(1)}% margin</span>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-caption text-black/50">Revenue</span>
+                    <span className="text-caption font-medium text-black/75">{formatRoleCurrency(outsideTotalAT.revenue)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-caption text-black/50">Cost</span>
+                    <span className="text-caption font-medium text-black/75">{formatRoleCurrency(outsideTotalAT.cost)}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-[#FDAB3D]/10">
+                    <span className="text-caption font-medium text-black/60">Profit</span>
+                    <span className="text-caption font-semibold text-amber-600">{formatRoleCurrency(outsideTotalAT.profit)}</span>
+                  </div>
+                </div>
+                <div className="mt-3 h-1.5 rounded-full bg-black/[0.04] overflow-hidden">
+                  <div className="h-full rounded-full bg-amber-500 transition-all" style={{ width: `${outsideMarginAT}%` }} />
+                </div>
+              </div>
+
+              {/* Insight pill */}
+              <div className="mt-4 flex items-start gap-2 p-3 rounded-lg bg-[#204CC7]/[0.03] border border-[#204CC7]/10">
+                <Lightbulb className="w-3.5 h-3.5 text-[#204CC7] flex-shrink-0 mt-0.5" aria-hidden="true" />
+                <p className="text-caption text-black/55">
+                  {outsideMarginAT > inhouseMarginAT
+                    ? `Outside + Remote executives yield ${(outsideMarginAT - inhouseMarginAT).toFixed(1)}pp higher margins than in-house — staffing model is more profitable.`
+                    : `In-house executives yield ${(inhouseMarginAT - outsideMarginAT).toFixed(1)}pp higher margins — consider optimising the staffing allocation.`
+                  }
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1107,6 +1508,268 @@ export function Overview({ globalDateRange = 'ytd', globalDepartment = 'All' }: 
           </div>
           )}
         </div>
+      </div>
+
+      {/* Client-wise Margin Report */}
+      <div className="bg-white rounded-xl border border-black/5 overflow-hidden">
+        <div className="px-5 py-4 border-b border-black/5 flex items-center justify-between">
+          <div>
+            <h3 className="text-black/90 text-body font-semibold">Client-Wise Margin Report</h3>
+            <p className="text-black/55 mt-0.5 text-caption">Profitability per client — expand a group to see details</p>
+          </div>
+          <div className="flex items-center gap-2" role="tablist" aria-label="Group client margins by">
+            <div className="flex bg-black/5 rounded-lg p-0.5">
+              <button
+                role="tab"
+                aria-selected={clientMarginView === 'service'}
+                onClick={() => { setClientMarginView('service'); setExpandedClientGroup(null); }}
+                className={`px-3 py-1.5 rounded-md text-caption font-medium transition-all ${clientMarginView === 'service' ? 'bg-white shadow-sm text-black/90' : 'text-black/55 hover:text-black/70'}`}
+              >
+                By Service
+              </button>
+              <button
+                role="tab"
+                aria-selected={clientMarginView === 'hod'}
+                onClick={() => { setClientMarginView('hod'); setExpandedClientGroup(null); }}
+                className={`px-3 py-1.5 rounded-md text-caption font-medium transition-all ${clientMarginView === 'hod' ? 'bg-white shadow-sm text-black/90' : 'text-black/55 hover:text-black/70'}`}
+              >
+                By HOD
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {(() => {
+          const groups = clientMarginView === 'service' ? clientMarginByService : clientMarginByHOD;
+          const groupEntries = Object.entries(groups);
+          const serviceColors: Record<string, string> = { 'SEM': '#7C3AED', 'A&T': '#06B6D4' };
+          const hodColors: Record<string, string> = { 'Chinmay Pawar': '#7C3AED', 'Zubear Shaikh': '#06B6D4' };
+
+          return groupEntries.map(([groupName, clients], gi) => {
+            const groupBilling = clients.reduce((s, c) => s + c.billingPerMonth, 0);
+            const groupCost = clients.reduce((s, c) => s + c.totalCost, 0);
+            const groupMargin = clients.reduce((s, c) => s + c.grossMargin, 0);
+            const groupMarginPct = groupBilling > 0 ? (groupMargin / groupBilling) * 100 : 0;
+            const healthyCount = clients.filter(c => c.status === 'Healthy').length;
+            const riskCount = clients.filter(c => c.status === 'At Risk').length;
+            const accentColor = clientMarginView === 'service'
+              ? (serviceColors[groupName] || '#204CC7')
+              : (hodColors[groupName] || '#204CC7');
+            const isExpanded = expandedClientGroup === groupName;
+
+            return (
+              <div key={groupName} className={gi > 0 ? 'border-t border-black/5' : ''}>
+                {/* Group summary row */}
+                <button
+                  onClick={() => setExpandedClientGroup(isExpanded ? null : groupName)}
+                  aria-expanded={isExpanded}
+                  aria-label={`${groupName} — ${clients.length} clients, ${formatClientCurrency(groupBilling)} billing, ${groupMarginPct.toFixed(1)}% margin`}
+                  className="w-full px-5 py-4 hover:bg-black/[0.015] transition-colors cursor-pointer text-left"
+                >
+                  {/* Row 1: Identity + health badges */}
+                  <div className="flex items-center justify-between mb-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <ChevronDown className={`w-3.5 h-3.5 text-black/40 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-0' : '-rotate-90'}`} aria-hidden="true" />
+                      <div className="w-1 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: accentColor }} aria-hidden="true" />
+                      <span className="text-body font-semibold text-black/90">{groupName}</span>
+                      <span className="text-caption text-black/45">{clients.length} clients</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {healthyCount > 0 && <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-caption font-medium text-emerald-700 border border-emerald-100">{healthyCount} healthy</span>}
+                      {riskCount > 0 && <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-rose-50 text-caption font-medium text-rose-700 border border-rose-100">{riskCount} at risk</span>}
+                    </div>
+                  </div>
+                  {/* Row 2: Metric strip — evenly spaced, no stacked labels */}
+                  <div className="flex items-center gap-3 ml-[26px]">
+                    <div className="flex items-center gap-1.5 bg-black/[0.025] rounded-md px-3 py-1.5">
+                      <span className="text-caption text-black/50">Billing</span>
+                      <span className="text-body font-semibold text-black/85">{formatClientCurrency(groupBilling)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-black/[0.025] rounded-md px-3 py-1.5">
+                      <span className="text-caption text-black/50">Cost</span>
+                      <span className="text-body font-semibold text-black/60">{formatClientCurrency(groupCost)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-black/[0.025] rounded-md px-3 py-1.5">
+                      <span className="text-caption text-black/50">Margin</span>
+                      <span className="text-body font-semibold text-[#00C875]">{formatClientCurrency(groupMargin)}</span>
+                    </div>
+                    <span className={`inline-flex px-2.5 py-1 rounded-md text-caption font-semibold border ${
+                      groupMarginPct >= 25 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                      groupMarginPct >= 15 ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                      'bg-rose-50 text-rose-700 border-rose-200'
+                    }`}>
+                      {groupMarginPct.toFixed(1)}%
+                    </span>
+                  </div>
+                </button>
+
+                {/* Expanded client table — progressive disclosure */}
+                {isExpanded && (
+                  <div className="border-t border-black/5">
+                    <table className="w-full" role="table" aria-label={`${groupName} client margins`}>
+                      <thead>
+                        <tr className="bg-[#F6F7FF]/60">
+                          <th className="px-5 py-2 pl-12 text-left text-caption font-medium text-black/55" style={{ minWidth: 200 }}>Client</th>
+                          <th
+                            className="px-4 py-2 text-right text-caption font-medium text-black/55 cursor-pointer hover:text-black/70 select-none"
+                            onClick={() => toggleClientMarginSort('billingPerMonth')}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleClientMarginSort('billingPerMonth'); } }}
+                            tabIndex={0}
+                            role="columnheader"
+                            aria-sort={clientMarginSort === 'billingPerMonth' ? (clientMarginSortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
+                          >
+                            Billing / Mo {clientMarginSort === 'billingPerMonth' ? (clientMarginSortDir === 'desc' ? '↓' : '↑') : ''}
+                          </th>
+                          <th className="px-4 py-2 text-right text-caption font-medium text-black/55">Cost</th>
+                          <th
+                            className="px-4 py-2 text-center text-caption font-medium text-black/55 cursor-pointer hover:text-black/70 select-none"
+                            onClick={() => toggleClientMarginSort('marginPercent')}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleClientMarginSort('marginPercent'); } }}
+                            tabIndex={0}
+                            role="columnheader"
+                            aria-sort={clientMarginSort === 'marginPercent' ? (clientMarginSortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
+                          >
+                            Margin % {clientMarginSort === 'marginPercent' ? (clientMarginSortDir === 'desc' ? '↓' : '↑') : ''}
+                          </th>
+                          <th className="px-4 py-2 text-center text-caption font-medium text-black/55" style={{ minWidth: 80 }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {clients.map((client) => (
+                          <tr key={client.id} className="border-t border-black/[0.03] hover:bg-black/[0.015] transition-colors">
+                            <td className="px-5 py-2.5 pl-12">
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${client.status === 'Healthy' ? 'bg-emerald-400' : 'bg-rose-400'}`}
+                                  role="img"
+                                  aria-label={client.status}
+                                />
+                                <span className="text-caption font-medium text-black/75">{client.clientName}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2.5 text-right text-caption text-black/70">{formatClientCurrency(client.billingPerMonth)}</td>
+                            <td className="px-4 py-2.5 text-right text-caption text-black/55">{formatClientCurrency(client.totalCost)}</td>
+                            <td className="px-4 py-2.5 text-center">
+                              <span className="inline-flex items-center gap-1">
+                                <span className={`text-caption font-semibold ${
+                                  client.marginPercent >= 25 ? 'text-emerald-600' :
+                                  client.marginPercent >= 10 ? 'text-amber-600' : 'text-rose-600'
+                                }`}>
+                                  {client.marginPercent.toFixed(1)}%
+                                </span>
+                                {client.trend === 'up' && <TrendingUp className="w-3 h-3 text-emerald-400" aria-hidden="true" />}
+                                {client.trend === 'down' && <TrendingDown className="w-3 h-3 text-rose-400" aria-hidden="true" />}
+                                {client.trend !== 'up' && client.trend !== 'down' && <span className="sr-only">stable</span>}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5 text-center">
+                              <span className={`inline-flex px-2 py-0.5 rounded text-caption font-medium ${
+                                client.status === 'Healthy' ? 'text-emerald-600' : 'text-rose-600'
+                              }`}>
+                                {client.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          });
+        })()}
+      </div>
+
+      {/* ═══ Client CLA + Employee CLA/NTF — Two Columns ═══ */}
+      <div className="grid grid-cols-2 gap-5">
+
+        {/* ── Client - CLA ── */}
+        <section
+          className="rounded-xl border border-black/[0.06] bg-white overflow-hidden flex flex-col cursor-pointer hover:border-black/[0.12] hover:shadow-sm transition-all group/clientcla"
+          aria-label="Client CLA nominations — click to view details"
+          onClick={() => router.push('/adminland/clients?tab=cla')}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push('/adminland/clients?tab=cla'); } }}
+          tabIndex={0}
+          role="link"
+        >
+          <div className="px-5 py-3.5 border-b border-black/[0.04] flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center" aria-hidden="true">
+                <Award className="w-3.5 h-3.5 text-[#204CC7]" />
+              </div>
+              <h3 className="text-body font-semibold text-black/80">Client - CLA</h3>
+              <ArrowRight className="w-3.5 h-3.5 text-black/25 opacity-0 group-hover/clientcla:opacity-100 transition-opacity" aria-hidden="true" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-caption font-semibold px-1.5 py-0.5 rounded-md bg-[#E2445C]/[0.08] text-[#E2445C]">{clientNominations.filter(n => n.claStatus === 'sureshot').length} sureshot</span>
+              <span className="text-caption font-semibold px-1.5 py-0.5 rounded-md bg-[#FDAB3D]/[0.08] text-[#FDAB3D]">{clientNominations.filter(n => n.claStatus === 'can-be-saved').length} saveable</span>
+            </div>
+          </div>
+          {/* Table header */}
+          <div className="px-5 py-2 bg-black/[0.015] flex items-center text-caption font-semibold text-black/45">
+            <span className="flex-1">Client</span>
+            <span className="w-[110px] text-center">Responsible</span>
+            <span className="w-[110px] text-right">Status</span>
+          </div>
+          <div className="overflow-y-auto divide-y divide-black/[0.03]" style={{ maxHeight: '320px' }}>
+            {clientNominations.map((n, i) => (
+              <div key={i} className="px-5 py-3 flex items-center hover:bg-black/[0.006] transition-colors">
+                <div className="flex-1 min-w-0 pr-3">
+                  <p className="text-body font-medium text-black/80 truncate">{n.client}</p>
+                  <p className="text-caption text-black/50 truncate">{n.reason}</p>
+                </div>
+                <span className="w-[110px] text-center text-caption font-medium text-black/65">{n.responsible}</span>
+                <span className="w-[110px] text-right">
+                  <span className={`text-caption font-semibold px-2 py-0.5 rounded-md ${
+                    n.claStatus === 'sureshot'
+                      ? 'bg-[#E2445C]/[0.08] text-[#E2445C]'
+                      : 'bg-[#FDAB3D]/[0.08] text-[#FDAB3D]'
+                  }`}>
+                    {n.claStatus === 'sureshot' ? 'Sureshot' : 'Can Be Saved'}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Employee - CLA/NTF ── */}
+        <section
+          className="rounded-xl border border-black/[0.06] bg-white overflow-hidden flex flex-col"
+          aria-label="Employee CLA and NTF list"
+        >
+          <div className="px-5 py-3.5 border-b border-black/[0.04] flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-purple-50 flex items-center justify-center" aria-hidden="true">
+                <Users className="w-3.5 h-3.5 text-[#7C3AED]" />
+              </div>
+              <h3 className="text-body font-semibold text-black/80">Employee - CLA/NTF</h3>
+            </div>
+            <span className="text-caption font-semibold px-1.5 py-0.5 rounded-md bg-purple-50 text-[#7C3AED]">{employeeNominations.length}</span>
+          </div>
+          {/* Table header */}
+          <div className="px-5 py-2 bg-black/[0.015] flex items-center text-caption font-semibold text-black/45">
+            <span className="w-[60px]">Date</span>
+            <span className="flex-1">Employee</span>
+            <span className="w-[120px] text-right">Assigned Clients</span>
+          </div>
+          <div className="divide-y divide-black/[0.03]" style={{ maxHeight: '320px', overflowY: 'auto' }}>
+            {employeeNominations.map((n, rowIdx) => (
+              <div key={rowIdx} className="px-5 py-3 flex items-center hover:bg-black/[0.006] transition-colors">
+                <span className="w-[60px] text-caption text-black/50 flex-shrink-0">{n.dateAdded}</span>
+                <div className="flex-1 min-w-0 pr-3">
+                  <p className="text-body font-medium text-black/80 truncate">{n.employee}</p>
+                  <p className="text-caption text-black/50 truncate">{n.reason}</p>
+                </div>
+                <div className="w-[120px] flex justify-end flex-shrink-0">
+                  <ClientCirclesGroup clients={n.clients} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
       </div>
 
     </div>

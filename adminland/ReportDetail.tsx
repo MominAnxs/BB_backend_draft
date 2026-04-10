@@ -107,7 +107,7 @@ export function ReportDetail({ client, service, onBack }: ReportDetailProps) {
           </button>
           <div>
             <h2 className="text-black/90 text-body font-semibold">{client.name}</h2>
-            <p className="text-caption font-light text-black/55">{client.code}</p>
+            <p className="text-caption font-light text-black/65">{client.code}</p>
           </div>
 
           <div className="w-px h-8 bg-black/8 mx-1" />
@@ -165,7 +165,7 @@ export function ReportDetail({ client, service, onBack }: ReportDetailProps) {
                   className={`px-3.5 py-2 text-caption font-medium rounded-xl transition-all whitespace-nowrap ${
                     activeTab === tab.id
                       ? 'bg-[#EEF1FB] text-[#204CC7] font-semibold'
-                      : 'text-black/50 hover:text-black/80 hover:bg-black/[0.03]'
+                      : 'text-black/60 hover:text-black/80 hover:bg-black/[0.03]'
                   }`}
                 >
                   {tab.label}
@@ -194,7 +194,7 @@ export function ReportDetail({ client, service, onBack }: ReportDetailProps) {
                   className={`px-3.5 py-2 text-caption font-medium rounded-xl transition-all whitespace-nowrap ${
                     activeTab === tab.id
                       ? 'bg-[#EEF1FB] text-[#204CC7] font-semibold'
-                      : 'text-black/50 hover:text-black/80 hover:bg-black/[0.03]'
+                      : 'text-black/60 hover:text-black/80 hover:bg-black/[0.03]'
                   }`}
                 >
                   {tab.label}
@@ -247,7 +247,7 @@ function PerformanceMarketingDetail({
       <div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-h3 text-black/90">Overview</h3>
-          <p className="text-caption text-black/55">Last updated {report.lastUpdated}</p>
+          <p className="text-caption text-black/65">Last updated {report.lastUpdated}</p>
         </div>
         <div className="grid grid-cols-5 gap-5">
           <MetricCard
@@ -284,7 +284,7 @@ function PerformanceMarketingDetail({
       <div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-h3 text-black/90">Target vs Achieved</h3>
-          <p className="text-caption text-black/55">Current Month Performance</p>
+          <p className="text-caption text-black/65">Current Month Performance</p>
         </div>
         <div className="grid grid-cols-4 gap-5">
           <TargetCard
@@ -339,7 +339,7 @@ function AccountsTaxationDetail({
       <div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-h3 text-black/90">Overview</h3>
-          <p className="text-caption text-black/55">Last updated {report.lastUpdated}</p>
+          <p className="text-caption text-black/65">Last updated {report.lastUpdated}</p>
         </div>
         <div className="grid grid-cols-5 gap-5">
           <MetricCard
@@ -377,7 +377,7 @@ function AccountsTaxationDetail({
       <div className="bg-white rounded-xl border border-black/[0.06] p-6">
         <div className="mb-6">
           <h3 className="text-h3 text-black/90 mb-1">What Changed This Period</h3>
-          <p className="text-caption text-black/55">Key movements that impact your financial position</p>
+          <p className="text-caption text-black/65">Key movements that impact your financial position</p>
         </div>
         <div className="space-y-4">
           {report.whatChanged.map((item, index) => (
@@ -415,7 +415,7 @@ function AccountsTaxationDetail({
       <div className="bg-white rounded-xl border border-black/[0.06] p-6">
         <div className="mb-6">
           <h3 className="text-h3 text-black/90 mb-1">Risks & Alerts</h3>
-          <p className="text-caption text-black/55">Items that need your attention to prevent issues</p>
+          <p className="text-caption text-black/65">Items that need your attention to prevent issues</p>
         </div>
         <div className="space-y-4">
           {report.risks.map((item, index) => (
@@ -449,7 +449,7 @@ function AccountsTaxationDetail({
       <div className="bg-white rounded-xl border border-black/[0.06] p-6">
         <div className="mb-6">
           <h3 className="text-h3 text-black/90 mb-1">Actions & Recommendations</h3>
-          <p className="text-caption text-black/55">Suggested actions to improve your financial position</p>
+          <p className="text-caption text-black/65">Suggested actions to improve your financial position</p>
         </div>
         <div className="space-y-4">
           {report.actions.map((item, index) => (
@@ -465,7 +465,7 @@ function AccountsTaxationDetail({
                 <p className="text-body font-medium text-black/90 mb-1">{item.title}</p>
                 <p className="text-caption text-black/60 mb-2">{item.description}</p>
                 <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-1 text-caption text-black/55">
+                  <span className="flex items-center gap-1 text-caption text-black/65">
                     <Clock className="w-3 h-3" />
                     This week
                   </span>
@@ -517,7 +517,7 @@ function MetricCard({
         <span className={`text-caption font-medium ${isPositive ? 'text-[#00C875]' : 'text-[#E2445C]'}`}>
           {Math.abs(change)}%
         </span>
-        <span className="text-caption text-black/55">vs last period</span>
+        <span className="text-caption text-black/65">vs last period</span>
       </div>
     </div>
   );

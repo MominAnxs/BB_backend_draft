@@ -599,9 +599,9 @@ export function ClientRelationshipData() {
         const headerBg = isAtRisk ? 'bg-[#E2445C]' : isNeedsAttention ? 'bg-[#FDAB3D]' : avgClientScore >= 4 ? 'bg-[#00C875]' : 'bg-[#204CC7]';
 
         return (
-          <div className="fixed inset-0 z-50 overflow-hidden">
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowDrawer(false)} />
-            <div className="absolute right-0 top-0 h-full w-full max-w-xl bg-white shadow-2xl">
+          <div className="fixed inset-0 z-[60]">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowDrawer(false)} />
+            <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-white shadow-2xl overflow-hidden">
               <div className="h-full flex flex-col">
                 {/* Header */}
                 <div className={`${headerBg} px-6 py-5`}>

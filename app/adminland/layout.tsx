@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Building2, AlertTriangle, MessageSquare, Heart, UserX, UserCircle2, Briefcase, CreditCard, Zap, BarChart3 } from 'lucide-react';
 
 const navItems = [
-  { id: 'reports', label: 'Reports', icon: BarChart3, href: '/adminland/reports' },
+  { id: 'overview', label: 'Overview', icon: BarChart3, href: '/adminland/overview' },
   { id: 'all-clients', label: 'All Clients', icon: Building2, href: '/adminland/clients' },
   { id: 'lost-clients', label: 'Lost Clients', icon: UserX, href: '/adminland/lost-clients' },
   { id: 'incidents', label: 'Incidents', icon: AlertTriangle, href: '/adminland/incidents' },

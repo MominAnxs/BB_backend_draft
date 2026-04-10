@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Search, Plus, Filter, Building2, TrendingUp, AlertTriangle, Users, ChevronRight, FileText, DollarSign, Clock, Layers, X, MoreVertical, User, Mail, MapPin, Phone, Calendar, ExternalLink, Check, ChevronLeft, Target, UserPlus, ArrowRight, CircleCheck, Megaphone, IndianRupee } from 'lucide-react';
 import { ClientDetailsDrawer } from './ClientDetailsDrawer';
 
@@ -60,8 +61,10 @@ interface CLA {
   briefOrReason: string;
   service: 'Performance Marketing' | 'Accounts & Taxation';
   status: 'Sureshot' | 'Can be Saved';
-  amount: number;
+  billingPerMonth: number;
+  hod: string;
   employeeResponsible: string;
+  category: 'Brego\'s Fault' | 'Client\'s Fault';
 }
 
 // ── Filter Types ──
@@ -858,8 +861,10 @@ interface AllClientsProps {
 }
 
 export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState<'clients' | 'cla'>('clients');
+  const [viewMode, setViewMode] = useState<'clients' | 'cla'>(tabParam === 'cla' ? 'cla' : 'clients');
   const [showAddCLAModal, setShowAddCLAModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [showClientDrawer, setShowClientDrawer] = useState(false);
@@ -879,8 +884,10 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
     briefOrReason: '',
     service: 'Performance Marketing' as 'Performance Marketing' | 'Accounts & Taxation',
     status: 'Can be Saved' as 'Sureshot' | 'Can be Saved',
-    amount: '',
+    billingPerMonth: '',
+    hod: '' as string,
     employeeResponsible: '',
+    category: "Brego's Fault" as "Brego's Fault" | "Client's Fault",
   });
 
   const handleClientClick = (client: Client) => {
@@ -1134,8 +1141,10 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
       briefOrReason: 'Contract expiring in 30 days, no renewal discussions yet',
       service: 'Performance Marketing',
       status: 'Sureshot',
-      amount: 45000,
-      employeeResponsible: 'Priya Sharma'
+      billingPerMonth: 45000,
+      hod: 'Chinmay P.',
+      employeeResponsible: 'Priya Sharma',
+      category: "Brego's Fault"
     },
     {
       id: '2',
@@ -1144,8 +1153,10 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
       briefOrReason: 'Mentioned budget cuts for next quarter during last call',
       service: 'Accounts & Taxation',
       status: 'Can be Saved',
-      amount: 28000,
-      employeeResponsible: 'Rohan Desai'
+      billingPerMonth: 28000,
+      hod: 'Zubear S.',
+      employeeResponsible: 'Rohan Desai',
+      category: "Client's Fault"
     },
     {
       id: '3',
@@ -1154,8 +1165,10 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
       briefOrReason: 'Dissatisfied with campaign results, considering competitor',
       service: 'Performance Marketing',
       status: 'Can be Saved',
-      amount: 65000,
-      employeeResponsible: 'Kavya Iyer'
+      billingPerMonth: 65000,
+      hod: 'Chinmay P.',
+      employeeResponsible: 'Kavya Iyer',
+      category: "Brego's Fault"
     },
     {
       id: '4',
@@ -1164,8 +1177,10 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
       briefOrReason: 'Delayed payments for 45+ days, communication issues',
       service: 'Accounts & Taxation',
       status: 'Sureshot',
-      amount: 52000,
-      employeeResponsible: 'Arjun Mehta'
+      billingPerMonth: 52000,
+      hod: 'Zubear S.',
+      employeeResponsible: 'Arjun Mehta',
+      category: "Client's Fault"
     },
     {
       id: '5',
@@ -1174,8 +1189,10 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
       briefOrReason: 'Internal restructuring, new management questioning ROI',
       service: 'Performance Marketing',
       status: 'Sureshot',
-      amount: 38000,
-      employeeResponsible: 'Ishaan Joshi'
+      billingPerMonth: 38000,
+      hod: 'Chinmay P.',
+      employeeResponsible: 'Ishaan Joshi',
+      category: "Client's Fault"
     },
     {
       id: '6',
@@ -1184,8 +1201,10 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
       briefOrReason: 'Requested 40% budget reduction, exploring cheaper alternatives',
       service: 'Performance Marketing',
       status: 'Can be Saved',
-      amount: 0,
-      employeeResponsible: 'Priya Sharma'
+      billingPerMonth: 0,
+      hod: 'Chinmay P.',
+      employeeResponsible: 'Priya Sharma',
+      category: "Brego's Fault"
     },
   ]);
 
@@ -1240,12 +1259,10 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
     });
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
+  const formatCurrency = (amount: number): string => {
+    if (amount >= 100000) return `₹${(amount / 100000).toFixed(1)}L`;
+    if (amount >= 1000) return `₹${(amount / 1000).toFixed(0)}K`;
+    return `₹${amount}`;
   };
 
   const getOnboardingColor = (status: string) => {
@@ -1294,7 +1311,7 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
   const totalCLAs = filteredCLAs.length;
   const approvedCLAs = filteredCLAs.filter(c => c.status === 'Sureshot').length;
   const pendingCLAs = filteredCLAs.filter(c => c.status === 'Can be Saved').length;
-  const totalCLAAmount = filteredCLAs.filter(c => c.status !== 'Can be Saved').reduce((sum, c) => sum + c.amount, 0);
+  const totalCLAAmount = filteredCLAs.filter(c => c.status !== 'Can be Saved').reduce((sum, c) => sum + c.billingPerMonth, 0);
 
   // CLA KPI calculations
   const totalAtRisk = filteredCLAs.length;
@@ -1453,7 +1470,7 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
             <>
               {clientFilters.service !== 'All' && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#204CC7]/[0.06] text-[#204CC7] text-caption font-medium">
-                  {clientFilters.service === 'Performance Marketing' ? 'PM' : 'A&T'}
+                  {clientFilters.service === 'Performance Marketing' ? 'SEM' : 'A&T'}
                   <button onClick={() => setClientFilters(f => ({ ...f, service: 'All' }))} className="hover:bg-[#204CC7]/10 rounded p-0.5"><X className="w-3 h-3" /></button>
                 </span>
               )}
@@ -1484,7 +1501,7 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
             <>
               {claFilters.service !== 'All' && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#204CC7]/[0.06] text-[#204CC7] text-caption font-medium">
-                  {claFilters.service === 'Performance Marketing' ? 'PM' : 'A&T'}
+                  {claFilters.service === 'Performance Marketing' ? 'SEM' : 'A&T'}
                   <button onClick={() => setClaFilters(f => ({ ...f, service: 'All' }))} className="hover:bg-[#204CC7]/10 rounded p-0.5"><X className="w-3 h-3" /></button>
                 </span>
               )}
@@ -1826,7 +1843,7 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
                             key={tag.id}
                             className={`inline-flex px-2 py-0.5 rounded-md text-caption font-medium border ${getServiceTagColor(tag.name)}`}
                           >
-                            {tag.name === 'Performance Marketing' ? 'PM' : 'A&T'}
+                            {tag.name === 'Performance Marketing' ? 'SEM' : 'A&T'}
                           </span>
                         ))}
                       </div>
@@ -1900,14 +1917,16 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
                   <th className="px-4 py-3 text-left text-black/65 text-caption font-medium">Brief or Reason</th>
                   <th className="px-4 py-3 text-left text-black/65 text-caption font-medium">Service</th>
                   <th className="px-4 py-3 text-left text-black/65 text-caption font-medium">Status</th>
-                  <th className="px-4 py-3 text-left text-black/65 text-caption font-medium">Amount</th>
+                  <th className="px-4 py-3 text-left text-black/65 text-caption font-medium">Billing / Mo</th>
+                  <th className="px-4 py-3 text-left text-black/65 text-caption font-medium">HOD</th>
                   <th className="px-4 py-3 text-left text-black/65 text-caption font-medium">Employee Responsible</th>
+                  <th className="px-4 py-3 text-left text-black/65 text-caption font-medium">Category</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredCLAs.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center">
+                    <td colSpan={9} className="px-4 py-12 text-center">
                       <div className="flex flex-col items-center gap-2">
                         <Search className="w-8 h-8 text-black/20" />
                         <p className="text-body font-medium text-black/50">No CLAs match your filters</p>
@@ -1943,7 +1962,7 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
                     {/* Service */}
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-0.5 rounded-md text-caption font-medium border ${getServiceTagColor(cla.service)}`}>
-                        {cla.service === 'Performance Marketing' ? 'PM' : cla.service === 'Accounts & Taxation' ? 'A&T' : 'CM'}
+                        {cla.service === 'Performance Marketing' ? 'SEM' : cla.service === 'Accounts & Taxation' ? 'A&T' : 'CM'}
                       </span>
                     </td>
 
@@ -1954,16 +1973,30 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
                       </span>
                     </td>
 
-                    {/* Amount */}
+                    {/* Billing / Mo */}
                     <td className="px-4 py-3">
-                      <p className="text-black/90 text-body font-medium">
-                        {formatCurrency(cla.amount)}
+                      <p className="text-body font-semibold text-[#E2445C]">
+                        {formatCurrency(cla.billingPerMonth)}
                       </p>
+                    </td>
+
+                    {/* HOD */}
+                    <td className="px-4 py-3">
+                      <p className="text-black/70 text-body">{cla.hod}</p>
                     </td>
 
                     {/* Employee Responsible */}
                     <td className="px-4 py-3">
                       <p className="text-black/70 text-body">{cla.employeeResponsible}</p>
+                    </td>
+
+                    {/* Category */}
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex px-2 py-0.5 rounded-md text-caption font-medium border ${
+                        cla.category === "Brego's Fault" ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}>
+                        {cla.category}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -1990,170 +2023,202 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
 
       {/* Add CLA Modal */}
       {showAddCLAModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowAddCLAModal(false)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-black/5">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6" onClick={() => setShowAddCLAModal(false)}>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px]" />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[560px] flex flex-col max-h-[calc(100vh-48px)]" onClick={(e) => e.stopPropagation()}>
+
+            {/* ── Sticky Header ── */}
+            <div className="flex items-center justify-between px-7 py-5 border-b border-black/[0.06] flex-shrink-0">
               <div>
-                <h3 className="text-h2 font-semibold text-black">Add New CLA</h3>
-                <p className="text-caption text-black/60 mt-0.5">Client Loss Alert - Track at-risk clients</p>
+                <h3 className="text-h2 font-bold text-black/90">Add New CLA</h3>
+                <p className="text-caption text-black/40 mt-1">Client Loss Alert — Track at-risk clients</p>
               </div>
-              <button 
-                className="w-8 h-8 rounded-full hover:bg-black/5 flex items-center justify-center transition-all" 
+              <button
+                className="w-9 h-9 rounded-xl hover:bg-black/[0.04] flex items-center justify-center transition-all"
                 onClick={() => setShowAddCLAModal(false)}
+                aria-label="Close modal"
               >
-                <X className="w-4 h-4 text-black/50" />
+                <X className="w-4 h-4 text-black/40" />
               </button>
             </div>
 
-            {/* Form */}
-            <form className="p-6 space-y-4">
-              {/* Creation Date and Time */}
-              <div>
-                <label className="block text-body font-medium text-black/70 mb-1.5">
-                  Creation Date & Time <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="datetime-local"
-                  value={formData.creationDate}
-                  onChange={(e) => setFormData({ ...formData, creationDate: e.target.value })}
-                  className="w-full px-3.5 py-2.5 text-body border border-black/10 rounded-xl bg-white text-black focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7] transition-all"
-                />
-              </div>
+            {/* ── Scrollable Form Body ── */}
+            <div className="flex-1 overflow-y-auto px-7 py-6">
+              <div className="space-y-5">
 
-              {/* Client Name */}
-              <div>
-                <label className="block text-body font-medium text-black/70 mb-1.5">
-                  Client Name <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={formData.clientName}
-                  onChange={(e) => {
-                    const selectedClient = clients.find(c => c.companyName === e.target.value);
-                    setFormData({ 
-                      ...formData, 
-                      clientName: e.target.value,
-                      amount: selectedClient ? selectedClient.value.toString() : ''
-                    });
-                  }}
-                  className="w-full px-3.5 py-2.5 text-body border border-black/10 rounded-xl bg-white text-black focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7] transition-all"
-                >
-                  <option value="">Select a client</option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.companyName}>
-                      {client.companyName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Brief or Reason */}
-              <div>
-                <label className="block text-body font-medium text-black/70 mb-1.5">
-                  Brief or Reason <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  placeholder="Describe the situation or reason for the CLA"
-                  value={formData.briefOrReason}
-                  onChange={(e) => setFormData({ ...formData, briefOrReason: e.target.value })}
-                  rows={3}
-                  className="w-full px-3.5 py-2.5 text-body border border-black/10 rounded-xl bg-white text-black placeholder:text-black/30 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7] transition-all resize-none"
-                />
-              </div>
-
-              {/* Service and Status - Two columns */}
-              <div className="grid grid-cols-2 gap-3">
-                {/* Service */}
-                <div>
-                  <label className="block text-body font-medium text-black/70 mb-1.5">
-                    Service <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={formData.service}
-                    onChange={(e) => setFormData({ ...formData, service: e.target.value as 'Performance Marketing' | 'Accounts & Taxation' })}
-                    className="w-full px-3.5 py-2.5 text-body border border-black/10 rounded-xl bg-white text-black focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7] transition-all"
-                  >
-                    <option value="Performance Marketing">Performance Marketing</option>
-                    <option value="Accounts & Taxation">Accounts & Taxation</option>
-                  </select>
+                {/* Row 1: Date + Client — Two columns */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-caption font-semibold text-black/55 uppercase tracking-wide mb-2">
+                      Date & Time <span className="text-[#E2445C]">*</span>
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.creationDate}
+                      onChange={(e) => setFormData({ ...formData, creationDate: e.target.value })}
+                      className="w-full px-3.5 py-2.5 text-body border border-black/[0.08] rounded-lg bg-white text-black/80 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/15 focus:border-[#204CC7]/40 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-caption font-semibold text-black/55 uppercase tracking-wide mb-2">
+                      Client <span className="text-[#E2445C]">*</span>
+                    </label>
+                    <select
+                      value={formData.clientName}
+                      onChange={(e) => {
+                        const sc = clients.find(c => c.companyName === e.target.value);
+                        setFormData({ ...formData, clientName: e.target.value, billingPerMonth: sc ? sc.value.toString() : '' });
+                      }}
+                      className="w-full px-3.5 py-2.5 text-body border border-black/[0.08] rounded-lg bg-white text-black/80 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/15 focus:border-[#204CC7]/40 transition-all appearance-none"
+                    >
+                      <option value="">Select a client</option>
+                      {clients.map((client) => (
+                        <option key={client.id} value={client.companyName}>{client.companyName}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                {/* Status */}
+                {/* Row 2: Brief or Reason */}
                 <div>
-                  <label className="block text-body font-medium text-black/70 mb-1.5">
-                    Status <span className="text-rose-500">*</span>
+                  <label className="block text-caption font-semibold text-black/55 uppercase tracking-wide mb-2">
+                    Brief or Reason <span className="text-[#E2445C]">*</span>
                   </label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value as 'Sureshot' | 'Can be Saved' })}
-                    className="w-full px-3.5 py-2.5 text-body border border-black/10 rounded-xl bg-white text-black focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7] transition-all"
-                  >
-                    <option value="Can be Saved">Can be Saved</option>
-                    <option value="Sureshot">Sureshot Loss</option>
-                  </select>
+                  <textarea
+                    placeholder="Describe the situation or reason for the CLA..."
+                    value={formData.briefOrReason}
+                    onChange={(e) => setFormData({ ...formData, briefOrReason: e.target.value })}
+                    rows={2}
+                    className="w-full px-3.5 py-2.5 text-body border border-black/[0.08] rounded-lg bg-white text-black/80 placeholder:text-black/25 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/15 focus:border-[#204CC7]/40 transition-all resize-none"
+                  />
                 </div>
-              </div>
 
-              {/* Amount */}
-              <div>
-                <label className="block text-body font-medium text-black/70 mb-1.5">
-                  Amount at Risk (₹)
-                </label>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  className="w-full px-3.5 py-2.5 text-body border border-black/10 rounded-xl bg-white text-black placeholder:text-black/30 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7] transition-all"
-                />
-              </div>
+                {/* Row 3: Service + Status — Two columns */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-caption font-semibold text-black/55 uppercase tracking-wide mb-2">
+                      Service <span className="text-[#E2445C]">*</span>
+                    </label>
+                    <select
+                      value={formData.service}
+                      onChange={(e) => setFormData({ ...formData, service: e.target.value as 'Performance Marketing' | 'Accounts & Taxation' })}
+                      className="w-full px-3.5 py-2.5 text-body border border-black/[0.08] rounded-lg bg-white text-black/80 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/15 focus:border-[#204CC7]/40 transition-all appearance-none"
+                    >
+                      <option value="Performance Marketing">Performance Marketing</option>
+                      <option value="Accounts & Taxation">Accounts & Taxation</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-caption font-semibold text-black/55 uppercase tracking-wide mb-2">
+                      Status <span className="text-[#E2445C]">*</span>
+                    </label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value as 'Sureshot' | 'Can be Saved' })}
+                      className="w-full px-3.5 py-2.5 text-body border border-black/[0.08] rounded-lg bg-white text-black/80 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/15 focus:border-[#204CC7]/40 transition-all appearance-none"
+                    >
+                      <option value="Can be Saved">Can be Saved</option>
+                      <option value="Sureshot">Sureshot Loss</option>
+                    </select>
+                  </div>
+                </div>
 
-              {/* Employee Responsible */}
-              <div>
-                <label className="block text-body font-medium text-black/70 mb-1.5">
-                  Employee Responsible <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter employee name"
-                  value={formData.employeeResponsible}
-                  onChange={(e) => setFormData({ ...formData, employeeResponsible: e.target.value })}
-                  className="w-full px-3.5 py-2.5 text-body border border-black/10 rounded-xl bg-white text-black placeholder:text-black/30 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7] transition-all"
-                />
-              </div>
+                {/* Row 4: Billing / Mo + HOD — Two columns */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-caption font-semibold text-black/55 uppercase tracking-wide mb-2">
+                      Billing / Mo (₹)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={formData.billingPerMonth}
+                      onChange={(e) => setFormData({ ...formData, billingPerMonth: e.target.value })}
+                      className="w-full px-3.5 py-2.5 text-body border border-black/[0.08] rounded-lg bg-white text-black/80 placeholder:text-black/25 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/15 focus:border-[#204CC7]/40 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-caption font-semibold text-black/55 uppercase tracking-wide mb-2">
+                      HOD <span className="text-[#E2445C]">*</span>
+                    </label>
+                    <select
+                      value={formData.hod}
+                      onChange={(e) => setFormData({ ...formData, hod: e.target.value })}
+                      className="w-full px-3.5 py-2.5 text-body border border-black/[0.08] rounded-lg bg-white text-black/80 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/15 focus:border-[#204CC7]/40 transition-all appearance-none"
+                    >
+                      <option value="">Select HOD</option>
+                      <option value="Chinmay P.">Chinmay P.</option>
+                      <option value="Zubear S.">Zubear S.</option>
+                      <option value="Tejas A.">Tejas A.</option>
+                      <option value="Hooshang B.">Hooshang B.</option>
+                    </select>
+                  </div>
+                </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2 pt-2">
-                <button
-                  type="button"
-                  className="flex-1 px-4 py-2.5 text-body font-medium bg-black/5 text-black/70 rounded-xl hover:bg-black/10 transition-all"
-                  onClick={() => setShowAddCLAModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="flex-1 px-4 py-2.5 text-body font-medium bg-[#204CC7] text-white rounded-xl hover:bg-[#1a3d9f] transition-all shadow-sm"
-                  onClick={() => {
-                    // Add CLA logic here
-                    console.log('Adding CLA:', formData);
-                    setShowAddCLAModal(false);
-                    // Reset form
-                    setFormData({
-                      creationDate: new Date().toISOString().slice(0, 16), // Default to current date/time
-                      clientName: '',
-                      briefOrReason: '',
-                      service: 'Performance Marketing',
-                      status: 'Can be Saved',
-                      amount: '',
-                      employeeResponsible: '',
-                    });
-                  }}
-                >
-                  Add CLA
-                </button>
+                {/* Row 5: Category + Employee — Two columns */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-caption font-semibold text-black/55 uppercase tracking-wide mb-2">
+                      Category <span className="text-[#E2445C]">*</span>
+                    </label>
+                    <select
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value as "Brego's Fault" | "Client's Fault" })}
+                      className="w-full px-3.5 py-2.5 text-body border border-black/[0.08] rounded-lg bg-white text-black/80 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/15 focus:border-[#204CC7]/40 transition-all appearance-none"
+                    >
+                      <option value="Brego's Fault">Brego&apos;s Fault</option>
+                      <option value="Client's Fault">Client&apos;s Fault</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-caption font-semibold text-black/55 uppercase tracking-wide mb-2">
+                      Employee Responsible <span className="text-[#E2445C]">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter employee name"
+                      value={formData.employeeResponsible}
+                      onChange={(e) => setFormData({ ...formData, employeeResponsible: e.target.value })}
+                      className="w-full px-3.5 py-2.5 text-body border border-black/[0.08] rounded-lg bg-white text-black/80 placeholder:text-black/25 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/15 focus:border-[#204CC7]/40 transition-all"
+                    />
+                  </div>
+                </div>
+
               </div>
-            </form>
+            </div>
+
+            {/* ── Sticky Footer ── */}
+            <div className="flex items-center justify-end gap-3 px-7 py-4 border-t border-black/[0.06] flex-shrink-0 bg-white rounded-b-2xl">
+              <button
+                type="button"
+                className="px-5 py-2.5 text-body font-medium text-black/60 hover:text-black/80 hover:bg-black/[0.04] rounded-lg transition-all"
+                onClick={() => setShowAddCLAModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="px-6 py-2.5 text-body font-semibold bg-[#204CC7] text-white rounded-lg hover:bg-[#1a3d9f] transition-all shadow-sm"
+                onClick={() => {
+                  console.log('Adding CLA:', formData);
+                  setShowAddCLAModal(false);
+                  setFormData({
+                    creationDate: new Date().toISOString().slice(0, 16),
+                    clientName: '',
+                    briefOrReason: '',
+                    service: 'Performance Marketing',
+                    status: 'Can be Saved',
+                    billingPerMonth: '',
+                    hod: '',
+                    employeeResponsible: '',
+                    category: "Brego's Fault",
+                  });
+                }}
+              >
+                Add CLA
+              </button>
+            </div>
+
           </div>
         </div>
       )}
@@ -2168,7 +2233,7 @@ export function AllClients({ onNavigateToIncidents }: AllClientsProps) {
             setFormData({
               ...formData,
               clientName: selectedClient.companyName,
-              amount: selectedClient.value.toString(),
+              billingPerMonth: selectedClient.value.toString(),
             });
             setShowClientDrawer(false);
             setShowAddCLAModal(true);

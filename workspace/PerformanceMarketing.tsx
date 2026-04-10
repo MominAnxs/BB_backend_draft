@@ -3446,10 +3446,6 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
                               <FileText className="w-4 h-4 text-[#5B7FD6]" />
                               <span className="text-black/75 text-caption font-medium">Planning</span>
                             </button>
-                            <button onClick={() => handleViewSelect('reports')} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#F6F7FF] transition-colors text-left">
-                              <BarChart3 className="w-4 h-4 text-[#5B7FD6]" />
-                              <span className="text-black/75 text-caption font-medium">Reports</span>
-                            </button>
                           </div>
                         )}
                       </td>

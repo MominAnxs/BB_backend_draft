@@ -1,5 +1,6 @@
 'use client';
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { AlertTriangle, Search, Plus, Filter, Eye, X, Calendar, User, Building2, FileText, TrendingDown, Check, ChevronDown, ChevronUp, ChevronRight, ArrowUpDown, Clock, Shield, CheckCircle2 } from 'lucide-react';
 
 // ── Types ──
@@ -10,7 +11,7 @@ interface Incident {
   relatedTo: string;
   service: 'Performance Marketing' | 'Accounts & Taxation' | 'Internal';
   category: 'Service Quality' | 'Communication' | 'Payment' | 'Technical' | 'HR Issue' | 'Compliance' | 'Deliverables';
-  severity: 'Low' | 'Medium' | 'High' | 'Critical';
+  priority: 'Low' | 'Medium' | 'High';
   description: string;
   status: 'Open' | 'In Progress' | 'Resolved' | 'Closed';
   assignedTo: string;
@@ -20,42 +21,42 @@ interface Incident {
 type TypeFilter = 'All' | 'Client' | 'Employee';
 type ServiceFilter = 'All' | 'Performance Marketing' | 'Accounts & Taxation' | 'Internal';
 type CategoryFilter = 'All' | Incident['category'];
-type SeverityFilter = 'All' | Incident['severity'];
+type PriorityFilter = 'All' | Incident['priority'];
 type StatusFilter = 'All' | Incident['status'];
-type SortField = 'date' | 'severity' | 'status' | 'relatedTo';
+type SortField = 'date' | 'priority' | 'status' | 'relatedTo';
 type SortDir = 'asc' | 'desc';
 
 interface Filters {
   type: TypeFilter;
   service: ServiceFilter;
   category: CategoryFilter;
-  severity: SeverityFilter;
+  priority: PriorityFilter;
   status: StatusFilter;
 }
 
-const DEFAULT_FILTERS: Filters = { type: 'All', service: 'All', category: 'All', severity: 'All', status: 'All' };
+const DEFAULT_FILTERS: Filters = { type: 'All', service: 'All', category: 'All', priority: 'All', status: 'All' };
 
-const SEVERITY_ORDER: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+const PRIORITY_ORDER: Record<string, number> = { High: 0, Medium: 1, Low: 2 };
 const STATUS_ORDER: Record<string, number> = { Open: 0, 'In Progress': 1, Resolved: 2, Closed: 3 };
 
 // ── Realistic Mock Data ──
 const initialIncidents: Incident[] = [
-  { id: 'INC-001', date: '2025-03-28', type: 'Client', relatedTo: 'Zenith Retail Pvt Ltd', service: 'Performance Marketing', category: 'Service Quality', severity: 'Critical', description: 'ROAS dropped below 1.5x for 3 consecutive weeks. Client threatening to leave.', status: 'Open', assignedTo: 'Priya Sharma' },
-  { id: 'INC-002', date: '2025-03-26', type: 'Client', relatedTo: 'Meridian Healthcare', service: 'Accounts & Taxation', category: 'Compliance', severity: 'High', description: 'GST filing deadline missed for February. Potential penalty of ₹10,000.', status: 'In Progress', assignedTo: 'Rohan Desai' },
-  { id: 'INC-003', date: '2025-03-25', type: 'Employee', relatedTo: 'Amit Verma', service: 'Internal', category: 'HR Issue', severity: 'Medium', description: 'Reported harassment complaint against team lead. Requires immediate HR investigation.', status: 'In Progress', assignedTo: 'HR Team' },
-  { id: 'INC-004', date: '2025-03-24', type: 'Client', relatedTo: 'UrbanNest Realty', service: 'Performance Marketing', category: 'Communication', severity: 'Medium', description: 'Client not receiving weekly performance reports. Issue persists for 2 weeks.', status: 'Open', assignedTo: 'Akshay Mehta' },
-  { id: 'INC-005', date: '2025-03-22', type: 'Client', relatedTo: 'NovaTech Solutions', service: 'Accounts & Taxation', category: 'Payment', severity: 'High', description: 'Invoice of ₹1.2L overdue by 45 days. Multiple follow-ups unanswered.', status: 'In Progress', assignedTo: 'Accounts Team' },
-  { id: 'INC-006', date: '2025-03-20', type: 'Client', relatedTo: 'Bloom Botanics', service: 'Performance Marketing', category: 'Deliverables', severity: 'High', description: 'March campaign creatives not delivered. Launch delayed by 5 days causing revenue loss.', status: 'Resolved', assignedTo: 'Sneha Patel', resolution: 'Creatives delivered and campaign launched. Offered 1 week free extension.' },
-  { id: 'INC-007', date: '2025-03-18', type: 'Employee', relatedTo: 'Kavya Iyer', service: 'Internal', category: 'HR Issue', severity: 'Low', description: 'Request for role change from Executive to Sr. Executive. Pending manager review.', status: 'Open', assignedTo: 'HR Team' },
-  { id: 'INC-008', date: '2025-03-15', type: 'Client', relatedTo: 'FreshBite Foods', service: 'Performance Marketing', category: 'Technical', severity: 'Critical', description: 'Facebook ad account suspended due to policy violation. All campaigns halted.', status: 'In Progress', assignedTo: 'Priya Sharma' },
-  { id: 'INC-009', date: '2025-03-12', type: 'Client', relatedTo: 'GreenLeaf Organics', service: 'Accounts & Taxation', category: 'Service Quality', severity: 'Medium', description: 'Bookkeeping errors found in Q3 statements. Client requesting re-audit.', status: 'Resolved', assignedTo: 'Rohan Desai', resolution: 'Statements corrected and verified. Apology letter sent to client.' },
-  { id: 'INC-010', date: '2025-03-10', type: 'Client', relatedTo: 'AutoPrime Motors', service: 'Performance Marketing', category: 'Communication', severity: 'Low', description: 'Client POC changed but team was not informed for 2 weeks.', status: 'Closed', assignedTo: 'Akshay Mehta', resolution: 'CRM updated. Process implemented for POC change notifications.' },
-  { id: 'INC-011', date: '2025-03-08', type: 'Employee', relatedTo: 'Ishaan Joshi', service: 'Internal', category: 'Compliance', severity: 'Medium', description: 'NDA breach suspected — shared client data screenshots on personal social media.', status: 'In Progress', assignedTo: 'Legal Team' },
-  { id: 'INC-012', date: '2025-03-05', type: 'Client', relatedTo: 'SparkEdge Media', service: 'Performance Marketing', category: 'Payment', severity: 'Medium', description: 'Disputed invoice amount. Client claims agreed fee was ₹80K, not ₹95K.', status: 'Open', assignedTo: 'Accounts Team' },
-  { id: 'INC-013', date: '2025-03-02', type: 'Client', relatedTo: 'TrueValue Finance', service: 'Accounts & Taxation', category: 'Deliverables', severity: 'High', description: 'Annual return filing incomplete. Missing documents from client side.', status: 'In Progress', assignedTo: 'Sneha Patel' },
-  { id: 'INC-014', date: '2025-02-28', type: 'Client', relatedTo: 'PeakFit Wellness', service: 'Performance Marketing', category: 'Service Quality', severity: 'Medium', description: 'Lead quality issues — 60% of leads generated are unqualified.', status: 'Resolved', assignedTo: 'Priya Sharma', resolution: 'Targeting refined, negative keywords added. Quality improved to 78% qualified.' },
-  { id: 'INC-015', date: '2025-02-25', type: 'Employee', relatedTo: 'Neha Kapoor', service: 'Internal', category: 'HR Issue', severity: 'Low', description: 'Frequent late arrivals reported by manager. 8 instances in February.', status: 'Closed', assignedTo: 'HR Team', resolution: 'Warning issued. Flexible timing approved for medical reasons.' },
-  { id: 'INC-016', date: '2025-02-20', type: 'Client', relatedTo: 'PixelCraft Studios', service: 'Performance Marketing', category: 'Technical', severity: 'High', description: 'Google Ads conversion tracking broken for 2 weeks. Data accuracy compromised.', status: 'Resolved', assignedTo: 'Akshay Mehta', resolution: 'Tracking pixel reinstalled and verified. Historical data reconciled.' },
+  { id: 'INC-001', date: '2025-03-28', type: 'Client', relatedTo: 'Zenith Retail Pvt Ltd', service: 'Performance Marketing', category: 'Service Quality', priority: 'High', description: 'ROAS dropped below 1.5x for 3 consecutive weeks. Client threatening to leave.', status: 'Open', assignedTo: 'Priya Sharma' },
+  { id: 'INC-002', date: '2025-03-26', type: 'Client', relatedTo: 'Meridian Healthcare', service: 'Accounts & Taxation', category: 'Compliance', priority: 'High', description: 'GST filing deadline missed for February. Potential penalty of ₹10,000.', status: 'In Progress', assignedTo: 'Rohan Desai' },
+  { id: 'INC-003', date: '2025-03-25', type: 'Employee', relatedTo: 'Amit Verma', service: 'Internal', category: 'HR Issue', priority: 'Medium', description: 'Reported harassment complaint against team lead. Requires immediate HR investigation.', status: 'In Progress', assignedTo: 'HR Team' },
+  { id: 'INC-004', date: '2025-03-24', type: 'Client', relatedTo: 'UrbanNest Realty', service: 'Performance Marketing', category: 'Communication', priority: 'Medium', description: 'Client not receiving weekly performance reports. Issue persists for 2 weeks.', status: 'Open', assignedTo: 'Akshay Mehta' },
+  { id: 'INC-005', date: '2025-03-22', type: 'Client', relatedTo: 'NovaTech Solutions', service: 'Accounts & Taxation', category: 'Payment', priority: 'High', description: 'Invoice of ₹1.2L overdue by 45 days. Multiple follow-ups unanswered.', status: 'In Progress', assignedTo: 'Accounts Team' },
+  { id: 'INC-006', date: '2025-03-20', type: 'Client', relatedTo: 'Bloom Botanics', service: 'Performance Marketing', category: 'Deliverables', priority: 'High', description: 'March campaign creatives not delivered. Launch delayed by 5 days causing revenue loss.', status: 'Resolved', assignedTo: 'Sneha Patel', resolution: 'Creatives delivered and campaign launched. Offered 1 week free extension.' },
+  { id: 'INC-007', date: '2025-03-18', type: 'Employee', relatedTo: 'Kavya Iyer', service: 'Internal', category: 'HR Issue', priority: 'Low', description: 'Request for role change from Executive to Sr. Executive. Pending manager review.', status: 'Open', assignedTo: 'HR Team' },
+  { id: 'INC-008', date: '2025-03-15', type: 'Client', relatedTo: 'FreshBite Foods', service: 'Performance Marketing', category: 'Technical', priority: 'High', description: 'Facebook ad account suspended due to policy violation. All campaigns halted.', status: 'In Progress', assignedTo: 'Priya Sharma' },
+  { id: 'INC-009', date: '2025-03-12', type: 'Client', relatedTo: 'GreenLeaf Organics', service: 'Accounts & Taxation', category: 'Service Quality', priority: 'Medium', description: 'Bookkeeping errors found in Q3 statements. Client requesting re-audit.', status: 'Resolved', assignedTo: 'Rohan Desai', resolution: 'Statements corrected and verified. Apology letter sent to client.' },
+  { id: 'INC-010', date: '2025-03-10', type: 'Client', relatedTo: 'AutoPrime Motors', service: 'Performance Marketing', category: 'Communication', priority: 'Low', description: 'Client POC changed but team was not informed for 2 weeks.', status: 'Closed', assignedTo: 'Akshay Mehta', resolution: 'CRM updated. Process implemented for POC change notifications.' },
+  { id: 'INC-011', date: '2025-03-08', type: 'Employee', relatedTo: 'Ishaan Joshi', service: 'Internal', category: 'Compliance', priority: 'Medium', description: 'NDA breach suspected — shared client data screenshots on personal social media.', status: 'In Progress', assignedTo: 'Legal Team' },
+  { id: 'INC-012', date: '2025-03-05', type: 'Client', relatedTo: 'SparkEdge Media', service: 'Performance Marketing', category: 'Payment', priority: 'Medium', description: 'Disputed invoice amount. Client claims agreed fee was ₹80K, not ₹95K.', status: 'Open', assignedTo: 'Accounts Team' },
+  { id: 'INC-013', date: '2025-03-02', type: 'Client', relatedTo: 'TrueValue Finance', service: 'Accounts & Taxation', category: 'Deliverables', priority: 'High', description: 'Annual return filing incomplete. Missing documents from client side.', status: 'In Progress', assignedTo: 'Sneha Patel' },
+  { id: 'INC-014', date: '2025-02-28', type: 'Client', relatedTo: 'PeakFit Wellness', service: 'Performance Marketing', category: 'Service Quality', priority: 'Medium', description: 'Lead quality issues — 60% of leads generated are unqualified.', status: 'Resolved', assignedTo: 'Priya Sharma', resolution: 'Targeting refined, negative keywords added. Quality improved to 78% qualified.' },
+  { id: 'INC-015', date: '2025-02-25', type: 'Employee', relatedTo: 'Neha Kapoor', service: 'Internal', category: 'HR Issue', priority: 'Low', description: 'Frequent late arrivals reported by manager. 8 instances in February.', status: 'Closed', assignedTo: 'HR Team', resolution: 'Warning issued. Flexible timing approved for medical reasons.' },
+  { id: 'INC-016', date: '2025-02-20', type: 'Client', relatedTo: 'PixelCraft Studios', service: 'Performance Marketing', category: 'Technical', priority: 'High', description: 'Google Ads conversion tracking broken for 2 weeks. Data accuracy compromised.', status: 'Resolved', assignedTo: 'Akshay Mehta', resolution: 'Tracking pixel reinstalled and verified. Historical data reconciled.' },
 ];
 
 // ── Helpers ──
@@ -123,12 +124,12 @@ function IncidentFilterPanel({ filters, onChange, onClose, onReset, activeCount 
             ))}
           </div>
         </div>
-        {/* Severity */}
+        {/* Priority */}
         <div>
-          <p className="text-caption font-semibold text-black/50 uppercase tracking-wide px-1 mb-1.5">Severity</p>
+          <p className="text-caption font-semibold text-black/50 uppercase tracking-wide px-1 mb-1.5">Priority</p>
           <div className="space-y-0.5">
-            {(['All', 'Critical', 'High', 'Medium', 'Low'] as SeverityFilter[]).map(opt => (
-              <FilterOption key={opt} label={opt === 'All' ? 'All Severities' : opt} value={opt} selected={filters.severity === opt} onSelect={v => onChange({ ...filters, severity: v })} />
+            {(['All', 'High', 'Medium', 'Low'] as PriorityFilter[]).map(opt => (
+              <FilterOption key={opt} label={opt === 'All' ? 'All Priorities' : opt} value={opt} selected={filters.priority === opt} onSelect={v => onChange({ ...filters, priority: v })} />
             ))}
           </div>
         </div>
@@ -166,12 +167,15 @@ const STATUS_DOT_COLORS: Record<Incident['status'], string> = {
 };
 
 export function IncidentData() {
+  const searchParams = useSearchParams();
+  const typeParam = searchParams.get('type');
+  const initialTypeFilter: TypeFilter = (typeParam === 'Client' || typeParam === 'Employee') ? typeParam : 'All';
   const [incidents, setIncidents] = useState<Incident[]>(initialIncidents);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [showDrawer, setShowDrawer] = useState(false);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<Filters>({ ...DEFAULT_FILTERS, type: initialTypeFilter });
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
@@ -182,14 +186,14 @@ export function IncidentData() {
     relatedTo: '',
     service: 'Performance Marketing' as Incident['service'],
     category: 'Service Quality' as Incident['category'],
-    severity: 'Medium' as Incident['severity'],
+    priority: 'Medium' as Incident['priority'],
     description: '',
     assignedTo: '',
   });
   const [formErrors, setFormErrors] = useState<Record<string, boolean>>({});
 
   const resetForm = () => {
-    setFormData({ type: 'Client', relatedTo: '', service: 'Performance Marketing', category: 'Service Quality', severity: 'Medium', description: '', assignedTo: '' });
+    setFormData({ type: 'Client', relatedTo: '', service: 'Performance Marketing', category: 'Service Quality', priority: 'Medium', description: '', assignedTo: '' });
     setFormErrors({});
   };
 
@@ -213,7 +217,7 @@ export function IncidentData() {
       relatedTo: formData.relatedTo.trim(),
       service: formData.type === 'Employee' ? 'Internal' : formData.service,
       category: formData.category,
-      severity: formData.severity,
+      priority: formData.priority,
       description: formData.description.trim(),
       status: 'Open',
       assignedTo: formData.assignedTo.trim(),
@@ -243,7 +247,7 @@ export function IncidentData() {
     setOpenStatusDropdown(null);
   };
 
-  const filterCount = (filters.type !== 'All' ? 1 : 0) + (filters.service !== 'All' ? 1 : 0) + (filters.category !== 'All' ? 1 : 0) + (filters.severity !== 'All' ? 1 : 0) + (filters.status !== 'All' ? 1 : 0);
+  const filterCount = (filters.type !== 'All' ? 1 : 0) + (filters.service !== 'All' ? 1 : 0) + (filters.category !== 'All' ? 1 : 0) + (filters.priority !== 'All' ? 1 : 0) + (filters.status !== 'All' ? 1 : 0);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -257,7 +261,7 @@ export function IncidentData() {
       if (filters.type !== 'All' && inc.type !== filters.type) return false;
       if (filters.service !== 'All' && inc.service !== filters.service) return false;
       if (filters.category !== 'All' && inc.category !== filters.category) return false;
-      if (filters.severity !== 'All' && inc.severity !== filters.severity) return false;
+      if (filters.priority !== 'All' && inc.priority !== filters.priority) return false;
       if (filters.status !== 'All' && inc.status !== filters.status) return false;
       return true;
     });
@@ -266,7 +270,7 @@ export function IncidentData() {
       let cmp = 0;
       switch (sortField) {
         case 'date': cmp = parseDate(a.date).getTime() - parseDate(b.date).getTime(); break;
-        case 'severity': cmp = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]; break;
+        case 'priority': cmp = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]; break;
         case 'status': cmp = STATUS_ORDER[a.status] - STATUS_ORDER[b.status]; break;
         case 'relatedTo': cmp = a.relatedTo.localeCompare(b.relatedTo); break;
       }
@@ -280,13 +284,12 @@ export function IncidentData() {
   const openIncidents = filteredIncidents.filter(i => i.status === 'Open').length;
   const inProgressIncidents = filteredIncidents.filter(i => i.status === 'In Progress').length;
   const resolvedIncidents = filteredIncidents.filter(i => i.status === 'Resolved' || i.status === 'Closed').length;
-  const criticalCount = filteredIncidents.filter(i => i.severity === 'Critical' || i.severity === 'High').length;
+  const highPriorityCount = filteredIncidents.filter(i => i.priority === 'High').length;
   const clientCount = filteredIncidents.filter(i => i.type === 'Client').length;
   const employeeCount = filteredIncidents.filter(i => i.type === 'Employee').length;
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'Critical': return 'bg-[#E2445C] text-white border-[#E2445C]';
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
       case 'High': return 'bg-rose-50 text-rose-700 border-rose-200';
       case 'Medium': return 'bg-amber-50 text-amber-700 border-amber-200';
       case 'Low': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
@@ -306,7 +309,7 @@ export function IncidentData() {
 
   const getTypeColor = (type: string) => type === 'Client' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-cyan-50 text-cyan-700 border-cyan-200';
 
-  const getServiceLabel = (s: string) => s === 'Performance Marketing' ? 'PM' : s === 'Accounts & Taxation' ? 'A&T' : 'Internal';
+  const getServiceLabel = (s: string) => s === 'Performance Marketing' ? 'SEM' : s === 'Accounts & Taxation' ? 'A&T' : 'Internal';
 
   const SortHeader = ({ field, children, className = '' }: { field: SortField; children: React.ReactNode; className?: string }) => (
     <th className={`px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide cursor-pointer hover:text-black/80 transition-colors select-none ${className}`} onClick={() => handleSort(field)}>
@@ -376,10 +379,10 @@ export function IncidentData() {
               <button onClick={() => setFilters(f => ({ ...f, service: 'All' }))} className="hover:bg-[#204CC7]/10 rounded p-0.5"><X className="w-3 h-3" /></button>
             </span>
           )}
-          {filters.severity !== 'All' && (
+          {filters.priority !== 'All' && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#204CC7]/[0.06] text-[#204CC7] text-caption font-medium">
-              {filters.severity}
-              <button onClick={() => setFilters(f => ({ ...f, severity: 'All' }))} className="hover:bg-[#204CC7]/10 rounded p-0.5"><X className="w-3 h-3" /></button>
+              {filters.priority}
+              <button onClick={() => setFilters(f => ({ ...f, priority: 'All' }))} className="hover:bg-[#204CC7]/10 rounded p-0.5"><X className="w-3 h-3" /></button>
             </span>
           )}
           {filters.status !== 'All' && (
@@ -451,34 +454,31 @@ export function IncidentData() {
           );
         })()}
 
-        {/* Severity Breakdown — full picture of how serious the incidents are */}
+        {/* Priority Breakdown — full picture of how serious the incidents are */}
         {(() => {
-          const critCount = filteredIncidents.filter(i => i.severity === 'Critical').length;
-          const highCount = filteredIncidents.filter(i => i.severity === 'High').length;
-          const medCount = filteredIncidents.filter(i => i.severity === 'Medium').length;
-          const lowCount = filteredIncidents.filter(i => i.severity === 'Low').length;
+          const highCount = filteredIncidents.filter(i => i.priority === 'High').length;
+          const medCount = filteredIncidents.filter(i => i.priority === 'Medium').length;
+          const lowCount = filteredIncidents.filter(i => i.priority === 'Low').length;
           return (
             <div className="bg-white border border-black/[0.06] rounded-2xl p-5 flex flex-col gap-4 hover:shadow-sm transition-shadow">
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
-                  <p className="text-black/50 text-caption font-medium uppercase tracking-wide">Severity Breakdown</p>
-                  <p className={`text-h1 font-bold ${criticalCount > 0 ? 'text-[#E2445C]' : 'text-black/90'}`}>{criticalCount > 0 ? `${criticalCount} Critical` : 'All Clear'}</p>
+                  <p className="text-black/50 text-caption font-medium uppercase tracking-wide">Priority Breakdown</p>
+                  <p className={`text-h1 font-bold ${highPriorityCount > 0 ? 'text-[#E2445C]' : 'text-black/90'}`}>{highPriorityCount > 0 ? `${highPriorityCount} High` : 'All Clear'}</p>
                 </div>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${criticalCount > 0 ? 'bg-[#E2445C]/[0.06]' : 'bg-[#00C875]/[0.08]'}`}>
-                  <Shield className={`w-5 h-5 ${criticalCount > 0 ? 'text-[#E2445C]/60' : 'text-[#00C875]/70'}`} />
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${highPriorityCount > 0 ? 'bg-[#E2445C]/[0.06]' : 'bg-[#00C875]/[0.08]'}`}>
+                  <Shield className={`w-5 h-5 ${highPriorityCount > 0 ? 'text-[#E2445C]/60' : 'text-[#00C875]/70'}`} />
                 </div>
               </div>
               <div className="space-y-2">
                 <div className="flex h-2 rounded-full overflow-hidden bg-black/[0.04]">
-                  {critCount > 0 && <div className="bg-[#E2445C] rounded-l-full" style={{ width: `${(critCount / Math.max(totalIncidents, 1)) * 100}%` }} />}
-                  {highCount > 0 && <div className="bg-[#FDAB3D]" style={{ width: `${(highCount / Math.max(totalIncidents, 1)) * 100}%` }} />}
-                  {medCount > 0 && <div className="bg-[#204CC7]" style={{ width: `${(medCount / Math.max(totalIncidents, 1)) * 100}%` }} />}
+                  {highCount > 0 && <div className="bg-[#E2445C] rounded-l-full" style={{ width: `${(highCount / Math.max(totalIncidents, 1)) * 100}%` }} />}
+                  {medCount > 0 && <div className="bg-[#FDAB3D]" style={{ width: `${(medCount / Math.max(totalIncidents, 1)) * 100}%` }} />}
                   {lowCount > 0 && <div className="bg-[#00C875]" style={{ width: `${(lowCount / Math.max(totalIncidents, 1)) * 100}%` }} />}
                 </div>
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#E2445C]" /><span className="text-black/50 text-caption font-normal">Critical: {critCount}</span></div>
-                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#FDAB3D]" /><span className="text-black/50 text-caption font-normal">High: {highCount}</span></div>
-                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#204CC7]" /><span className="text-black/50 text-caption font-normal">Medium: {medCount}</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#E2445C]" /><span className="text-black/50 text-caption font-normal">High: {highCount}</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#FDAB3D]" /><span className="text-black/50 text-caption font-normal">Medium: {medCount}</span></div>
                   <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#00C875]" /><span className="text-black/50 text-caption font-normal">Low: {lowCount}</span></div>
                 </div>
               </div>
@@ -534,7 +534,7 @@ export function IncidentData() {
                 <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Type</th>
                 <SortHeader field="relatedTo">Related To</SortHeader>
                 <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Category</th>
-                <SortHeader field="severity">Severity</SortHeader>
+                <SortHeader field="priority">Priority</SortHeader>
                 <SortHeader field="status">Status</SortHeader>
                 <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Assigned To</th>
                 <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide w-12"></th>
@@ -555,7 +555,7 @@ export function IncidentData() {
               {filteredIncidents.map((incident, index) => {
                 const daysAgo = daysSince(incident.date);
                 return (
-                  <tr key={incident.id} className={`border-b border-black/[0.04] hover:bg-black/[0.015] transition-colors ${index % 2 === 1 ? 'bg-black/[0.01]' : ''} ${incident.severity === 'Critical' && incident.status === 'Open' ? 'bg-rose-50/40' : ''}`}>
+                  <tr key={incident.id} className={`border-b border-black/[0.04] hover:bg-black/[0.015] transition-colors ${index % 2 === 1 ? 'bg-black/[0.01]' : ''} ${incident.priority === 'High' && incident.status === 'Open' ? 'bg-rose-50/40' : ''}`}>
                     <td className="px-4 py-3">
                       <p className="text-[#204CC7] text-caption font-semibold">{incident.id}</p>
                     </td>
@@ -580,8 +580,8 @@ export function IncidentData() {
                       <p className="text-caption font-normal text-black/65">{incident.category}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded-md text-caption font-medium border ${getSeverityColor(incident.severity)}`}>
-                        {incident.severity}
+                      <span className={`inline-flex px-2 py-0.5 rounded-md text-caption font-medium border ${getPriorityColor(incident.priority)}`}>
+                        {incident.priority}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -639,9 +639,9 @@ export function IncidentData() {
 
       {/* ── Add Incident Modal ── */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 overflow-hidden">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
-          <div className="absolute inset-0 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60]">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
+          <div className="fixed inset-0 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
               {/* Modal Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-black/[0.06]">
@@ -768,13 +768,13 @@ export function IncidentData() {
                   {formErrors.assignedTo && <p className="text-caption font-medium text-[#E2445C] mt-1">Assignee is required</p>}
                 </div>
 
-                {/* Severity */}
+                {/* Priority */}
                 <div>
-                  <label className="block text-caption font-semibold text-black/60 mb-2">Severity <span className="text-[#E2445C]">*</span></label>
+                  <label className="block text-caption font-semibold text-black/60 mb-2">Priority <span className="text-[#E2445C]">*</span></label>
                   <div className="flex gap-2">
-                    {(['Low', 'Medium', 'High', 'Critical'] as Incident['severity'][]).map(s => {
-                      const colors: Record<string, string> = { Low: 'bg-emerald-50 border-emerald-200 text-emerald-700', Medium: 'bg-amber-50 border-amber-200 text-amber-700', High: 'bg-rose-50 border-rose-200 text-rose-700', Critical: 'bg-[#E2445C] border-[#E2445C] text-white' };
-                      return <button key={s} type="button" onClick={() => setFormData(f => ({...f, severity: s}))} className={`flex-1 py-2.5 rounded-xl border text-caption font-medium transition-all ${formData.severity === s ? colors[s] : 'border-black/10 text-black/50 hover:bg-black/[0.02]'}`}>{s}</button>;
+                    {(['Low', 'Medium', 'High'] as Incident['priority'][]).map(s => {
+                      const colors: Record<string, string> = { Low: 'bg-emerald-50 border-emerald-200 text-emerald-700', Medium: 'bg-amber-50 border-amber-200 text-amber-700', High: 'bg-rose-50 border-rose-200 text-rose-700' };
+                      return <button key={s} type="button" onClick={() => setFormData(f => ({...f, priority: s}))} className={`flex-1 py-2.5 rounded-xl border text-caption font-medium transition-all ${formData.priority === s ? colors[s] : 'border-black/10 text-black/50 hover:bg-black/[0.02]'}`}>{s}</button>;
                     })}
                   </div>
                 </div>
@@ -798,7 +798,7 @@ export function IncidentData() {
       {/* Incident Details Drawer */}
       {showDrawer && selectedIncident && (() => {
         const daysOpen = daysSince(selectedIncident.date);
-        const isUrgent = (selectedIncident.severity === 'Critical' || selectedIncident.severity === 'High') && (selectedIncident.status === 'Open' || selectedIncident.status === 'In Progress');
+        const isUrgent = selectedIncident.priority === 'High' && (selectedIncident.status === 'Open' || selectedIncident.status === 'In Progress');
         const isOpen = selectedIncident.status === 'Open';
         const isInProgress = selectedIncident.status === 'In Progress';
         const isResolved = selectedIncident.status === 'Resolved';
@@ -810,20 +810,20 @@ export function IncidentData() {
         const nextColors = isOpen ? 'bg-[#204CC7] hover:bg-[#1a3d9f] text-white' : isInProgress ? 'bg-[#00C875] hover:bg-[#00a85f] text-white' : isResolved ? 'bg-black/80 hover:bg-black/70 text-white' : '';
 
         // Severity header color
-        const severityHeaderBg = selectedIncident.severity === 'Critical' ? 'bg-[#E2445C]' : selectedIncident.severity === 'High' ? 'bg-[#FDAB3D]' : 'bg-[#204CC7]';
+        const priorityHeaderBg = selectedIncident.priority === 'High' ? 'bg-[#E2445C]' : selectedIncident.priority === 'Medium' ? 'bg-[#FDAB3D]' : 'bg-[#204CC7]';
 
         return (
-          <div className="fixed inset-0 z-50 overflow-hidden">
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowDrawer(false)} />
-            <div className="absolute right-0 top-0 h-full w-full max-w-xl bg-white shadow-2xl">
+          <div className="fixed inset-0 z-[60]">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowDrawer(false)} />
+            <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-white shadow-2xl overflow-hidden">
               <div className="h-full flex flex-col">
-                {/* Header — color-coded by severity */}
-                <div className={`${severityHeaderBg} px-6 py-5`}>
+                {/* Header — color-coded by priority */}
+                <div className={`${priorityHeaderBg} px-6 py-5`}>
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2.5 mb-2">
                         <span className="text-white/70 text-caption font-medium bg-white/15 px-2 py-0.5 rounded-md">{selectedIncident.id}</span>
-                        <span className="text-white/70 text-caption font-medium bg-white/15 px-2 py-0.5 rounded-md">{selectedIncident.severity}</span>
+                        <span className="text-white/70 text-caption font-medium bg-white/15 px-2 py-0.5 rounded-md">{selectedIncident.priority}</span>
                       </div>
                       <h2 className="text-white text-h2 font-bold truncate">{selectedIncident.relatedTo}</h2>
                       <p className="text-white/70 text-caption font-normal mt-1">{selectedIncident.category} · {getServiceLabel(selectedIncident.service)} · Reported {formatDate(selectedIncident.date)}</p>
@@ -842,7 +842,7 @@ export function IncidentData() {
                     </div>
                     <div>
                       <p className="text-[#E2445C] text-caption font-semibold">Open for {daysOpen} day{daysOpen !== 1 ? 's' : ''}</p>
-                      <p className="text-black/50 text-caption font-normal">{selectedIncident.severity} severity — requires immediate attention</p>
+                      <p className="text-black/50 text-caption font-normal">{selectedIncident.priority} priority — requires immediate attention</p>
                     </div>
                   </div>
                 )}
@@ -856,8 +856,8 @@ export function IncidentData() {
                       <span className={`inline-flex px-2.5 py-1 rounded-md text-caption font-medium border ${getStatusColor(selectedIncident.status)}`}>{selectedIncident.status}</span>
                     </div>
                     <div className="bg-white border border-black/[0.06] rounded-xl p-3.5">
-                      <p className="text-black/45 text-caption font-medium mb-1.5">Severity</p>
-                      <span className={`inline-flex px-2.5 py-1 rounded-md text-caption font-medium border ${getSeverityColor(selectedIncident.severity)}`}>{selectedIncident.severity}</span>
+                      <p className="text-black/45 text-caption font-medium mb-1.5">Priority</p>
+                      <span className={`inline-flex px-2.5 py-1 rounded-md text-caption font-medium border ${getPriorityColor(selectedIncident.priority)}`}>{selectedIncident.priority}</span>
                     </div>
                     <div className="bg-white border border-black/[0.06] rounded-xl p-3.5">
                       <p className="text-black/45 text-caption font-medium mb-1.5">Age</p>
@@ -954,15 +954,15 @@ export function IncidentData() {
 
                   {/* Secondary actions row */}
                   <div className="flex gap-2.5">
-                    {/* Escalate — only for open/in-progress non-critical incidents */}
-                    {(isOpen || isInProgress) && selectedIncident.severity !== 'Critical' && (
+                    {/* Escalate — only for open/in-progress non-high incidents */}
+                    {(isOpen || isInProgress) && selectedIncident.priority !== 'High' && (
                       <button
                         onClick={() => {
-                          const nextSeverity: Record<string, Incident['severity']> = { Low: 'Medium', Medium: 'High', High: 'Critical' };
-                          const upgraded = nextSeverity[selectedIncident.severity];
+                          const nextPriority: Record<string, Incident['priority']> = { Low: 'Medium', Medium: 'High' };
+                          const upgraded = nextPriority[selectedIncident.priority];
                           if (upgraded) {
-                            setIncidents(prev => prev.map(inc => inc.id === selectedIncident.id ? { ...inc, severity: upgraded } : inc));
-                            setSelectedIncident({ ...selectedIncident, severity: upgraded });
+                            setIncidents(prev => prev.map(inc => inc.id === selectedIncident.id ? { ...inc, priority: upgraded } : inc));
+                            setSelectedIncident({ ...selectedIncident, priority: upgraded });
                           }
                         }}
                         className="flex-1 px-3 py-2.5 border border-[#E2445C]/20 text-[#E2445C] rounded-xl hover:bg-[#E2445C]/[0.04] transition-all text-caption font-medium flex items-center justify-center gap-1.5"

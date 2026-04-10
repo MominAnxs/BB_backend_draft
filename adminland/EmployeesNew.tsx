@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Users, Search, Plus, X, AlertTriangle, CheckCircle, Clock, Award, TrendingUp, Filter, UserPlus, Building2, User, Briefcase, DollarSign, Home, ChevronDown, Check, Mail, RotateCcw, Trash2, Send, Shield, Eye, MessageSquare, FolderOpen, ListTodo, BarChart3, Settings } from 'lucide-react';
 
 interface Employee {
@@ -32,9 +33,24 @@ interface Employee {
   adCreativeUnderstanding: string;
   industryKnowledge: string;
   googlePlatform: string;
+  onboardingStatus: 'Onboarded' | 'Settled' | 'Unsettled';
   isCLA: boolean;
+  claType: 'CLA' | 'NTF' | '';
   claReason: string;
   assignedClients: string[];
+}
+
+type IncomingStatus = 'Incoming' | 'Backed Out' | 'Active';
+
+interface IncomingEmployee {
+  id: number;
+  code: string;
+  name: string;
+  department: string;
+  role: string;
+  joiningDate: string;
+  incomingStatus: IncomingStatus;
+  note?: string;
 }
 
 // Available options for dropdowns
@@ -49,6 +65,7 @@ const ROLES = [
 const DEPARTMENTS = [
   'All',
   'Performance Marketing',
+  'Accounts & Taxation',
   'Finance',
   'Operations',
   'HR',
@@ -163,7 +180,7 @@ function EditablePill({
       </button>
       {isOpen && (
         <div
-          className="absolute right-0 top-full mt-1 z-50 min-w-[160px] bg-white rounded-xl border border-black/10 shadow-xl overflow-hidden"
+          className="absolute right-0 top-full mt-1 z-[60] min-w-[160px] bg-white rounded-xl border border-black/10 shadow-xl overflow-hidden"
           role="listbox"
           aria-label={`Select ${field}`}
         >
@@ -251,7 +268,7 @@ function FilterOption<T extends string>({ label, options, value, onChange }: { l
         <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-1 z-50 min-w-[180px] bg-white rounded-xl border border-black/10 shadow-xl overflow-hidden">
+        <div className="absolute top-full left-0 mt-1 z-[60] min-w-[180px] bg-white rounded-xl border border-black/10 shadow-xl overflow-hidden">
           <div className="max-h-60 overflow-y-auto py-1">
             {options.map(opt => (
               <button key={opt} onClick={() => { onChange(opt); setOpen(false); }}
@@ -267,9 +284,15 @@ function FilterOption<T extends string>({ label, options, value, onChange }: { l
 }
 
 export function EmployeesNew() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const initialView = (tabParam === 'cla' || tabParam === 'incoming') ? tabParam : 'all';
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
-  const [activeView, setActiveView] = useState<'all' | 'cla'>('all');
+  const [activeView, setActiveView] = useState<'all' | 'cla' | 'incoming'>(initialView);
+  const [showAddIncomingModal, setShowAddIncomingModal] = useState(false);
+  const [incomingForm, setIncomingForm] = useState({ name: '', department: 'Finance', role: 'Executive', joiningDate: '', note: '' });
+  const [incomingFormErrors, setIncomingFormErrors] = useState({ name: false });
   const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
   const [isAddingCLA, setIsAddingCLA] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -316,7 +339,9 @@ export function EmployeesNew() {
       adCreativeUnderstanding: 'Average',
       industryKnowledge: 'Average',
       googlePlatform: 'Average',
+      onboardingStatus: 'Onboarded',
       isCLA: false,
+      claType: '' as const,
       claReason: '',
       assignedClients: ['All'],
     },
@@ -349,7 +374,9 @@ export function EmployeesNew() {
       adCreativeUnderstanding: 'Average',
       industryKnowledge: 'Average',
       googlePlatform: 'Average',
+      onboardingStatus: 'Onboarded',
       isCLA: false,
+      claType: '' as const,
       claReason: '',
       assignedClients: ['All'],
     },
@@ -382,7 +409,9 @@ export function EmployeesNew() {
       adCreativeUnderstanding: 'Average',
       industryKnowledge: 'Average',
       googlePlatform: 'Average',
+      onboardingStatus: 'Onboarded',
       isCLA: false,
+      claType: '' as const,
       claReason: '',
       assignedClients: ['All'],
     },
@@ -415,7 +444,9 @@ export function EmployeesNew() {
       adCreativeUnderstanding: 'Average',
       industryKnowledge: 'Average',
       googlePlatform: 'Average',
+      onboardingStatus: 'Onboarded',
       isCLA: false,
+      claType: '' as const,
       claReason: '',
       assignedClients: ['All'],
     },
@@ -448,7 +479,9 @@ export function EmployeesNew() {
       adCreativeUnderstanding: 'Average',
       industryKnowledge: 'Average',
       googlePlatform: 'Average',
+      onboardingStatus: 'Onboarded',
       isCLA: false,
+      claType: '' as const,
       claReason: '',
       assignedClients: [],
     },
@@ -481,7 +514,9 @@ export function EmployeesNew() {
       adCreativeUnderstanding: 'Average',
       industryKnowledge: 'Average',
       googlePlatform: 'Average',
+      onboardingStatus: 'Onboarded',
       isCLA: false,
+      claType: '' as const,
       claReason: '',
       assignedClients: [],
     },
@@ -514,7 +549,9 @@ export function EmployeesNew() {
       adCreativeUnderstanding: 'Average',
       industryKnowledge: 'Average',
       googlePlatform: 'Average',
+      onboardingStatus: 'Onboarded',
       isCLA: false,
+      claType: '' as const,
       claReason: '',
       assignedClients: ['All'],
     },
@@ -547,7 +584,9 @@ export function EmployeesNew() {
       adCreativeUnderstanding: 'Very Strong',
       industryKnowledge: 'Very Strong',
       googlePlatform: 'Very Strong',
+      onboardingStatus: 'Settled',
       isCLA: true,
+      claType: 'CLA' as const,
       claReason: 'Performance issues - Not meeting monthly targets for 3 consecutive months',
       assignedClients: ['Acme Corp', 'Tech Innovations'],
     },
@@ -580,11 +619,33 @@ export function EmployeesNew() {
       adCreativeUnderstanding: 'Strong',
       industryKnowledge: 'Average',
       googlePlatform: 'Weak',
+      onboardingStatus: 'Unsettled',
       isCLA: true,
+      claType: 'NTF' as const,
       claReason: 'Attendance and punctuality concerns - Late submissions affecting team deliverables',
       assignedClients: ['Sunrise Retail'],
     },
   ]);
+
+  const [incomingEmployees, setIncomingEmployees] = useState<IncomingEmployee[]>([
+    { id: 101, code: 'BRG020', name: 'Nisha Patil', department: 'Finance', role: 'Executive', joiningDate: '6th Apr, 2026', incomingStatus: 'Active', note: 'Offered ₹33.2K, DOJ: 6th April, DOCS: Done' },
+    { id: 102, code: 'BRG021', name: 'Jyoti Rane', department: 'Finance', role: 'Executive', joiningDate: '4th May, 2026', incomingStatus: 'Incoming', note: 'Offered ₹41.5K, DOJ: 4th May, DOCS: Pending' },
+    { id: 103, code: 'BRG022', name: 'Amisha Desai', department: 'Finance', role: 'Executive', joiningDate: 'TBD', incomingStatus: 'Incoming', note: 'Shortlisted for final round — scheduled Friday evening with Irshad' },
+    { id: 104, code: 'BRG023', name: 'Rahul Kapoor', department: 'Sales', role: 'Sr. Executive', joiningDate: '14th Apr, 2026', incomingStatus: 'Incoming', note: 'Referred by Chinmay, 4 yrs exp in B2B sales' },
+    { id: 105, code: 'BRG024', name: 'Sneha Kulkarni', department: 'Performance Marketing', role: 'Executive', joiningDate: '21st Apr, 2026', incomingStatus: 'Incoming', note: 'Google Ads certified, previously at iProspect' },
+    { id: 106, code: 'BRG025', name: 'Vishal Thakur', department: 'Technology', role: 'Executive', joiningDate: '28th Apr, 2026', incomingStatus: 'Incoming', note: 'Full-stack developer, React + Node background' },
+    { id: 107, code: 'BRG026', name: 'Ankita Sharma', department: 'Finance', role: 'Executive', joiningDate: '15th Mar, 2026', incomingStatus: 'Backed Out', note: 'Accepted counter-offer from current employer' },
+    { id: 108, code: 'BRG027', name: 'Ravi Menon', department: 'Sales', role: 'Executive', joiningDate: '20th Mar, 2026', incomingStatus: 'Backed Out', note: 'Relocated to Bangalore, no longer available' },
+  ]);
+
+  const getIncomingStatusColor = (status: IncomingStatus) => {
+    switch (status) {
+      case 'Incoming': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'Backed Out': return 'bg-rose-50 text-rose-700 border-rose-200';
+      case 'Active': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      default: return 'bg-black/5 text-black/50 border-black/10';
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -662,6 +723,7 @@ export function EmployeesNew() {
   // State for CLA Assignment Form
   const [claForm, setClaForm] = useState({
     selectedEmployeeId: 0,
+    claType: 'CLA' as 'CLA' | 'NTF',
     reason: '',
   });
 
@@ -769,7 +831,9 @@ export function EmployeesNew() {
       adCreativeUnderstanding: 'Average',
       industryKnowledge: 'Average',
       googlePlatform: 'Average',
+      onboardingStatus: 'Unsettled',
       isCLA: false,
+      claType: '' as const,
       claReason: '',
       assignedClients: newEmployee.role === 'Admin' ? ['All'] : [],
     };
@@ -801,15 +865,16 @@ export function EmployeesNew() {
 
     setEmployees(prev => prev.map(emp =>
       emp.id === claForm.selectedEmployeeId
-        ? { ...emp, isCLA: true, claReason: claForm.reason }
+        ? { ...emp, isCLA: true, claType: claForm.claType, claReason: claForm.reason }
         : emp
     ));
 
     setShowAddEmployeeModal(false);
-    
+
     // Reset form
     setClaForm({
       selectedEmployeeId: 0,
+      claType: 'CLA',
       reason: '',
     });
   };
@@ -843,6 +908,16 @@ export function EmployeesNew() {
               }`}
             >
               CLA/NTF
+            </button>
+            <button
+              onClick={() => setActiveView('incoming')}
+              className={`px-4 py-1.5 text-caption font-medium rounded-lg transition-all ${
+                activeView === 'incoming'
+                  ? 'bg-white text-black shadow-sm'
+                  : 'text-black/50 hover:text-black/70'
+              }`}
+            >
+              Incoming
             </button>
           </div>
 
@@ -884,13 +959,17 @@ export function EmployeesNew() {
             )}
             <button
               onClick={() => {
-                setIsAddingCLA(activeView === 'cla');
-                setShowAddEmployeeModal(true);
+                if (activeView === 'incoming') {
+                  setShowAddIncomingModal(true);
+                } else {
+                  setIsAddingCLA(activeView === 'cla');
+                  setShowAddEmployeeModal(true);
+                }
               }}
               className="flex items-center gap-1.5 px-3 py-2 bg-[#204CC7] text-white rounded-lg hover:bg-[#1a3d9f] transition-all text-caption font-medium"
             >
               <UserPlus className="w-3.5 h-3.5" />
-              <span>{activeView === 'cla' ? 'Add to CLA/NTF' : 'Add Employee'}</span>
+              <span>{activeView === 'incoming' ? 'Incoming Employee' : activeView === 'cla' ? 'Add to CLA/NTF' : 'Add Employee'}</span>
             </button>
           </div>
         </div>
@@ -985,7 +1064,108 @@ export function EmployeesNew() {
         </div>
       </div>
 
+      {/* Incoming Employees Table */}
+      {activeView === 'incoming' && (
+        <div className="bg-white border border-black/5 rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-black/5 bg-black/[0.01]">
+                  <th className="pl-5 pr-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Code</th>
+                  <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Name</th>
+                  <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Department</th>
+                  <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Role</th>
+                  <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Joining Date</th>
+                  <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Status</th>
+                  <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                {incomingEmployees.map((emp, index) => (
+                  <tr key={emp.id} className={`border-b border-black/[0.04] last:border-0 transition-colors hover:bg-black/[0.015] ${index % 2 === 1 ? 'bg-black/[0.01]' : ''}`}>
+                    <td className="pl-5 pr-3 py-3">
+                      <span className="text-[#204CC7]/70 text-caption font-mono">{emp.code}</span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 bg-black/[0.04] rounded-full flex items-center justify-center flex-shrink-0">
+                          <span className="text-black/50 text-caption font-semibold">{emp.name.charAt(0)}</span>
+                        </div>
+                        <span className="text-black/85 text-caption font-medium">{emp.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className={`inline-flex px-2.5 py-1 rounded-full text-caption font-medium whitespace-nowrap ${getDepartmentColor(emp.department)}`}>{emp.department}</span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className="inline-flex px-2.5 py-1 rounded-full text-caption font-medium bg-black/[0.03] text-black/70 whitespace-nowrap">{emp.role}</span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className="text-black/50 text-caption whitespace-nowrap">{emp.joiningDate}</span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="relative">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenDropdown(
+                              openDropdown?.id === emp.id && openDropdown?.field === 'incomingStatus'
+                                ? null
+                                : { id: emp.id, field: 'incomingStatus' }
+                            );
+                          }}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-caption font-medium border whitespace-nowrap transition-all cursor-pointer ${getIncomingStatusColor(emp.incomingStatus)}`}
+                        >
+                          <span>{emp.incomingStatus}</span>
+                          <ChevronDown className="w-3 h-3 flex-shrink-0" />
+                        </button>
+                        {openDropdown?.id === emp.id && openDropdown?.field === 'incomingStatus' && (
+                          <div className="absolute top-full left-0 mt-1 z-50 min-w-[150px]">
+                            <div className="bg-white rounded-xl border border-black/10 shadow-xl overflow-hidden">
+                              {(['Incoming', 'Backed Out', 'Active'] as IncomingStatus[]).map(s => (
+                                <button
+                                  key={s}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIncomingEmployees(prev => prev.map(ie => ie.id === emp.id ? { ...ie, incomingStatus: s } : ie));
+                                    setOpenDropdown(null);
+                                  }}
+                                  className={`w-full text-left px-3 py-2 text-caption hover:bg-black/[0.02] transition-all flex items-center gap-2 ${
+                                    emp.incomingStatus === s ? 'font-medium' : 'text-black/70'
+                                  }`}
+                                >
+                                  <span className={`inline-flex px-2 py-0.5 rounded-full text-caption font-medium border ${getIncomingStatusColor(s)}`}>{s}</span>
+                                  {emp.incomingStatus === s && <Check className="w-3.5 h-3.5 text-[#204CC7] ml-auto" />}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 max-w-[280px]">
+                      {emp.note ? (
+                        <p className="text-caption text-black/55 leading-relaxed line-clamp-2">{emp.note}</p>
+                      ) : (
+                        <span className="text-caption text-black/25">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {incomingEmployees.length === 0 && (
+            <div className="py-16 text-center">
+              <Users className="w-12 h-12 text-black/10 mx-auto mb-3" />
+              <p className="text-black/55 text-body">No incoming employees</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* World-Class Table */}
+      {activeView !== 'incoming' && (
       <div className="bg-white border border-black/5 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -996,7 +1176,8 @@ export function EmployeesNew() {
                 <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Department</th>
                 <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Role</th>
                 <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Joined</th>
-                <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Clients</th>
+                <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Onboarding</th>
+                <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">{activeView === 'cla' ? 'Status' : 'Clients'}</th>
                 {activeView === 'cla' && (
                   <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Reason/Brief</th>
                 )}
@@ -1103,13 +1284,80 @@ export function EmployeesNew() {
                     <span className="text-black/50 text-caption whitespace-nowrap">{employee.joiningDate}</span>
                   </td>
 
-                  {/* Clients */}
+                  {/* Onboarding Status */}
+                  <td className="px-3 py-3">
+                    {isFounder ? (
+                      <span className={`inline-flex px-2.5 py-1 rounded-md text-caption font-medium border ${
+                        employee.onboardingStatus === 'Onboarded' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                        employee.onboardingStatus === 'Settled' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                        'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}>{employee.onboardingStatus}</span>
+                    ) : (
+                      <div className="relative">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenDropdown(
+                              openDropdown?.id === employee.id && openDropdown?.field === 'onboardingStatus'
+                                ? null
+                                : { id: employee.id, field: 'onboardingStatus' }
+                            );
+                          }}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-caption font-medium border cursor-pointer transition-all hover:shadow-sm ${
+                            employee.onboardingStatus === 'Onboarded' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                            employee.onboardingStatus === 'Settled' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}
+                          aria-expanded={openDropdown?.id === employee.id && openDropdown?.field === 'onboardingStatus'}
+                          aria-haspopup="listbox"
+                        >
+                          <span>{employee.onboardingStatus}</span>
+                          <ChevronDown className={`w-3 h-3 flex-shrink-0 transition-transform ${openDropdown?.id === employee.id && openDropdown?.field === 'onboardingStatus' ? 'rotate-180' : ''}`} />
+                        </button>
+                        {openDropdown?.id === employee.id && openDropdown?.field === 'onboardingStatus' && (
+                          <div className="absolute top-full left-0 mt-1 z-50 min-w-[150px]">
+                            <div className="bg-white rounded-xl border border-black/10 shadow-xl overflow-hidden">
+                              <div className="py-1">
+                                {(['Onboarded', 'Settled', 'Unsettled'] as const).map((opt) => (
+                                  <button
+                                    key={opt}
+                                    role="option"
+                                    aria-selected={employee.onboardingStatus === opt}
+                                    onClick={(e) => { e.stopPropagation(); updateEmployee(employee.id, 'onboardingStatus', opt); }}
+                                    className={`w-full text-left px-3 py-2 text-caption transition-all flex items-center justify-between ${
+                                      employee.onboardingStatus === opt ? 'bg-[#204CC7]/5 font-medium' : 'hover:bg-black/[0.02]'
+                                    }`}
+                                  >
+                                    <span className={`px-2 py-0.5 rounded-md text-caption font-medium border ${
+                                      opt === 'Onboarded' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                      opt === 'Settled' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                      'bg-amber-50 text-amber-700 border-amber-200'
+                                    }`}>{opt}</span>
+                                    {employee.onboardingStatus === opt && <Check className="w-3.5 h-3.5 text-[#204CC7]" />}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </td>
+
+                  {/* Clients / Status */}
                   <td className="px-3 py-3">
                     {activeView === 'cla' ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-caption font-medium bg-blue-50 text-blue-700 whitespace-nowrap">
-                        {employee.role === 'Admin' ? 'All' : employee.assignedClients.length > 0 ? employee.assignedClients[0] : '—'}
-                        {employee.assignedClients.length > 1 && <span className="text-blue-500 text-caption font-semibold">+{employee.assignedClients.length - 1}</span>}
-                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const next = employee.claType === 'CLA' ? 'NTF' : 'CLA';
+                          updateEmployee(employee.id, 'claType', next);
+                        }}
+                        className={`inline-flex px-2.5 py-1 rounded-md text-caption font-medium border cursor-pointer transition-all ${
+                          employee.claType === 'CLA' ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' :
+                          employee.claType === 'NTF' ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100' :
+                          'bg-black/[0.03] text-black/50 border-black/10 hover:bg-black/[0.05]'
+                        }`}>{employee.claType || '—'}</button>
                     ) : (
                       <button
                         onClick={(e) => { e.stopPropagation(); setAssignModalEmployee(employee); setAssignSearch(''); }}
@@ -1154,6 +1402,7 @@ export function EmployeesNew() {
           </div>
         )}
       </div>
+      )}
 
       </div>
 
@@ -1184,14 +1433,30 @@ export function EmployeesNew() {
 
             {/* Modal Body */}
             <div className="p-6 space-y-6">
-              {/* CLA Reason/Brief Section - Only show when adding CLA */}
+              {/* CLA Type + Reason Section - Only show when adding CLA */}
               {isAddingCLA && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <AlertTriangle className="w-4 h-4 text-red-600" />
-                    <h4 className="text-caption font-semibold text-black/70 uppercase tracking-wide">Reason/Brief</h4>
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertTriangle className="w-4 h-4 text-red-600" />
+                      <h4 className="text-caption font-semibold text-black/70 uppercase tracking-wide">Status Type</h4>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {(['CLA', 'NTF'] as const).map(t => (
+                        <button key={t} type="button" onClick={() => setClaForm({ ...claForm, claType: t })}
+                          className={`flex-1 py-2.5 rounded-xl border text-caption font-medium transition-all ${
+                            claForm.claType === t
+                              ? t === 'CLA' ? 'bg-amber-50 text-amber-700 border-amber-300' : 'bg-rose-50 text-rose-600 border-rose-300'
+                              : 'border-black/10 text-black/50 hover:bg-black/[0.02]'
+                          }`}>{t}</button>
+                      ))}
+                    </div>
                   </div>
                   <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertTriangle className="w-4 h-4 text-red-600" />
+                      <h4 className="text-caption font-semibold text-black/70 uppercase tracking-wide">Reason/Brief</h4>
+                    </div>
                     <label className="block text-caption font-medium text-black/70 mb-2">
                       Why is this employee being added to CLA/NTF? <span className="text-red-500">*</span>
                     </label>
@@ -1415,144 +1680,137 @@ export function EmployeesNew() {
         </div>
       )}
 
-      {/* Client Assignment Modal */}
-      {assignModalEmployee && (() => {
-        const emp = employees.find(e => e.id === assignModalEmployee.id) ?? assignModalEmployee;
-        const assignedSet = new Set(emp.assignedClients);
-        const searchLower = assignSearch.toLowerCase();
-        const filteredClients = AVAILABLE_CLIENTS.filter(c => c.name.toLowerCase().includes(searchLower));
-        const pmClients = filteredClients.filter(c => c.service === 'Performance Marketing');
-        const atClients = filteredClients.filter(c => c.service === 'Accounts & Taxation');
-        const pmAssignedCount = AVAILABLE_CLIENTS.filter(c => c.service === 'Performance Marketing' && assignedSet.has(c.name)).length;
-        const atAssignedCount = AVAILABLE_CLIENTS.filter(c => c.service === 'Accounts & Taxation' && assignedSet.has(c.name)).length;
-
-        const toggleAll = (service: 'Performance Marketing' | 'Accounts & Taxation') => {
-          const serviceClients = AVAILABLE_CLIENTS.filter(c => c.service === service).map(c => c.name);
-          const allAssigned = serviceClients.every(name => assignedSet.has(name));
-          setEmployees(prev => prev.map(e => {
-            if (e.id !== emp.id) return e;
-            const updated = allAssigned
-              ? e.assignedClients.filter(c => !serviceClients.includes(c))
-              : [...new Set([...e.assignedClients, ...serviceClients])];
-            return { ...e, assignedClients: updated };
-          }));
-        };
-
-        const ClientRow = ({ client }: { client: ClientInfo }) => {
-          const isAssigned = assignedSet.has(client.name);
-          return (
-            <button onClick={() => toggleClientAssignment(emp.id, client.name)}
-              className={`w-full flex items-center gap-3 px-5 py-2.5 transition-all ${isAssigned ? 'bg-[#204CC7]/[0.03]' : 'hover:bg-black/[0.02]'}`}>
-              <div className={`w-[18px] h-[18px] rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isAssigned ? 'border-[#204CC7] bg-[#204CC7]' : 'border-black/20'}`}>
-                {isAssigned && <Check className="w-3 h-3 text-white" />}
-              </div>
-              <span className={`text-body flex-1 text-left ${isAssigned ? 'text-black font-medium' : 'text-black/65'}`}>{client.name}</span>
-            </button>
-          );
-        };
-
-        return (
-          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
-              {/* Header */}
-              <div className="px-6 py-4 border-b border-black/[0.06] flex-shrink-0">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-[#204CC7]/[0.07] rounded-full flex items-center justify-center">
-                      <span className="text-[#204CC7] text-body font-semibold">{emp.name.charAt(0)}</span>
-                    </div>
-                    <div>
-                      <h3 className="text-body font-semibold text-black">{emp.name}</h3>
-                      <p className="text-caption text-black/45">
-                        {emp.assignedClients.filter(c => c !== 'All').length === 0
-                          ? 'No clients assigned'
-                          : `${emp.assignedClients.filter(c => c !== 'All').length} client${emp.assignedClients.filter(c => c !== 'All').length !== 1 ? 's' : ''} assigned`}
-                      </p>
-                    </div>
-                  </div>
-                  <button onClick={() => setAssignModalEmployee(null)} className="w-8 h-8 rounded-lg hover:bg-black/5 flex items-center justify-center transition-all">
-                    <X className="w-4 h-4 text-black/50" />
-                  </button>
+      {/* Add Incoming Employee Modal */}
+      {showAddIncomingModal && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowAddIncomingModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-black/[0.06]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#204CC7]/10 flex items-center justify-center">
+                  <UserPlus className="w-5 h-5 text-[#204CC7]" />
                 </div>
-                {/* Search */}
-                <div className="relative mt-3">
-                  <Search className="w-3.5 h-3.5 text-black/40 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text" placeholder="Search clients..." value={assignSearch}
-                    onChange={e => setAssignSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 text-body border border-black/10 rounded-xl bg-white text-black placeholder:text-black/40 focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all"
-                  />
+                <div>
+                  <h3 className="text-black font-semibold">Add Incoming Employee</h3>
+                  <p className="text-black/50 text-caption mt-0.5">Track a new hire expected to join</p>
+                </div>
+              </div>
+              <button onClick={() => setShowAddIncomingModal(false)} className="w-8 h-8 rounded-lg hover:bg-black/5 flex items-center justify-center transition-all">
+                <X className="w-4 h-4 text-black/50" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-5">
+              {/* Name */}
+              <div>
+                <label className="block text-caption font-semibold text-black/60 mb-1.5">Full Name <span className="text-[#E2445C]">*</span></label>
+                <input
+                  type="text"
+                  value={incomingForm.name}
+                  onChange={e => { setIncomingForm(f => ({ ...f, name: e.target.value })); setIncomingFormErrors(fe => ({ ...fe, name: false })); }}
+                  placeholder="e.g., Jyoti Rane"
+                  className={`w-full px-3.5 py-2.5 rounded-xl border text-body text-black/90 placeholder:text-black/30 focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all ${
+                    incomingFormErrors.name ? 'border-[#E2445C] bg-rose-50/30' : 'border-black/10'
+                  }`}
+                />
+                {incomingFormErrors.name && <p className="text-caption font-medium text-[#E2445C] mt-1">Name is required</p>}
+              </div>
+
+              {/* Department + Role */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-caption font-semibold text-black/60 mb-1.5">Department</label>
+                  <select
+                    value={incomingForm.department}
+                    onChange={e => setIncomingForm(f => ({ ...f, department: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 text-body text-black/80 bg-white focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all appearance-none cursor-pointer"
+                  >
+                    {DEPARTMENTS.filter(d => d !== 'All').map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-caption font-semibold text-black/60 mb-1.5">Role</label>
+                  <select
+                    value={incomingForm.role}
+                    onChange={e => setIncomingForm(f => ({ ...f, role: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 text-body text-black/80 bg-white focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all appearance-none cursor-pointer"
+                  >
+                    {ROLES.filter(r => r !== 'Admin').map(r => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              {/* Client List — grouped by service */}
-              <div className="flex-1 overflow-y-auto">
-                {filteredClients.length === 0 ? (
-                  <div className="py-12 text-center">
-                    <Users className="w-10 h-10 text-black/10 mx-auto mb-2" />
-                    <p className="text-black/45 text-caption">No clients match your search</p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Performance Marketing Section */}
-                    {pmClients.length > 0 && (
-                      <div>
-                        <div className="px-5 pt-4 pb-2 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-[#7C3AED]" />
-                            <span className="text-caption font-semibold text-black/70">Performance Marketing</span>
-                            <span className="text-caption text-black/30">{pmAssignedCount}/{pmClients.length}</span>
-                          </div>
-                          <button
-                            onClick={() => toggleAll('Performance Marketing')}
-                            className="text-[11px] font-medium text-[#204CC7] hover:text-[#1a3d9f] transition-all"
-                          >
-                            {pmClients.every(c => assignedSet.has(c.name)) ? 'Deselect all' : 'Select all'}
-                          </button>
-                        </div>
-                        {pmClients.map(client => <ClientRow key={client.name} client={client} />)}
-                      </div>
-                    )}
-
-                    {/* Accounts & Taxation Section */}
-                    {atClients.length > 0 && (
-                      <div className={pmClients.length > 0 ? 'border-t border-black/[0.04]' : ''}>
-                        <div className="px-5 pt-4 pb-2 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-[#06B6D4]" />
-                            <span className="text-caption font-semibold text-black/70">Accounts & Taxation</span>
-                            <span className="text-caption text-black/30">{atAssignedCount}/{atClients.length}</span>
-                          </div>
-                          <button
-                            onClick={() => toggleAll('Accounts & Taxation')}
-                            className="text-[11px] font-medium text-[#204CC7] hover:text-[#1a3d9f] transition-all"
-                          >
-                            {atClients.every(c => assignedSet.has(c.name)) ? 'Deselect all' : 'Select all'}
-                          </button>
-                        </div>
-                        {atClients.map(client => <ClientRow key={client.name} client={client} />)}
-                      </div>
-                    )}
-                  </>
-                )}
+              {/* Joining Date */}
+              <div>
+                <label className="block text-caption font-semibold text-black/60 mb-1.5">Expected Joining Date</label>
+                <input
+                  type="text"
+                  value={incomingForm.joiningDate}
+                  onChange={e => setIncomingForm(f => ({ ...f, joiningDate: e.target.value }))}
+                  placeholder="e.g., 15th May, 2026 or TBD"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 text-body text-black/90 placeholder:text-black/30 focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all"
+                />
               </div>
 
-              {/* Footer */}
-              <div className="px-6 py-3 border-t border-black/[0.06] flex items-center justify-between flex-shrink-0">
-                {emp.assignedClients.filter(c => c !== 'All').length > 0 ? (
-                  <button onClick={() => clearAllClients(emp.id)} className="text-caption text-[#E2445C] font-medium hover:text-[#d13a4f] transition-all">
-                    Remove All
-                  </button>
-                ) : <div />}
-                <button onClick={() => setAssignModalEmployee(null)}
-                  className="px-5 py-2 bg-[#204CC7] text-white rounded-lg text-caption font-medium hover:bg-[#1a3d9f] transition-all">
-                  Done
-                </button>
+              {/* Note / Description */}
+              <div>
+                <label className="block text-caption font-semibold text-black/60 mb-1.5">Note</label>
+                <textarea
+                  value={incomingForm.note}
+                  onChange={e => setIncomingForm(f => ({ ...f, note: e.target.value }))}
+                  placeholder="e.g., Offered ₹33.2K, documents pending, referred by Pooja..."
+                  rows={3}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 text-body text-black/90 placeholder:text-black/30 focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all resize-none"
+                />
               </div>
             </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-black/[0.06] flex items-center justify-between">
+              <button onClick={() => setShowAddIncomingModal(false)} className="px-4 py-2.5 rounded-lg border border-black/10 text-black/60 hover:bg-black/[0.03] transition-all text-caption font-medium">
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!incomingForm.name.trim()) {
+                    setIncomingFormErrors({ name: true });
+                    return;
+                  }
+                  const nextId = Math.max(...incomingEmployees.map(e => e.id), 200) + 1;
+                  const nextCode = `BRG${String(Math.max(...incomingEmployees.map(e => parseInt(e.code.replace('BRG', ''), 10)), 27) + 1).padStart(3, '0')}`;
+                  setIncomingEmployees(prev => [
+                    ...prev,
+                    {
+                      id: nextId,
+                      code: nextCode,
+                      name: incomingForm.name.trim(),
+                      department: incomingForm.department,
+                      role: incomingForm.role,
+                      joiningDate: incomingForm.joiningDate.trim() || 'TBD',
+                      incomingStatus: 'Incoming',
+                      note: incomingForm.note.trim() || undefined,
+                    },
+                  ]);
+                  setIncomingForm({ name: '', department: 'Finance', role: 'Executive', joiningDate: '', note: '' });
+                  setIncomingFormErrors({ name: false });
+                  setShowAddIncomingModal(false);
+                }}
+                className="px-5 py-2.5 rounded-lg bg-[#204CC7] text-white hover:bg-[#1a3d9f] transition-all text-caption font-semibold flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Employee
+              </button>
+            </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
+
+      {/* Client Assignment Modal removed — now inline in drawer */}
 
       {/* Pending Invites Modal */}
       {showPendingInvites && (
@@ -1812,7 +2070,7 @@ export function EmployeesNew() {
           {/* Backdrop */}
           <div 
             className="absolute inset-0 bg-black/20 backdrop-blur-sm"
-            onClick={() => setSelectedEmployee(null)}
+            onClick={() => { setSelectedEmployee(null); setAssignModalEmployee(null); }}
           />
           
           {/* Drawer Panel */}
@@ -1824,6 +2082,7 @@ export function EmployeesNew() {
                 onClick={(e) => {
                   e.stopPropagation();
                   setSelectedEmployee(null);
+                  setAssignModalEmployee(null);
                 }}
                 className="w-8 h-8 rounded-lg border border-black/10 hover:bg-black/5 flex items-center justify-center transition-all"
               >
@@ -1914,9 +2173,18 @@ export function EmployeesNew() {
                         Core Team
                       </span>
                     )}
+                    <span className={`px-3 py-1.5 text-caption font-medium rounded-lg ${
+                      selectedEmployee.onboardingStatus === 'Onboarded' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                      selectedEmployee.onboardingStatus === 'Settled' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                      'bg-amber-50 text-amber-700 border border-amber-200'
+                    }`}>
+                      {selectedEmployee.onboardingStatus}
+                    </span>
                     {selectedEmployee.isCLA && (
-                      <span className="px-3 py-1.5 text-caption font-medium rounded-lg bg-[#E2445C] text-white">
-                        CLA/NTF
+                      <span className={`px-3 py-1.5 text-caption font-medium rounded-lg text-white ${
+                        selectedEmployee.claType === 'NTF' ? 'bg-[#E2445C]' : 'bg-amber-500'
+                      }`}>
+                        {selectedEmployee.claType || 'CLA/NTF'}
                       </span>
                     )}
                   </div>
@@ -1926,7 +2194,7 @@ export function EmployeesNew() {
                     <div className="flex items-start gap-3 px-4 py-3 bg-[#E2445C]/[0.05] border border-[#E2445C]/15 rounded-xl">
                       <AlertTriangle className="w-4 h-4 text-[#E2445C] mt-0.5 flex-shrink-0" />
                       <div>
-                        <p className="text-caption font-semibold text-[#E2445C] mb-0.5">CLA/NTF Reason</p>
+                        <p className="text-caption font-semibold text-[#E2445C] mb-0.5">{selectedEmployee.claType || 'CLA/NTF'} Reason</p>
                         <p className="text-caption text-black/60 leading-relaxed">{selectedEmployee.claReason}</p>
                       </div>
                     </div>
@@ -1967,36 +2235,157 @@ export function EmployeesNew() {
                     </div>
                   </div>
 
-                  {/* Assigned Clients */}
-                  <div className="bg-[#F6F7FF] rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-body font-semibold text-black">Assigned Clients</h3>
-                      <button onClick={(e) => { e.stopPropagation(); setAssignModalEmployee(selectedEmployee); setAssignSearch(''); }}
-                        className="text-caption font-medium text-[#204CC7] hover:text-[#1a3d9f] transition-all">
-                        Manage
-                      </button>
-                    </div>
-                    {selectedEmployee.assignedClients.filter(c => c !== 'All').length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {selectedEmployee.assignedClients.filter(c => c !== 'All').map((clientName) => {
-                          const clientInfo = AVAILABLE_CLIENTS.find(c => c.name === clientName);
-                          const isPM = clientInfo?.service === 'Performance Marketing';
-                          return (
-                            <span
-                              key={clientName}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-caption font-medium rounded-lg ${
-                                isPM ? 'bg-[#7C3AED]/10 text-[#7C3AED]' : 'bg-[#06B6D4]/10 text-[#06B6D4]'
-                              }`}
-                            >
-                              <div className={`w-1.5 h-1.5 rounded-full ${isPM ? 'bg-[#7C3AED]' : 'bg-[#06B6D4]'}`} />
-                              {clientName}
-                            </span>
-                          );
-                        })}
+                  {/* Assigned Clients — with inline manage panel */}
+                  <div className="bg-[#F6F7FF] rounded-lg overflow-hidden">
+                    <div className="p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-body font-semibold text-black">Assigned Clients</h3>
+                        <button onClick={(e) => {
+                          e.stopPropagation();
+                          if (assignModalEmployee?.id === selectedEmployee.id) {
+                            setAssignModalEmployee(null);
+                          } else {
+                            setAssignModalEmployee(selectedEmployee);
+                            setAssignSearch('');
+                          }
+                        }}
+                          className={`text-caption font-medium transition-all ${assignModalEmployee?.id === selectedEmployee.id ? 'text-black/45 hover:text-black/60' : 'text-[#204CC7] hover:text-[#1a3d9f]'}`}>
+                          {assignModalEmployee?.id === selectedEmployee.id ? 'Close' : 'Manage'}
+                        </button>
                       </div>
-                    ) : (
-                      <p className="text-caption text-black/45">No clients assigned</p>
-                    )}
+                      {selectedEmployee.assignedClients.filter(c => c !== 'All').length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedEmployee.assignedClients.filter(c => c !== 'All').map((clientName) => {
+                            const clientInfo = AVAILABLE_CLIENTS.find(c => c.name === clientName);
+                            const isPM = clientInfo?.service === 'Performance Marketing';
+                            return (
+                              <span
+                                key={clientName}
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-caption font-medium rounded-lg ${
+                                  isPM ? 'bg-[#7C3AED]/10 text-[#7C3AED]' : 'bg-[#06B6D4]/10 text-[#06B6D4]'
+                                }`}
+                              >
+                                <div className={`w-1.5 h-1.5 rounded-full ${isPM ? 'bg-[#7C3AED]' : 'bg-[#06B6D4]'}`} />
+                                {clientName}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-caption text-black/45">No clients assigned</p>
+                      )}
+                    </div>
+
+                    {/* Inline Client Assignment Panel */}
+                    {assignModalEmployee?.id === selectedEmployee.id && (() => {
+                      const emp = employees.find(e => e.id === selectedEmployee.id) ?? selectedEmployee;
+                      const assignedSet = new Set(emp.assignedClients);
+                      const searchLower = assignSearch.toLowerCase();
+                      const filteredClients = AVAILABLE_CLIENTS.filter(c => c.name.toLowerCase().includes(searchLower));
+                      const pmClients = filteredClients.filter(c => c.service === 'Performance Marketing');
+                      const atClients = filteredClients.filter(c => c.service === 'Accounts & Taxation');
+                      const pmAssignedCount = AVAILABLE_CLIENTS.filter(c => c.service === 'Performance Marketing' && assignedSet.has(c.name)).length;
+                      const atAssignedCount = AVAILABLE_CLIENTS.filter(c => c.service === 'Accounts & Taxation' && assignedSet.has(c.name)).length;
+
+                      const toggleAll = (service: 'Performance Marketing' | 'Accounts & Taxation') => {
+                        const serviceClients = AVAILABLE_CLIENTS.filter(c => c.service === service).map(c => c.name);
+                        const allAssigned = serviceClients.every(name => assignedSet.has(name));
+                        setEmployees(prev => prev.map(e => {
+                          if (e.id !== emp.id) return e;
+                          const updated = allAssigned
+                            ? e.assignedClients.filter(c => !serviceClients.includes(c))
+                            : [...new Set([...e.assignedClients, ...serviceClients])];
+                          return { ...e, assignedClients: updated };
+                        }));
+                      };
+
+                      const InlineClientRow = ({ client }: { client: ClientInfo }) => {
+                        const isAssigned = assignedSet.has(client.name);
+                        return (
+                          <button onClick={() => toggleClientAssignment(emp.id, client.name)}
+                            className={`w-full flex items-center gap-3 px-4 py-2 transition-all rounded-lg ${isAssigned ? 'bg-[#204CC7]/[0.05]' : 'hover:bg-white/60'}`}>
+                            <div className={`w-[16px] h-[16px] rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isAssigned ? 'border-[#204CC7] bg-[#204CC7]' : 'border-black/20'}`}>
+                              {isAssigned && <Check className="w-2.5 h-2.5 text-white" />}
+                            </div>
+                            <span className={`text-caption flex-1 text-left ${isAssigned ? 'text-black font-medium' : 'text-black/60'}`}>{client.name}</span>
+                          </button>
+                        );
+                      };
+
+                      return (
+                        <div className="border-t border-black/[0.06]">
+                          {/* Search */}
+                          <div className="px-4 pt-3 pb-2">
+                            <div className="relative">
+                              <Search className="w-3.5 h-3.5 text-black/40 absolute left-3 top-1/2 -translate-y-1/2" />
+                              <input
+                                type="text" placeholder="Search clients..." value={assignSearch}
+                                onChange={e => setAssignSearch(e.target.value)}
+                                className="w-full pl-9 pr-3 py-2 text-caption border border-black/10 rounded-lg bg-white text-black placeholder:text-black/40 focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all"
+                                autoFocus
+                              />
+                            </div>
+                          </div>
+
+                          {/* Client List */}
+                          <div className="max-h-[240px] overflow-y-auto px-2 pb-2">
+                            {filteredClients.length === 0 ? (
+                              <div className="py-6 text-center">
+                                <p className="text-black/40 text-caption">No clients match your search</p>
+                              </div>
+                            ) : (
+                              <>
+                                {pmClients.length > 0 && (
+                                  <div>
+                                    <div className="px-2 pt-2 pb-1 flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[#7C3AED]" />
+                                        <span className="text-[11px] font-semibold text-black/60">Performance Marketing</span>
+                                        <span className="text-[11px] text-black/30">{pmAssignedCount}/{pmClients.length}</span>
+                                      </div>
+                                      <button onClick={() => toggleAll('Performance Marketing')}
+                                        className="text-[11px] font-medium text-[#204CC7] hover:text-[#1a3d9f] transition-all">
+                                        {pmClients.every(c => assignedSet.has(c.name)) ? 'Deselect all' : 'Select all'}
+                                      </button>
+                                    </div>
+                                    {pmClients.map(client => <InlineClientRow key={client.name} client={client} />)}
+                                  </div>
+                                )}
+                                {atClients.length > 0 && (
+                                  <div className={pmClients.length > 0 ? 'border-t border-black/[0.04] mt-1 pt-1' : ''}>
+                                    <div className="px-2 pt-2 pb-1 flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[#06B6D4]" />
+                                        <span className="text-[11px] font-semibold text-black/60">Accounts & Taxation</span>
+                                        <span className="text-[11px] text-black/30">{atAssignedCount}/{atClients.length}</span>
+                                      </div>
+                                      <button onClick={() => toggleAll('Accounts & Taxation')}
+                                        className="text-[11px] font-medium text-[#204CC7] hover:text-[#1a3d9f] transition-all">
+                                        {atClients.every(c => assignedSet.has(c.name)) ? 'Deselect all' : 'Select all'}
+                                      </button>
+                                    </div>
+                                    {atClients.map(client => <InlineClientRow key={client.name} client={client} />)}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+
+                          {/* Footer actions */}
+                          <div className="px-4 py-2.5 border-t border-black/[0.06] flex items-center justify-between">
+                            {emp.assignedClients.filter(c => c !== 'All').length > 0 ? (
+                              <button onClick={() => clearAllClients(emp.id)} className="text-[11px] text-[#E2445C] font-medium hover:text-[#d13a4f] transition-all">
+                                Remove All
+                              </button>
+                            ) : <div />}
+                            <button onClick={() => setAssignModalEmployee(null)}
+                              className="px-4 py-1.5 bg-[#204CC7] text-white rounded-lg text-caption font-medium hover:bg-[#1a3d9f] transition-all">
+                              Done
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Relationship Status */}

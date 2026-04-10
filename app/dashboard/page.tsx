@@ -1,5 +1,5 @@
-"use client";
-import { ReportingModule } from '@/adminland/ReportingModule';
+import { redirect } from 'next/navigation';
+
 export default function DashboardPage() {
-  return <ReportingModule />;
+  redirect('/dashboard/accounts-taxation');
 }

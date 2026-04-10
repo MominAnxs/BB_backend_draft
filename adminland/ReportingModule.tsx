@@ -1,7 +1,10 @@
 'use client';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Search, TrendingUp, TrendingDown, Calendar, ChevronRight, BarChart3, PieChart, Filter, X, ChevronDown, Target, DollarSign, Users, FileText, CheckCircle2, ArrowUpDown, ChevronLeft, ChevronsLeft, ChevronsRight, Layers, Settings, Check, ArrowRightLeft, Clock } from 'lucide-react';
+import { Search, ChevronRight, BarChart3, X, ChevronDown, ChevronUp, Target, FileText, ChevronLeft, ChevronsLeft, ChevronsRight, Layers, Settings, Check, ArrowRightLeft, Clock, ArrowUpDown } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { ReportDetail } from './ReportDetail';
+import { ClientDashboard } from './ClientDashboard';
+import { PMClientDashboard } from './PMClientDashboard';
 
 // ── Role mock — toggle to simulate different roles ──
 // Roles: admin (full platform access), hod (department head), manager (team lead),
@@ -128,7 +131,7 @@ const mockClients: ClientReport[] = [
       { reportType: 'leadGeneration', lastUpdated: 'Mar 23, 2026', period: 'Last 30 Days', metrics: { adSpend: { value: 450000, change: 3, target: 600000 }, leads: { value: 634, change: 8, target: 800 }, cpl: { value: 710, change: -5, target: 750 }, ctr: { value: 1.9, change: -3, target: 2.5 } }, targetAchievement: { spends: { achieved: 450000, target: 600000, variance: -150000 }, revenue: { achieved: 2100000, target: 3000000, variance: -900000 } }, status: 'needs-attention' },
     ],
     atReports: [
-      { businessType: 'tradingManufacturing', lastUpdated: 'Mar 23, 2026', period: 'Q1 2026', metrics: { revenue: { value: 2100000, change: -8 }, expenses: { value: 2450000, change: 12 }, bankBalance: { value: 380000, change: -22 }, debtors: { value: 920000, change: 25 }, creditors: { value: 750000, change: 10 } }, whatChanged: [{ category: 'Expenses', description: 'Increased by 12%', value: '₹24.5L', trend: 'up' }, { category: 'Bank Balance', description: 'Dropped by 22%', value: '₹3.8L', trend: 'down' }], risks: [{ severity: 'high', title: 'Cash Crunch', description: 'Expenses exceeding revenue, bank balance declining.' }, { severity: 'high', title: 'High Debtors', description: 'Outstanding receivables up 25%.' }], actions: [{ priority: 'high', title: 'Cost Reduction', description: 'Implement cost-saving measures immediately.' }], status: 'needs-attention' },
+      { businessType: 'tradingManufacturing', lastUpdated: 'Mar 23, 2026', period: 'Q1 2026', metrics: { revenue: { value: 2100000, change: -8 }, expenses: { value: 2450000, change: 12 }, bankBalance: { value: 380000, change: -22 }, debtors: { value: 920000, change: 25 }, creditors: { value: 750000, change: -3 } }, whatChanged: [{ category: 'Expenses', description: 'Increased by 12%', value: '₹24.5L', trend: 'up' }, { category: 'Bank Balance', description: 'Dropped by 22%', value: '₹3.8L', trend: 'down' }], risks: [{ severity: 'high', title: 'Cash Crunch', description: 'Expenses exceeding revenue, bank balance declining.' }, { severity: 'high', title: 'High Debtors', description: 'Outstanding receivables up 25%.' }], actions: [{ priority: 'high', title: 'Cost Reduction', description: 'Implement cost-saving measures immediately.' }], status: 'needs-attention' },
     ],
   },
   {
@@ -227,8 +230,6 @@ const mockClients: ClientReport[] = [
 
 // ── Filter types ──
 
-type ServiceFilter = 'all' | 'performanceMarketing' | 'accountsTaxation';
-type BusinessTypeFilter = 'all' | BusinessType;
 type StatusFilter = 'all' | 'excellent' | 'good' | 'needs-attention';
 
 // ── Helpers ──
@@ -241,26 +242,12 @@ function formatCurrency(value: number) {
 function formatNumber(value: number) { return value.toLocaleString('en-IN'); }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
-  excellent: { bg: 'bg-[#E8F8F5]', text: 'text-[#00C875]', dot: 'bg-[#00C875]' },
+  excellent: { bg: 'bg-[#E8F8F5]', text: 'text-[#0A8F5E]', dot: 'bg-[#00C875]' },
   good: { bg: 'bg-[#EEF1FB]', text: 'text-[#204CC7]', dot: 'bg-[#204CC7]' },
-  'needs-attention': { bg: 'bg-[#FFF4E6]', text: 'text-[#FDAB3D]', dot: 'bg-[#FDAB3D]' },
+  'needs-attention': { bg: 'bg-[#FFF4E6]', text: 'text-[#B87514]', dot: 'bg-[#FDAB3D]' },
 };
 
 function getStatusLabel(s: string) { return s === 'needs-attention' ? 'Needs Attention' : s.charAt(0).toUpperCase() + s.slice(1); }
-
-// Query helpers
-function clientHasService(c: ClientReport, svc: ServiceFilter) {
-  if (svc === 'all') return true;
-  return svc === 'performanceMarketing' ? c.pmReports.length > 0 : c.atReports.length > 0;
-}
-function clientHasBusinessType(c: ClientReport, bt: BusinessTypeFilter) {
-  if (bt === 'all') return true;
-  return c.pmReports.some((r) => r.reportType === bt) || c.atReports.some((r) => r.businessType === bt);
-}
-function clientHasStatus(c: ClientReport, st: StatusFilter) {
-  if (st === 'all') return true;
-  return c.pmReports.some((r) => r.status === st) || c.atReports.some((r) => r.status === st);
-}
 
 // ── Dropdown hook (mousedown + contains — fixes React 18) ──
 
@@ -278,23 +265,22 @@ function useDropdown() {
   return { open, setOpen, ref };
 }
 
-const CLIENTS_PER_PAGE = 10;
+const CLIENTS_PER_PAGE = 15;
 
 // ── Progress bar helper ──
 
 function ProgressBar({ value, target, inverse }: { value: number; target: number; inverse?: boolean }) {
   if (!target || target === 0) return null;
   const pct = Math.min((value / target) * 100, 100);
-  // For inverse metrics (like CPL), being under target is good
   const isGood = inverse ? value <= target : value >= target * 0.8;
   const isExcellent = inverse ? value <= target * 0.9 : value >= target;
   const barColor = isExcellent ? 'bg-[#00C875]' : isGood ? 'bg-[#204CC7]' : 'bg-[#FDAB3D]';
   return (
-    <div className="mt-1.5 flex items-center gap-2">
-      <div className="flex-1 h-[5px] rounded-full bg-black/[0.04] overflow-hidden">
+    <div className="flex items-center gap-1.5">
+      <div className="flex-1 h-[4px] rounded-full bg-black/[0.04] overflow-hidden">
         <div className={`h-full rounded-full ${barColor} transition-all duration-500`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-caption font-normal text-black/40 shrink-0 tabular-nums" style={{ fontSize: '11px' }}>{Math.round(pct)}%</span>
+      <span className="text-[11px] font-normal text-black/40 shrink-0 tabular-nums">{Math.round(pct)}%</span>
     </div>
   );
 }
@@ -352,8 +338,6 @@ const ALL_PM_METRICS: Record<PMBusinessType, { key: string; label: string }[]> =
 };
 
 // ── Client Target Change Requests (slim model) ──
-// When a client changes their preferred metrics on the client-facing app,
-// it surfaces here as a pending request inside the Set Target modal.
 
 interface ClientTargetRequest {
   clientId: string;
@@ -364,7 +348,6 @@ interface ClientTargetRequest {
   proposed: Record<string, number>;
 }
 
-// Mock: 2 clients have submitted change requests from their app
 const initialClientRequests: ClientTargetRequest[] = [
   {
     clientId: '1', reportType: 'ecommerce', reportIndex: 0,
@@ -414,23 +397,19 @@ function TargetSettingsModal({ clientName, reportType, businessTypeLabel, target
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-label="Set metric targets">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={onClose} />
-      {/* Modal */}
       <div ref={modalRef} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-        {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-black/[0.06]">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-h3 text-black/85">Set Targets</h2>
-              <p className="text-caption font-normal text-black/55 mt-0.5">{clientName} · PM · {businessTypeLabel}</p>
+              <p className="text-caption font-normal text-black/65 mt-0.5">{clientName} · PM · {businessTypeLabel}</p>
             </div>
             <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-lg text-black/40 hover:text-black/70 hover:bg-black/[0.04] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30">
               <X className="w-4.5 h-4.5" />
             </button>
           </div>
         </div>
-        {/* Fields */}
         <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
           {metricKeys.map((key) => (
             <div key={key}>
@@ -454,7 +433,6 @@ function TargetSettingsModal({ clientName, reportType, businessTypeLabel, target
             </div>
           ))}
         </div>
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-black/[0.06] flex items-center justify-end gap-3 bg-[#F6F7FF]/40">
           <button onClick={onClose} className="px-4 py-2 rounded-xl text-caption font-medium text-black/60 hover:text-black/80 hover:bg-black/[0.04] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30">
             Cancel
@@ -486,7 +464,6 @@ function ChangeRequestReviewModal({ clientName, reportType, businessTypeLabel, c
   const availableMetrics = ALL_PM_METRICS[reportType];
   const newMetricKeys = Object.keys(clientRequest.proposed).filter(k => !currentMetricKeys.includes(k));
 
-  // Selected metrics: current ones + any new ones from client's proposal
   const [selectedMetrics, setSelectedMetrics] = useState<Set<string>>(() => {
     const initial = new Set(currentMetricKeys);
     newMetricKeys.forEach(k => initial.add(k));
@@ -496,7 +473,6 @@ function ChangeRequestReviewModal({ clientName, reportType, businessTypeLabel, c
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Draft targets — start with current targets, pre-fill new metrics with proposed values
   const [draft, setDraft] = useState<Record<string, string>>(() => {
     const d: Record<string, string> = {};
     Object.entries(currentTargets).forEach(([k, v]) => { d[k] = String(v); });
@@ -539,12 +515,11 @@ function ChangeRequestReviewModal({ clientName, reportType, businessTypeLabel, c
     <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-label="Review change request">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
-        {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-black/[0.06]">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-h3 text-black/85">Review Change Request</h2>
-              <p className="text-caption font-normal text-black/55 mt-0.5">{clientName} · PM · {businessTypeLabel}</p>
+              <p className="text-caption font-normal text-black/65 mt-0.5">{clientName} · PM · {businessTypeLabel}</p>
             </div>
             <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-lg text-black/40 hover:text-black/70 hover:bg-black/[0.04] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30">
               <X className="w-4.5 h-4.5" />
@@ -553,7 +528,6 @@ function ChangeRequestReviewModal({ clientName, reportType, businessTypeLabel, c
         </div>
 
         <div className="max-h-[65vh] overflow-y-auto">
-          {/* Request context banner */}
           <div className="mx-6 mt-4 px-3.5 py-3 rounded-xl bg-amber-50/80 border border-amber-200/50 flex items-center gap-2.5">
             <ArrowRightLeft className="w-4 h-4 text-amber-600 shrink-0" />
             <p className="text-caption font-semibold text-amber-800">{clientRequest.requestedBy}</p>
@@ -563,7 +537,6 @@ function ChangeRequestReviewModal({ clientName, reportType, businessTypeLabel, c
             </div>
           </div>
 
-          {/* Metric Selector Dropdown */}
           <div className="px-6 mt-5">
             <label className="block text-caption font-semibold text-black/70 mb-2">Select Metrics</label>
             <div ref={dropdownRef} className="relative">
@@ -612,7 +585,6 @@ function ChangeRequestReviewModal({ clientName, reportType, businessTypeLabel, c
             </div>
           </div>
 
-          {/* Target inputs for selected metrics */}
           <div className="px-6 pt-4 pb-5 space-y-3">
             <label className="block text-caption font-semibold text-black/70">Targets</label>
             {selectedList.length === 0 && (
@@ -670,7 +642,6 @@ function ChangeRequestReviewModal({ clientName, reportType, businessTypeLabel, c
           </div>
         </div>
 
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-black/[0.06] bg-[#F6F7FF]/40 flex items-center justify-between">
           <button onClick={() => { onReject(); onClose(); }} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-caption font-medium text-[#E2445C]/80 hover:text-[#E2445C] hover:bg-[#E2445C]/[0.06] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E2445C]/30">
             <X className="w-3.5 h-3.5" /> Reject
@@ -684,28 +655,78 @@ function ChangeRequestReviewModal({ clientName, reportType, businessTypeLabel, c
   );
 }
 
+// ── Change value indicator ──
+function ChangeIndicator({ value, inverse }: { value: number; inverse?: boolean }) {
+  const isGood = inverse ? value <= 0 : value >= 0;
+  return (
+    <span className={`text-caption font-medium tabular-nums ${isGood ? 'text-[#0A8F5E]' : 'text-[#D03050]'}`}>
+      {value >= 0 ? '+' : ''}{value}%
+    </span>
+  );
+}
+
+// ── Status badge ──
+function StatusBadge({ status }: { status: string }) {
+  const s = STATUS_STYLES[status];
+  if (!s) return null;
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-caption font-medium ${s.bg} ${s.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} aria-hidden="true" />
+      {getStatusLabel(status)}
+    </span>
+  );
+}
+
 // ── Component ──
 
-export function ReportingModule() {
+interface ReportingModuleProps {
+  activeTab?: 'at' | 'pm';
+}
+
+export function ReportingModule({ activeTab = 'at' }: ReportingModuleProps) {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
-  const [serviceFilter, setServiceFilter] = useState<ServiceFilter>('all');
-  const [businessTypeFilter, setBusinessTypeFilter] = useState<BusinessTypeFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [pmSubFilter, setPmSubFilter] = useState<'all' | PMBusinessType>('all');
+  const [atSubFilter, setAtSubFilter] = useState<'all' | ATBusinessType>('all');
   const [currentPage, setCurrentPage] = useState(1);
 
-  const [viewMode, setViewMode] = useState<'overview' | 'detail'>('overview');
+  const [viewMode, setViewMode] = useState<'overview' | 'detail' | 'atDashboard' | 'pmDashboard'>('overview');
   const [detailClient, setDetailClient] = useState<any>(null);
   const [detailService, setDetailService] = useState<ServiceType>('performanceMarketing');
+  const [atDashboardClient, setAtDashboardClient] = useState<{ client: { id: string; name: string; code: string }; report: AccountsTaxationReport } | null>(null);
+  const [pmDashboardClient, setPmDashboardClient] = useState<{ client: { id: string; name: string; code: string }; report: PerformanceMarketingReport } | null>(null);
 
-  // Target overrides: keyed by "clientId-reportType-reportIndex"
+  // Target overrides
   const [targetOverrides, setTargetOverrides] = useState<Record<string, Record<string, number>>>({});
-  // Target modal state
   const [targetModal, setTargetModal] = useState<{ clientId: string; reportIndex: number; report: PerformanceMarketingReport } | null>(null);
-  // Change request review modal state
   const [reviewModal, setReviewModal] = useState<{ clientId: string; reportIndex: number; report: PerformanceMarketingReport } | null>(null);
 
-  // ── Client Target Change Requests ──
+  // Client Target Change Requests
   const [clientRequests, setClientRequests] = useState<ClientTargetRequest[]>(initialClientRequests);
+
+  // Sort state
+  type SortDirection = 'asc' | 'desc' | null;
+  type PMEcomSortField = 'client' | 'code' | 'adSpend' | 'roas' | 'revenue' | 'orders' | 'aov' | 'status' | 'updated';
+  type PMLeadSortField = 'client' | 'code' | 'adSpend' | 'leads' | 'cpl' | 'ctr' | 'status' | 'updated';
+  type ATSortField = 'client' | 'code' | 'type' | 'revenue' | 'expenses' | 'bankBalance' | 'debtors' | 'creditors' | 'status' | 'updated';
+  const [atSort, setAtSort] = useState<{ field: ATSortField; dir: SortDirection }>({ field: 'client', dir: 'asc' });
+  const [ecomSort, setEcomSort] = useState<{ field: PMEcomSortField; dir: SortDirection }>({ field: 'client', dir: 'asc' });
+  const [leadSort, setLeadSort] = useState<{ field: PMLeadSortField; dir: SortDirection }>({ field: 'client', dir: 'asc' });
+
+  const toggleSort = <T extends string>(current: { field: T; dir: SortDirection }, field: T): { field: T; dir: SortDirection } => {
+    if (current.field === field) {
+      if (current.dir === 'asc') return { field, dir: 'desc' };
+      if (current.dir === 'desc') return { field, dir: null };
+      return { field, dir: 'asc' };
+    }
+    return { field, dir: 'asc' };
+  };
+
+  const SortIcon = ({ field, current }: { field: string; current: { field: string; dir: SortDirection } }) => {
+    if (current.field !== field || current.dir === null) return <ArrowUpDown className="w-3 h-3 text-black/25" />;
+    return current.dir === 'asc' ? <ChevronUp className="w-3 h-3 text-[#204CC7]" /> : <ChevronDown className="w-3 h-3 text-[#204CC7]" />;
+  };
 
   function getClientRequest(clientId: string, reportType: PMBusinessType, reportIndex: number): ClientTargetRequest | undefined {
     return clientRequests.find(r => r.clientId === clientId && r.reportType === reportType && r.reportIndex === reportIndex);
@@ -715,7 +736,6 @@ export function ReportingModule() {
     setClientRequests(prev => prev.filter(r => !(r.clientId === clientId && r.reportType === reportType && r.reportIndex === reportIndex)));
   }
 
-  // Get effective targets for a PM report (overrides take precedence)
   function getTargets(clientId: string, reportIndex: number, report: PerformanceMarketingReport): Record<string, number> {
     const overrideKey = `${clientId}-${report.reportType}-${reportIndex}`;
     const overrides = targetOverrides[overrideKey] || {};
@@ -733,33 +753,127 @@ export function ReportingModule() {
     setTargetModal(null);
   }
 
-  const serviceDD = useDropdown();
-  const businessTypeDD = useDropdown();
   const statusDD = useDropdown();
+  const subFilterDD = useDropdown();
 
-  useEffect(() => { setBusinessTypeFilter('all'); }, [serviceFilter]);
-  useEffect(() => { setCurrentPage(1); }, [searchTerm, serviceFilter, businessTypeFilter, statusFilter]);
+  // Reset page on filter changes
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter, activeTab, pmSubFilter, atSubFilter]);
 
-  const availableBusinessTypes = useMemo(() => {
-    if (serviceFilter === 'performanceMarketing') return PM_BUSINESS_TYPES;
-    if (serviceFilter === 'accountsTaxation') return AT_BUSINESS_TYPES;
-    return [...PM_BUSINESS_TYPES, ...AT_BUSINESS_TYPES];
-  }, [serviceFilter]);
+  // ── A&T filtered data ──
+  const atRows = useMemo(() => {
+    const rows: { client: ClientReport; report: AccountsTaxationReport; reportIndex: number }[] = [];
+    mockClients.forEach(c => {
+      c.atReports.forEach((r, i) => rows.push({ client: c, report: r, reportIndex: i }));
+    });
+    let filtered = rows;
+    if (searchTerm) {
+      const s = searchTerm.toLowerCase();
+      filtered = filtered.filter(r => r.client.name.toLowerCase().includes(s) || r.client.code.toLowerCase().includes(s));
+    }
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(r => r.report.status === statusFilter);
+    }
+    if (atSubFilter !== 'all') {
+      filtered = filtered.filter(r => r.report.businessType === atSubFilter);
+    }
+    if (atSort.dir) {
+      const dir = atSort.dir === 'asc' ? 1 : -1;
+      filtered.sort((a, b) => {
+        switch (atSort.field) {
+          case 'client': return dir * a.client.name.localeCompare(b.client.name);
+          case 'code': return dir * a.client.code.localeCompare(b.client.code);
+          case 'type': return dir * (a.report.businessType || '').localeCompare(b.report.businessType || '');
+          case 'revenue': return dir * (a.report.metrics.revenue.value - b.report.metrics.revenue.value);
+          case 'expenses': return dir * (a.report.metrics.expenses.value - b.report.metrics.expenses.value);
+          case 'bankBalance': return dir * (a.report.metrics.bankBalance.value - b.report.metrics.bankBalance.value);
+          case 'debtors': return dir * (a.report.metrics.debtors.value - b.report.metrics.debtors.value);
+          case 'creditors': return dir * (a.report.metrics.creditors.value - b.report.metrics.creditors.value);
+          case 'status': return dir * a.report.status.localeCompare(b.report.status);
+          case 'updated': return dir * a.report.lastUpdated.localeCompare(b.report.lastUpdated);
+          default: return 0;
+        }
+      });
+    } else {
+      filtered.sort((a, b) => a.client.name.localeCompare(b.client.name));
+    }
+    return filtered;
+  }, [searchTerm, statusFilter, atSubFilter, atSort]);
 
-  const filteredClients = useMemo(() => {
-    let r = mockClients;
-    if (searchTerm) { const s = searchTerm.toLowerCase(); r = r.filter((c) => c.name.toLowerCase().includes(s) || c.code.toLowerCase().includes(s)); }
-    if (serviceFilter !== 'all') r = r.filter((c) => clientHasService(c, serviceFilter));
-    if (businessTypeFilter !== 'all') r = r.filter((c) => clientHasBusinessType(c, businessTypeFilter));
-    if (statusFilter !== 'all') r = r.filter((c) => clientHasStatus(c, statusFilter));
-    return [...r].sort((a, b) => a.name.localeCompare(b.name));
-  }, [searchTerm, serviceFilter, businessTypeFilter, statusFilter]);
+  // ── PM filtered data — split by report type ──
+  const pmRows = useMemo(() => {
+    const rows: { client: ClientReport; report: PerformanceMarketingReport; reportIndex: number }[] = [];
+    mockClients.forEach(c => {
+      c.pmReports.forEach((r, i) => rows.push({ client: c, report: r, reportIndex: i }));
+    });
+    let filtered = rows;
+    if (searchTerm) {
+      const s = searchTerm.toLowerCase();
+      filtered = filtered.filter(r => r.client.name.toLowerCase().includes(s) || r.client.code.toLowerCase().includes(s));
+    }
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(r => r.report.status === statusFilter);
+    }
+    if (pmSubFilter !== 'all') {
+      filtered = filtered.filter(r => r.report.reportType === pmSubFilter);
+    }
+    return filtered.sort((a, b) => a.client.name.localeCompare(b.client.name));
+  }, [searchTerm, statusFilter, pmSubFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredClients.length / CLIENTS_PER_PAGE));
+  const pmEcomRows = useMemo(() => {
+    const rows = pmRows.filter(r => r.report.reportType === 'ecommerce');
+    if (ecomSort.dir) {
+      const dir = ecomSort.dir === 'asc' ? 1 : -1;
+      rows.sort((a, b) => {
+        const am = a.report.metrics as ECommerceMetrics;
+        const bm = b.report.metrics as ECommerceMetrics;
+        switch (ecomSort.field) {
+          case 'client': return dir * a.client.name.localeCompare(b.client.name);
+          case 'code': return dir * a.client.code.localeCompare(b.client.code);
+          case 'adSpend': return dir * (am.adSpend.value - bm.adSpend.value);
+          case 'roas': return dir * (am.roas.value - bm.roas.value);
+          case 'revenue': return dir * (am.revenue.value - bm.revenue.value);
+          case 'orders': return dir * (am.orders.value - bm.orders.value);
+          case 'aov': return dir * (am.aov.value - bm.aov.value);
+          case 'status': return dir * a.report.status.localeCompare(b.report.status);
+          case 'updated': return dir * a.report.lastUpdated.localeCompare(b.report.lastUpdated);
+          default: return 0;
+        }
+      });
+    }
+    return rows;
+  }, [pmRows, ecomSort]);
+
+  const pmLeadGenRows = useMemo(() => {
+    const rows = pmRows.filter(r => r.report.reportType === 'leadGeneration');
+    if (leadSort.dir) {
+      const dir = leadSort.dir === 'asc' ? 1 : -1;
+      rows.sort((a, b) => {
+        const am = a.report.metrics as LeadGenMetrics;
+        const bm = b.report.metrics as LeadGenMetrics;
+        switch (leadSort.field) {
+          case 'client': return dir * a.client.name.localeCompare(b.client.name);
+          case 'code': return dir * a.client.code.localeCompare(b.client.code);
+          case 'adSpend': return dir * (am.adSpend.value - bm.adSpend.value);
+          case 'leads': return dir * (am.leads.value - bm.leads.value);
+          case 'cpl': return dir * (am.cpl.value - bm.cpl.value);
+          case 'ctr': return dir * (am.ctr.value - bm.ctr.value);
+          case 'status': return dir * a.report.status.localeCompare(b.report.status);
+          case 'updated': return dir * a.report.lastUpdated.localeCompare(b.report.lastUpdated);
+          default: return 0;
+        }
+      });
+    }
+    return rows;
+  }, [pmRows, leadSort]);
+
+  // Pagination
+  const currentRows = activeTab === 'at' ? atRows : pmRows;
+  const totalPages = Math.max(1, Math.ceil(currentRows.length / CLIENTS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
-  const paginatedClients = filteredClients.slice((safePage - 1) * CLIENTS_PER_PAGE, safePage * CLIENTS_PER_PAGE);
-  const startIdx = (safePage - 1) * CLIENTS_PER_PAGE + 1;
-  const endIdx = Math.min(safePage * CLIENTS_PER_PAGE, filteredClients.length);
+  const startIdx = (safePage - 1) * CLIENTS_PER_PAGE;
+  const endIdx = Math.min(safePage * CLIENTS_PER_PAGE, currentRows.length);
+
+  const paginatedAtRows = activeTab === 'at' ? atRows.slice(startIdx, endIdx) : [];
 
   const getPageNumbers = useCallback((): (number | 'ellipsis')[] => {
     if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
@@ -770,321 +884,597 @@ export function ReportingModule() {
     return p;
   }, [totalPages, safePage]);
 
-  // Count helpers
-  const svcCounts = useMemo(() => {
-    const b = mockClients.filter((c) => { if (searchTerm) { const s = searchTerm.toLowerCase(); if (!c.name.toLowerCase().includes(s) && !c.code.toLowerCase().includes(s)) return false; } if (statusFilter !== 'all' && !clientHasStatus(c, statusFilter)) return false; return true; });
-    return { all: b.length, performanceMarketing: b.filter((c) => c.pmReports.length > 0).length, accountsTaxation: b.filter((c) => c.atReports.length > 0).length };
-  }, [searchTerm, statusFilter]);
+  // Counts
+  const atCount = useMemo(() => mockClients.reduce((n, c) => n + c.atReports.length, 0), []);
+  const pmCount = useMemo(() => mockClients.reduce((n, c) => n + c.pmReports.length, 0), []);
 
-  const btCounts = useMemo(() => {
-    const b = mockClients.filter((c) => { if (searchTerm) { const s = searchTerm.toLowerCase(); if (!c.name.toLowerCase().includes(s) && !c.code.toLowerCase().includes(s)) return false; } if (serviceFilter !== 'all' && !clientHasService(c, serviceFilter)) return false; if (statusFilter !== 'all' && !clientHasStatus(c, statusFilter)) return false; return true; });
-    const counts: Record<string, number> = { all: b.length };
-    availableBusinessTypes.forEach((bt) => { counts[bt.value] = b.filter((c) => clientHasBusinessType(c, bt.value)).length; });
-    return counts;
-  }, [searchTerm, serviceFilter, statusFilter, availableBusinessTypes]);
-
+  // Status counts for dropdown
   const stCounts = useMemo(() => {
-    const b = mockClients.filter((c) => { if (searchTerm) { const s = searchTerm.toLowerCase(); if (!c.name.toLowerCase().includes(s) && !c.code.toLowerCase().includes(s)) return false; } if (serviceFilter !== 'all' && !clientHasService(c, serviceFilter)) return false; if (businessTypeFilter !== 'all' && !clientHasBusinessType(c, businessTypeFilter)) return false; return true; });
-    return { all: b.length, excellent: b.filter((c) => clientHasStatus(c, 'excellent')).length, good: b.filter((c) => clientHasStatus(c, 'good')).length, 'needs-attention': b.filter((c) => clientHasStatus(c, 'needs-attention')).length };
-  }, [searchTerm, serviceFilter, businessTypeFilter]);
+    const rows = activeTab === 'at' ? atRows : pmRows;
+    // Remove status filter to count all
+    const allRows = activeTab === 'at'
+      ? (() => {
+          const r: { report: AccountsTaxationReport }[] = [];
+          mockClients.forEach(c => c.atReports.forEach(rep => r.push({ report: rep })));
+          let f = r;
+          if (searchTerm) { const s = searchTerm.toLowerCase(); f = f.filter(x => mockClients.find(c => c.atReports.includes(x.report))?.name.toLowerCase().includes(s) || false); }
+          return f;
+        })()
+      : (() => {
+          const r: { report: PerformanceMarketingReport }[] = [];
+          mockClients.forEach(c => c.pmReports.forEach(rep => r.push({ report: rep })));
+          return r;
+        })();
+    return {
+      all: allRows.length,
+      excellent: allRows.filter(r => r.report.status === 'excellent').length,
+      good: allRows.filter(r => r.report.status === 'good').length,
+      'needs-attention': allRows.filter(r => r.report.status === 'needs-attention').length,
+    };
+  }, [activeTab, searchTerm, atRows, pmRows]);
 
-  const totalClients = mockClients.length;
-  const activeFilterCount = (serviceFilter !== 'all' ? 1 : 0) + (businessTypeFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0);
-
-  function clearAll() { setServiceFilter('all'); setBusinessTypeFilter('all'); setStatusFilter('all'); setSearchTerm(''); }
+  function clearAll() { setStatusFilter('all'); setSearchTerm(''); setPmSubFilter('all'); setAtSubFilter('all'); }
 
   // Build a ReportDetail-compatible single-report client
   function openDetail(client: ClientReport, svc: ServiceType, report: PerformanceMarketingReport | AccountsTaxationReport) {
-    setDetailClient({
-      id: client.id, name: client.name, code: client.code,
-      services: {
-        ...(svc === 'performanceMarketing' ? { performanceMarketing: report } : {}),
-        ...(svc === 'accountsTaxation' ? { accountsTaxation: report } : {}),
-      },
-    });
-    setDetailService(svc);
-    setViewMode('detail');
+    if (svc === 'accountsTaxation') {
+      setAtDashboardClient({ client: { id: client.id, name: client.name, code: client.code }, report: report as AccountsTaxationReport });
+      setViewMode('atDashboard');
+      return;
+    }
+    setPmDashboardClient({ client: { id: client.id, name: client.name, code: client.code }, report: report as PerformanceMarketingReport });
+    setViewMode('pmDashboard');
+  }
+
+  if (viewMode === 'atDashboard' && atDashboardClient) {
+    return <ClientDashboard client={atDashboardClient.client} report={atDashboardClient.report} onBack={() => { setViewMode('overview'); setAtDashboardClient(null); }} />;
+  }
+
+  if (viewMode === 'pmDashboard' && pmDashboardClient) {
+    return <PMClientDashboard client={pmDashboardClient.client} report={pmDashboardClient.report} onBack={() => { setViewMode('overview'); setPmDashboardClient(null); }} />;
   }
 
   if (viewMode === 'detail' && detailClient) {
     return <ReportDetail client={detailClient} service={detailService} onBack={() => { setViewMode('overview'); setDetailClient(null); }} />;
   }
 
+  const activeFilterCount = (statusFilter !== 'all' ? 1 : 0) + (activeTab === 'pm' && pmSubFilter !== 'all' ? 1 : 0) + (activeTab === 'at' && atSubFilter !== 'all' ? 1 : 0);
+
   return (
-    <div className="space-y-5">
+    <div className="flex h-full">
 
-      {/* Filter Bar */}
-      <div className="flex items-center gap-2.5 bg-white rounded-xl border border-black/[0.06] px-4 py-3">
-        <div className="flex items-center gap-2 flex-1">
-
-          {/* Service */}
-          <div ref={serviceDD.ref} className="relative">
-            <button onClick={() => { serviceDD.setOpen(!serviceDD.open); businessTypeDD.setOpen(false); statusDD.setOpen(false); }}
-              aria-expanded={serviceDD.open} aria-haspopup="listbox"
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl border transition-all text-caption focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30 ${serviceFilter !== 'all' ? 'bg-[#EEF1FB] border-[#204CC7]/20 text-[#204CC7]' : 'border-black/8 hover:bg-black/[0.03] hover:border-black/12 text-black/65'}`}>
-              <Filter className="w-3.5 h-3.5" />
-              {serviceFilter === 'all' ? 'All Services' : serviceFilter === 'performanceMarketing' ? 'Performance Marketing' : 'Accounts & Tax'}
-              <ChevronDown className={`w-3 h-3 transition-transform ${serviceDD.open ? 'rotate-180' : ''}`} />
-            </button>
-            {serviceDD.open && (
-              <div role="listbox" aria-label="Filter by service" className="absolute top-full left-0 mt-1.5 w-60 bg-white border border-black/8 rounded-xl shadow-lg py-1.5 z-50">
-                {([['all', 'All Services', null], ['performanceMarketing', 'Performance Marketing', 'text-[#204CC7]'], ['accountsTaxation', 'Accounts & Taxation', 'text-[#00C875]']] as const).map(([v, l, ic]) => (
-                  <button key={v} role="option" aria-selected={serviceFilter === v}
-                    onClick={() => { setServiceFilter(v as ServiceFilter); serviceDD.setOpen(false); }}
-                    className={`w-full px-4 py-2.5 text-left text-caption transition-colors flex items-center justify-between focus-visible:outline-none focus-visible:bg-[#EEF1FB]/40 ${serviceFilter === v ? 'bg-[#EEF1FB]/60 text-[#204CC7]' : 'text-black/70 hover:bg-[#F6F7FF]'}`}>
-                    <span className="flex items-center gap-2">
-                      {v === 'performanceMarketing' && <BarChart3 className={`w-3.5 h-3.5 ${ic}`} />}
-                      {v === 'accountsTaxation' && <FileText className={`w-3.5 h-3.5 ${ic}`} />}
-                      {v === 'all' && <Filter className="w-3.5 h-3.5 text-black/55" />}
-                      {l}
-                    </span>
-                    <span className={`text-caption font-medium px-1.5 py-0.5 rounded-md ${serviceFilter === v ? 'bg-[#204CC7]/10 text-[#204CC7]' : 'bg-black/[0.04] text-black/55'}`}>{svcCounts[v as keyof typeof svcCounts]}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Business Type */}
-          <div ref={businessTypeDD.ref} className="relative">
-            <button onClick={() => { businessTypeDD.setOpen(!businessTypeDD.open); serviceDD.setOpen(false); statusDD.setOpen(false); }}
-              aria-expanded={businessTypeDD.open} aria-haspopup="listbox"
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl border transition-all text-caption focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30 ${businessTypeFilter !== 'all' ? 'bg-[#EEF1FB] border-[#204CC7]/20 text-[#204CC7]' : 'border-black/8 hover:bg-black/[0.03] hover:border-black/12 text-black/65'}`}>
-              <Layers className="w-3.5 h-3.5" />
-              {businessTypeFilter === 'all' ? 'All Types' : getBusinessTypeLabel(businessTypeFilter)}
-              <ChevronDown className={`w-3 h-3 transition-transform ${businessTypeDD.open ? 'rotate-180' : ''}`} />
-            </button>
-            {businessTypeDD.open && (
-              <div role="listbox" aria-label="Filter by business type" className="absolute top-full left-0 mt-1.5 w-72 bg-white border border-black/8 rounded-xl shadow-lg py-1.5 z-50">
-                <button role="option" aria-selected={businessTypeFilter === 'all'}
-                  onClick={() => { setBusinessTypeFilter('all'); businessTypeDD.setOpen(false); }}
-                  className={`w-full px-4 py-2.5 text-left text-caption transition-colors flex items-center justify-between focus-visible:outline-none ${businessTypeFilter === 'all' ? 'bg-[#EEF1FB]/60 text-[#204CC7]' : 'text-black/70 hover:bg-[#F6F7FF]'}`}>
-                  <span className="flex items-center gap-2"><Layers className="w-3.5 h-3.5 text-black/55" /> All Types</span>
-                  <span className={`text-caption font-medium px-1.5 py-0.5 rounded-md ${businessTypeFilter === 'all' ? 'bg-[#204CC7]/10 text-[#204CC7]' : 'bg-black/[0.04] text-black/55'}`}>{btCounts.all}</span>
-                </button>
-                {(serviceFilter === 'all' || serviceFilter === 'performanceMarketing') && (<>
-                  <div className="px-4 pt-3 pb-1.5"><span className="text-caption font-semibold text-[#204CC7]/70 flex items-center gap-1.5"><BarChart3 className="w-3 h-3" /> Performance Marketing</span></div>
-                  {PM_BUSINESS_TYPES.map((bt) => (
-                    <button key={bt.value} role="option" aria-selected={businessTypeFilter === bt.value}
-                      onClick={() => { setBusinessTypeFilter(bt.value); businessTypeDD.setOpen(false); }}
-                      className={`w-full px-4 pl-8 py-2 text-left text-caption transition-colors flex items-center justify-between focus-visible:outline-none ${businessTypeFilter === bt.value ? 'bg-[#EEF1FB]/60 text-[#204CC7]' : 'text-black/70 hover:bg-[#F6F7FF]'}`}>
-                      {bt.label}
-                      <span className={`text-caption font-medium px-1.5 py-0.5 rounded-md ${businessTypeFilter === bt.value ? 'bg-[#204CC7]/10 text-[#204CC7]' : 'bg-black/[0.04] text-black/55'}`}>{btCounts[bt.value] ?? 0}</span>
-                    </button>
-                  ))}
-                </>)}
-                {(serviceFilter === 'all' || serviceFilter === 'accountsTaxation') && (<>
-                  <div className="px-4 pt-3 pb-1.5"><span className="text-caption font-semibold text-[#00C875]/70 flex items-center gap-1.5"><FileText className="w-3 h-3" /> Accounts & Taxation</span></div>
-                  {AT_BUSINESS_TYPES.map((bt) => (
-                    <button key={bt.value} role="option" aria-selected={businessTypeFilter === bt.value}
-                      onClick={() => { setBusinessTypeFilter(bt.value); businessTypeDD.setOpen(false); }}
-                      className={`w-full px-4 pl-8 py-2 text-left text-caption transition-colors flex items-center justify-between focus-visible:outline-none ${businessTypeFilter === bt.value ? 'bg-[#EEF1FB]/60 text-[#204CC7]' : 'text-black/70 hover:bg-[#F6F7FF]'}`}>
-                      {bt.label}
-                      <span className={`text-caption font-medium px-1.5 py-0.5 rounded-md ${businessTypeFilter === bt.value ? 'bg-[#204CC7]/10 text-[#204CC7]' : 'bg-black/[0.04] text-black/55'}`}>{btCounts[bt.value] ?? 0}</span>
-                    </button>
-                  ))}
-                </>)}
-              </div>
-            )}
-          </div>
-
-          {/* Status */}
-          <div ref={statusDD.ref} className="relative">
-            <button onClick={() => { statusDD.setOpen(!statusDD.open); serviceDD.setOpen(false); businessTypeDD.setOpen(false); }}
-              aria-expanded={statusDD.open} aria-haspopup="listbox"
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl border transition-all text-caption focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30 ${statusFilter !== 'all' ? 'bg-[#EEF1FB] border-[#204CC7]/20 text-[#204CC7]' : 'border-black/8 hover:bg-black/[0.03] hover:border-black/12 text-black/65'}`}>
-              {statusFilter !== 'all' && <span className={`w-2 h-2 rounded-full ${STATUS_STYLES[statusFilter]?.dot}`} aria-hidden="true" />}
-              {statusFilter === 'all' ? 'All Status' : getStatusLabel(statusFilter)}
-              <ChevronDown className={`w-3 h-3 transition-transform ${statusDD.open ? 'rotate-180' : ''}`} />
-            </button>
-            {statusDD.open && (
-              <div role="listbox" aria-label="Filter by status" className="absolute top-full left-0 mt-1.5 w-52 bg-white border border-black/8 rounded-xl shadow-lg py-1.5 z-50">
-                {(['all', 'excellent', 'good', 'needs-attention'] as StatusFilter[]).map((v) => (
-                  <button key={v} role="option" aria-selected={statusFilter === v}
-                    onClick={() => { setStatusFilter(v); statusDD.setOpen(false); }}
-                    className={`w-full px-4 py-2.5 text-left text-caption transition-colors flex items-center justify-between focus-visible:outline-none ${statusFilter === v ? 'bg-[#EEF1FB]/60 text-[#204CC7]' : 'text-black/70 hover:bg-[#F6F7FF]'}`}>
-                    <span className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${v !== 'all' ? STATUS_STYLES[v]?.dot : 'bg-black/25'}`} aria-hidden="true" />
-                      {v === 'all' ? 'All Status' : getStatusLabel(v)}
-                    </span>
-                    <span className={`text-caption font-medium px-1.5 py-0.5 rounded-md ${statusFilter === v ? 'bg-[#204CC7]/10 text-[#204CC7]' : 'bg-black/[0.04] text-black/55'}`}>{stCounts[v]}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {activeFilterCount > 0 && (
-            <button onClick={clearAll} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-caption text-black/55 hover:text-[#204CC7] hover:bg-[#EEF1FB]/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30">
-              <X className="w-3 h-3" /> Clear filters
-            </button>
-          )}
-          <div className="w-px h-6 bg-black/8 mx-0.5" />
-          <span className="text-caption text-black/55">{filteredClients.length} of {totalClients} clients</span>
+      {/* ── Left Sidebar ── */}
+      <div className="w-[240px] shrink-0 border-r border-black/[0.06] bg-white flex flex-col">
+        {/* Sidebar header */}
+        <div className="px-5 pt-6 pb-4">
+          <h1 className="text-h2 text-black/85">Dashboard</h1>
+          <p className="text-caption font-normal text-black/60 mt-1">Client report summary</p>
         </div>
 
-        <div className="relative w-56">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-black/55 pointer-events-none" aria-hidden="true" />
-          <input type="text" placeholder="Search clients..." aria-label="Search clients" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 bg-[#F6F7FF] border border-black/5 rounded-xl placeholder:text-black/45 focus:outline-none focus:bg-white focus:border-[#204CC7]/25 focus:ring-2 focus:ring-[#204CC7]/15 transition-all text-caption" />
-          {searchTerm && <button onClick={() => setSearchTerm('')} aria-label="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-black/55 hover:text-black/70 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30"><X className="w-3 h-3" /></button>}
+        {/* Nav items */}
+        <nav className="px-3 flex-1" aria-label="Dashboard sections">
+          <button
+            onClick={() => { router.push('/dashboard/accounts-taxation'); }}
+            className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl mb-1 transition-all text-left group ${activeTab === 'at' ? 'bg-[#204CC7]/[0.08]' : 'hover:bg-black/[0.03]'}`}
+          >
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${activeTab === 'at' ? 'bg-[#204CC7]/15' : 'bg-black/[0.04]'}`}>
+              <FileText className={`w-4 h-4 ${activeTab === 'at' ? 'text-[#204CC7]' : 'text-black/55'}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`text-body font-semibold truncate ${activeTab === 'at' ? 'text-[#204CC7]' : 'text-black/70'}`}>Accounts & Taxation</p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => { router.push('/dashboard/performance-marketing'); }}
+            className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl mb-1 transition-all text-left group ${activeTab === 'pm' ? 'bg-[#204CC7]/[0.08]' : 'hover:bg-black/[0.03]'}`}
+          >
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${activeTab === 'pm' ? 'bg-[#204CC7]/15' : 'bg-black/[0.04]'}`}>
+              <BarChart3 className={`w-4 h-4 ${activeTab === 'pm' ? 'text-[#204CC7]' : 'text-black/55'}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`text-body font-semibold truncate ${activeTab === 'pm' ? 'text-[#204CC7]' : 'text-black/70'}`}>Performance Marketing</p>
+            </div>
+          </button>
+        </nav>
+
+        {/* Sidebar footer summary */}
+        <div className="px-5 py-4 border-t border-black/[0.06]">
+          <p className="text-caption font-normal text-black/60">{mockClients.length} total clients</p>
         </div>
       </div>
 
-      {/* Client Cards */}
-      <div className="grid grid-cols-1 gap-4">
-        {paginatedClients.map((client) => {
-          const totalCards = client.pmReports.length + client.atReports.length;
-          return (
-            <div key={client.id} className="bg-white rounded-xl border border-black/[0.06] overflow-hidden">
-              {/* Header */}
-              <div className="px-5 py-4 border-b border-black/[0.04] flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-[#F6F7FF] flex items-center justify-center text-[#204CC7] text-caption font-bold" aria-hidden="true">{client.name.charAt(0)}</div>
-                  <div>
-                    <h3 className="text-body font-semibold text-black/85">{client.name}</h3>
-                    <p className="text-caption font-light text-black/55">{client.code}</p>
+      {/* ── Main Content ── */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Top bar: filters + search */}
+        <div className="px-6 pt-5 pb-4 border-b border-black/[0.06] bg-white shrink-0">
+          <div className="flex items-center gap-3">
+            {/* Section title */}
+            <div className="flex items-center gap-2.5 mr-3">
+              {activeTab === 'at' ? (
+                <FileText className="w-4.5 h-4.5 text-[#06B6D4]" />
+              ) : (
+                <BarChart3 className="w-4.5 h-4.5 text-[#7C3AED]" />
+              )}
+              <h2 className="text-h3 text-black/85">{activeTab === 'at' ? 'Accounts & Taxation' : 'Performance Marketing'}</h2>
+            </div>
+
+            <div className="w-px h-6 bg-black/8" />
+
+            {/* Sub-filter (business type) */}
+            <div ref={subFilterDD.ref} className="relative">
+              <button
+                onClick={() => { subFilterDD.setOpen(!subFilterDD.open); statusDD.setOpen(false); }}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl border transition-all text-caption focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30 ${(activeTab === 'at' ? atSubFilter : pmSubFilter) !== 'all' ? 'bg-[#EEF1FB] border-[#204CC7]/20 text-[#204CC7]' : 'border-black/8 hover:bg-black/[0.03] hover:border-black/12 text-black/65'}`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                {activeTab === 'at'
+                  ? (atSubFilter === 'all' ? 'All Types' : getBusinessTypeLabel(atSubFilter))
+                  : (pmSubFilter === 'all' ? 'All Types' : getBusinessTypeLabel(pmSubFilter))
+                }
+                <ChevronDown className={`w-3 h-3 transition-transform ${subFilterDD.open ? 'rotate-180' : ''}`} />
+              </button>
+              {subFilterDD.open && (
+                <div className="absolute top-full left-0 mt-1.5 w-64 bg-white border border-black/8 rounded-xl shadow-lg py-1.5 z-50">
+                  <button
+                    onClick={() => { activeTab === 'at' ? setAtSubFilter('all') : setPmSubFilter('all'); subFilterDD.setOpen(false); }}
+                    className={`w-full px-4 py-2.5 text-left text-caption transition-colors flex items-center gap-2 focus-visible:outline-none ${(activeTab === 'at' ? atSubFilter : pmSubFilter) === 'all' ? 'bg-[#EEF1FB]/60 text-[#204CC7]' : 'text-black/70 hover:bg-[#F6F7FF]'}`}
+                  >
+                    <Layers className="w-3.5 h-3.5 text-black/55" /> All Types
+                  </button>
+                  {(activeTab === 'at' ? AT_BUSINESS_TYPES : PM_BUSINESS_TYPES).map(bt => (
+                    <button
+                      key={bt.value}
+                      onClick={() => { activeTab === 'at' ? setAtSubFilter(bt.value as ATBusinessType) : setPmSubFilter(bt.value as PMBusinessType); subFilterDD.setOpen(false); }}
+                      className={`w-full px-4 py-2.5 text-left text-caption transition-colors flex items-center gap-2 focus-visible:outline-none ${(activeTab === 'at' ? atSubFilter : pmSubFilter) === bt.value ? 'bg-[#EEF1FB]/60 text-[#204CC7]' : 'text-black/70 hover:bg-[#F6F7FF]'}`}
+                    >
+                      {bt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Status filter */}
+            <div ref={statusDD.ref} className="relative">
+              <button
+                onClick={() => { statusDD.setOpen(!statusDD.open); subFilterDD.setOpen(false); }}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl border transition-all text-caption focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30 ${statusFilter !== 'all' ? 'bg-[#EEF1FB] border-[#204CC7]/20 text-[#204CC7]' : 'border-black/8 hover:bg-black/[0.03] hover:border-black/12 text-black/65'}`}
+              >
+                {statusFilter !== 'all' && <span className={`w-2 h-2 rounded-full ${STATUS_STYLES[statusFilter]?.dot}`} aria-hidden="true" />}
+                {statusFilter === 'all' ? 'All Status' : getStatusLabel(statusFilter)}
+                <ChevronDown className={`w-3 h-3 transition-transform ${statusDD.open ? 'rotate-180' : ''}`} />
+              </button>
+              {statusDD.open && (
+                <div className="absolute top-full left-0 mt-1.5 w-52 bg-white border border-black/8 rounded-xl shadow-lg py-1.5 z-50">
+                  {(['all', 'excellent', 'good', 'needs-attention'] as StatusFilter[]).map(v => (
+                    <button
+                      key={v}
+                      onClick={() => { setStatusFilter(v); statusDD.setOpen(false); }}
+                      className={`w-full px-4 py-2.5 text-left text-caption transition-colors flex items-center justify-between focus-visible:outline-none ${statusFilter === v ? 'bg-[#EEF1FB]/60 text-[#204CC7]' : 'text-black/70 hover:bg-[#F6F7FF]'}`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${v !== 'all' ? STATUS_STYLES[v]?.dot : 'bg-black/40'}`} aria-hidden="true" />
+                        {v === 'all' ? 'All Status' : getStatusLabel(v)}
+                      </span>
+                      <span className={`text-caption font-medium px-1.5 py-0.5 rounded-md ${statusFilter === v ? 'bg-[#204CC7]/10 text-[#204CC7]' : 'bg-black/[0.04] text-black/65'}`}>
+                        {stCounts[v]}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {activeFilterCount > 0 && (
+              <button onClick={clearAll} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-caption text-black/55 hover:text-[#204CC7] hover:bg-[#EEF1FB]/50 transition-colors focus-visible:outline-none">
+                <X className="w-3 h-3" /> Clear
+              </button>
+            )}
+
+            <div className="flex-1" />
+
+            <span className="text-caption text-black/60 mr-2">{currentRows.length} report{currentRows.length !== 1 ? 's' : ''}</span>
+
+            {/* Search */}
+            <div className="relative w-56">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-black/55 pointer-events-none" aria-hidden="true" />
+              <input
+                type="text" placeholder="Search clients..." aria-label="Search clients"
+                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 bg-[#F6F7FF] border border-black/5 rounded-xl placeholder:text-black/55 focus:outline-none focus:bg-white focus:border-[#204CC7]/25 focus:ring-2 focus:ring-[#204CC7]/15 transition-all text-caption"
+              />
+              {searchTerm && (
+                <button onClick={() => setSearchTerm('')} aria-label="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-black/55 hover:text-black/70 transition-colors rounded">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Table content */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+
+          {/* ═══ A&T Table ═══ */}
+          {activeTab === 'at' && (
+            <div className="bg-white rounded-xl border border-black/[0.06] overflow-x-auto">
+              <table className="w-full min-w-[1100px]" style={{ tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '200px' }} />
+                  <col style={{ width: '80px' }} />
+                  <col style={{ width: '110px' }} />
+                  <col style={{ width: '120px' }} />
+                  <col style={{ width: '120px' }} />
+                  <col style={{ width: '130px' }} />
+                  <col style={{ width: '110px' }} />
+                  <col style={{ width: '110px' }} />
+                  <col style={{ width: '110px' }} />
+                  <col style={{ width: '100px' }} />
+                </colgroup>
+                <thead>
+                  <tr className="border-b border-black/[0.06] bg-[#FAFBFC]">
+                    {([['client','Client','left','px-5'],['code','Code','left','px-4'],['type','Type','left','px-4'],['revenue','Revenue','right','px-4'],['expenses','Expenses','right','px-4'],['bankBalance','Bank Balance','right','px-4'],['debtors','Debtors','right','px-4'],['creditors','Creditors','right','px-4']] as [ATSortField, string, string, string][]).map(([field, label, align, px]) => (
+                      <th key={field} className={`text-${align} text-[11px] font-semibold text-black/50 uppercase tracking-wider ${px} py-3 cursor-pointer select-none hover:text-black/70 transition-colors`} onClick={() => setAtSort(toggleSort(atSort, field))}>
+                        <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'justify-end' : ''}`}>{label} <SortIcon field={field} current={atSort} /></span>
+                      </th>
+                    ))}
+                    <th className="text-center text-[11px] font-semibold text-black/50 uppercase tracking-wider px-4 py-3 cursor-pointer select-none hover:text-black/70 transition-colors" onClick={() => setAtSort(toggleSort(atSort, 'status'))}>
+                      <span className="inline-flex items-center gap-1 justify-center">Status <SortIcon field="status" current={atSort} /></span>
+                    </th>
+                    <th className="text-right text-[11px] font-semibold text-black/50 uppercase tracking-wider px-5 py-3 cursor-pointer select-none hover:text-black/70 transition-colors" onClick={() => setAtSort(toggleSort(atSort, 'updated'))}>
+                      <span className="inline-flex items-center gap-1 justify-end">Updated <SortIcon field="updated" current={atSort} /></span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedAtRows.map((row, idx) => (
+                    <tr
+                      key={`${row.client.id}-at-${row.reportIndex}`}
+                      className="border-b border-black/[0.04] hover:bg-[#F8F9FF]/60 transition-colors cursor-pointer group h-[52px]"
+                      onClick={() => openDetail(row.client, 'accountsTaxation', row.report)}
+                    >
+                      <td className="px-5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-[#06B6D4]/[0.10] flex items-center justify-center text-[#0E7490] text-caption font-bold shrink-0">
+                            {row.client.name.charAt(0)}
+                          </div>
+                          <span className="text-body font-semibold text-black/80 truncate">{row.client.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 text-caption text-black/55 truncate">{row.client.code}</td>
+                      <td className="px-4">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-caption font-medium whitespace-nowrap ${row.report.businessType === 'tradingManufacturing' ? 'bg-[#06B6D4]/[0.10] text-[#0E7490]' : 'bg-[#00C875]/[0.10] text-[#0A8F5E]'}`}>{getBusinessTypeShort(row.report.businessType)}</span>
+                      </td>
+                      <td className="px-4 text-right">
+                        <span className="text-body font-semibold text-black/80 tabular-nums">{formatCurrency(row.report.metrics.revenue.value)}</span>
+                        <span className="ml-1.5 inline-flex items-center"><ChangeIndicator value={row.report.metrics.revenue.change} /></span>
+                      </td>
+                      <td className="px-4 text-right">
+                        <span className="text-body font-semibold text-black/80 tabular-nums">{formatCurrency(row.report.metrics.expenses.value)}</span>
+                        <span className="ml-1.5 inline-flex items-center"><ChangeIndicator value={row.report.metrics.expenses.change} inverse /></span>
+                      </td>
+                      <td className="px-4 text-right">
+                        <span className="text-body font-semibold text-black/80 tabular-nums">{formatCurrency(row.report.metrics.bankBalance.value)}</span>
+                        <span className="ml-1.5 inline-flex items-center"><ChangeIndicator value={row.report.metrics.bankBalance.change} /></span>
+                      </td>
+                      <td className="px-4 text-right">
+                        <span className="text-body font-semibold text-black/80 tabular-nums">{formatCurrency(row.report.metrics.debtors.value)}</span>
+                        <span className="ml-1.5 inline-flex items-center"><ChangeIndicator value={row.report.metrics.debtors.change} inverse /></span>
+                      </td>
+                      <td className="px-4 text-right">
+                        <span className="text-body font-semibold text-black/80 tabular-nums">{formatCurrency(row.report.metrics.creditors.value)}</span>
+                        <span className="ml-1.5 inline-flex items-center"><ChangeIndicator value={row.report.metrics.creditors.change} inverse /></span>
+                      </td>
+                      <td className="px-4 text-center">
+                        <StatusBadge status={row.report.status} />
+                      </td>
+                      <td className="px-5 text-right">
+                        <span className="text-caption text-black/50 whitespace-nowrap">{row.report.lastUpdated}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {atRows.length === 0 && (
+                <div className="py-16 text-center" role="status">
+                  <Search className="w-10 h-10 text-black/15 mx-auto mb-3" aria-hidden="true" />
+                  <p className="text-black/70 text-body font-medium">No A&T reports match your filters</p>
+                  <button onClick={clearAll} className="mt-2 text-[#204CC7] hover:underline text-caption rounded">Reset filters</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══ PM Tables (E-Commerce + Lead Generation) ═══ */}
+          {activeTab === 'pm' && (
+            <div className="space-y-6">
+
+              {/* E-Commerce Table */}
+              {pmEcomRows.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2.5 mb-3 px-1">
+                    <span className="text-caption font-semibold text-black/70">E-Commerce</span>
+                    <span className="text-caption font-normal text-black/55">{pmEcomRows.length} report{pmEcomRows.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="bg-white rounded-xl border border-black/[0.06] overflow-x-auto">
+                    <table className="w-full min-w-[1060px]" style={{ tableLayout: 'fixed' }}>
+                      <colgroup>
+                        <col style={{ width: '210px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '130px' }} />
+                        <col style={{ width: '100px' }} />
+                        <col style={{ width: '130px' }} />
+                        <col style={{ width: '100px' }} />
+                        <col style={{ width: '110px' }} />
+                        <col style={{ width: '110px' }} />
+                        <col style={{ width: '48px' }} />
+                        <col style={{ width: '100px' }} />
+                      </colgroup>
+                      <thead>
+                        <tr className="border-b border-black/[0.06] bg-[#FAFBFC]">
+                          {([['client','Client','left','px-5'],['code','Code','left','px-4'],['adSpend','Ad Spends','right','px-4'],['roas','ROAS','right','px-4'],['revenue','Revenue','right','px-4'],['orders','Orders','right','px-4'],['aov','AOV','right','px-4']] as [PMEcomSortField, string, string, string][]).map(([field, label, align, px]) => (
+                            <th key={field} className={`text-${align} text-[11px] font-semibold text-black/50 uppercase tracking-wider ${px} py-3 cursor-pointer select-none hover:text-black/70 transition-colors`} onClick={() => setEcomSort(toggleSort(ecomSort, field))}>
+                              <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'justify-end' : ''}`}>{label} <SortIcon field={field} current={ecomSort} /></span>
+                            </th>
+                          ))}
+                          <th className="text-center text-[11px] font-semibold text-black/50 uppercase tracking-wider px-4 py-3 cursor-pointer select-none hover:text-black/70 transition-colors" onClick={() => setEcomSort(toggleSort(ecomSort, 'status'))}>
+                            <span className="inline-flex items-center gap-1 justify-center">Status <SortIcon field="status" current={ecomSort} /></span>
+                          </th>
+                          <th className="px-1 py-3"></th>
+                          <th className="text-right text-[11px] font-semibold text-black/50 uppercase tracking-wider px-5 py-3 cursor-pointer select-none hover:text-black/70 transition-colors" onClick={() => setEcomSort(toggleSort(ecomSort, 'updated'))}>
+                            <span className="inline-flex items-center gap-1 justify-end">Updated <SortIcon field="updated" current={ecomSort} /></span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pmEcomRows.map((row) => {
+                          const m = row.report.metrics as ECommerceMetrics;
+                          const targets = getTargets(row.client.id, row.reportIndex, row.report);
+                          const hasRequest = !!getClientRequest(row.client.id, row.report.reportType, row.reportIndex);
+                          return (
+                            <tr
+                              key={`${row.client.id}-ecom-${row.reportIndex}`}
+                              className="border-b border-black/[0.04] hover:bg-[#F8F9FF]/60 transition-colors cursor-pointer group h-[52px]"
+                              onClick={() => openDetail(row.client, 'performanceMarketing', row.report)}
+                            >
+                              <td className="px-5">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-7 h-7 rounded-lg bg-[#7C3AED]/[0.08] flex items-center justify-center text-[#7C3AED] text-[11px] font-bold shrink-0">
+                                    {row.client.name.charAt(0)}
+                                  </div>
+                                  <span className="text-body font-semibold text-black/80 truncate">{row.client.name}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 text-caption text-black/55 truncate">{row.client.code}</td>
+                              <td className="px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <span className="text-body font-semibold text-black/80 tabular-nums">{formatCurrency(m.adSpend.value)}</span>
+                                  <ChangeIndicator value={m.adSpend.change} />
+                                </div>
+                                {targets.adSpend > 0 && <p className="text-[11px] text-black/40 tabular-nums mt-0.5">Target: {formatCurrency(targets.adSpend)}</p>}
+                              </td>
+                              <td className="px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <span className="text-body font-semibold text-black/80 tabular-nums">{m.roas.value}x</span>
+                                  <ChangeIndicator value={m.roas.change} />
+                                </div>
+                                {targets.roas > 0 && <p className="text-[11px] text-black/40 tabular-nums mt-0.5">Target: {targets.roas}x</p>}
+                              </td>
+                              <td className="px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <span className="text-body font-semibold text-black/80 tabular-nums">{formatCurrency(m.revenue.value)}</span>
+                                  <ChangeIndicator value={m.revenue.change} />
+                                </div>
+                                {targets.revenue > 0 && <p className="text-[11px] text-black/40 tabular-nums mt-0.5">Target: {formatCurrency(targets.revenue)}</p>}
+                              </td>
+                              <td className="px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <span className="text-body font-semibold text-black/80 tabular-nums">{formatNumber(m.orders.value)}</span>
+                                  <ChangeIndicator value={m.orders.change} />
+                                </div>
+                                {targets.orders > 0 && <p className="text-[11px] text-black/40 tabular-nums mt-0.5">Target: {formatNumber(targets.orders)}</p>}
+                              </td>
+                              <td className="px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <span className="text-body font-semibold text-black/80 tabular-nums">{formatCurrency(m.aov.value)}</span>
+                                  <ChangeIndicator value={m.aov.change} />
+                                </div>
+                                {targets.aov > 0 && <p className="text-[11px] text-black/40 tabular-nums mt-0.5">Target: {formatCurrency(targets.aov)}</p>}
+                              </td>
+                              <td className="px-4 text-center">
+                                <StatusBadge status={row.report.status} />
+                              </td>
+                              <td className="px-1 text-center">
+                                <div className="flex items-center gap-0.5 justify-center">
+                                  {hasRequest && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setReviewModal({ clientId: row.client.id, reportIndex: row.reportIndex, report: row.report }); }}
+                                      className="p-1 rounded-lg text-amber-500 hover:text-amber-600 hover:bg-amber-50 transition-all"
+                                      title="Change Request"
+                                    >
+                                      <ArrowRightLeft className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  {CAN_EDIT_TARGETS && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setTargetModal({ clientId: row.client.id, reportIndex: row.reportIndex, report: row.report }); }}
+                                      className="p-1 rounded-lg text-black/25 hover:text-[#204CC7] hover:bg-[#204CC7]/[0.06] transition-all opacity-0 group-hover:opacity-100"
+                                      title="Set Targets"
+                                    >
+                                      <Settings className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-5 text-right">
+                                <span className="text-caption text-black/50 whitespace-nowrap">{row.report.lastUpdated}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                  {client.pmReports.map((r) => (
-                    <span key={`t-pm-${r.reportType}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#EEF1FB]/60 text-[#204CC7] text-caption font-medium">
-                      <BarChart3 className="w-3 h-3" /> PM · {getBusinessTypeShort(r.reportType)}
-                    </span>
-                  ))}
-                  {client.atReports.map((r) => (
-                    <span key={`t-at-${r.businessType}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#E8F8F5]/60 text-[#00C875] text-caption font-medium">
-                      <FileText className="w-3 h-3" /> A&T · {getBusinessTypeShort(r.businessType)}
-                    </span>
-                  ))}
-                </div>
-              </div>
+              )}
 
-              {/* Sub-cards — one per report */}
-              <div className="p-4">
-                <div className={`grid gap-3 ${totalCards >= 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                  {client.pmReports.map((pm, i) => {
-                    const targets = getTargets(client.id, i, pm);
-                    const metricKeys = pm.reportType === 'ecommerce'
-                      ? ['adSpend', 'roas', 'revenue', 'orders', 'aov'] as const
-                      : ['adSpend', 'leads', 'cpl', 'ctr'] as const;
-                    return (
-                    <div key={`pm-${i}`} className="rounded-xl border border-black/[0.06] hover:border-[#204CC7]/20 hover:bg-[#F6F7FF]/40 transition-all group focus-within:ring-2 focus-within:ring-[#204CC7]/30 overflow-hidden">
-                      <div className="flex items-center justify-between px-4 pt-4 mb-3.5">
-                        <div className="flex items-center gap-2">
-                          <BarChart3 className="w-4 h-4 text-[#204CC7]" />
-                          <span className="text-caption font-semibold text-black/75">PM · {getBusinessTypeShort(pm.reportType)}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {/* Pending target change request badge */}
-                          {getClientRequest(client.id, pm.reportType, i) && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setReviewModal({ clientId: client.id, reportIndex: i, report: pm }); }}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 text-caption font-medium hover:bg-amber-100 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+              {/* Lead Generation Table */}
+              {pmLeadGenRows.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2.5 mb-3 px-1">
+                    <span className="text-caption font-semibold text-black/70">Lead Generation</span>
+                    <span className="text-caption font-normal text-black/55">{pmLeadGenRows.length} report{pmLeadGenRows.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="bg-white rounded-xl border border-black/[0.06] overflow-x-auto">
+                    <table className="w-full min-w-[900px]" style={{ tableLayout: 'fixed' }}>
+                      <colgroup>
+                        <col style={{ width: '210px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '140px' }} />
+                        <col style={{ width: '110px' }} />
+                        <col style={{ width: '120px' }} />
+                        <col style={{ width: '100px' }} />
+                        <col style={{ width: '110px' }} />
+                        <col style={{ width: '48px' }} />
+                        <col style={{ width: '100px' }} />
+                      </colgroup>
+                      <thead>
+                        <tr className="border-b border-black/[0.06] bg-[#FAFBFC]">
+                          {([['client','Client','left','px-5'],['code','Code','left','px-4'],['adSpend','Ad Spends','right','px-4'],['leads','Leads','right','px-4'],['cpl','CPL','right','px-4'],['ctr','CTR','right','px-4']] as [PMLeadSortField, string, string, string][]).map(([field, label, align, px]) => (
+                            <th key={field} className={`text-${align} text-[11px] font-semibold text-black/50 uppercase tracking-wider ${px} py-3 cursor-pointer select-none hover:text-black/70 transition-colors`} onClick={() => setLeadSort(toggleSort(leadSort, field))}>
+                              <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'justify-end' : ''}`}>{label} <SortIcon field={field} current={leadSort} /></span>
+                            </th>
+                          ))}
+                          <th className="text-center text-[11px] font-semibold text-black/50 uppercase tracking-wider px-4 py-3 cursor-pointer select-none hover:text-black/70 transition-colors" onClick={() => setLeadSort(toggleSort(leadSort, 'status'))}>
+                            <span className="inline-flex items-center gap-1 justify-center">Status <SortIcon field="status" current={leadSort} /></span>
+                          </th>
+                          <th className="px-1 py-3"></th>
+                          <th className="text-right text-[11px] font-semibold text-black/50 uppercase tracking-wider px-5 py-3 cursor-pointer select-none hover:text-black/70 transition-colors" onClick={() => setLeadSort(toggleSort(leadSort, 'updated'))}>
+                            <span className="inline-flex items-center gap-1 justify-end">Updated <SortIcon field="updated" current={leadSort} /></span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pmLeadGenRows.map((row) => {
+                          const m = row.report.metrics as LeadGenMetrics;
+                          const targets = getTargets(row.client.id, row.reportIndex, row.report);
+                          const hasRequest = !!getClientRequest(row.client.id, row.report.reportType, row.reportIndex);
+                          return (
+                            <tr
+                              key={`${row.client.id}-leadgen-${row.reportIndex}`}
+                              className="border-b border-black/[0.04] hover:bg-[#F8F9FF]/60 transition-colors cursor-pointer group h-[52px]"
+                              onClick={() => openDetail(row.client, 'performanceMarketing', row.report)}
                             >
-                              <ArrowRightLeft className="w-3 h-3" />
-                              Change Request
-                            </button>
-                          )}
-                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-caption font-medium ${STATUS_STYLES[pm.status].bg} ${STATUS_STYLES[pm.status].text}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${STATUS_STYLES[pm.status].dot}`} aria-hidden="true" />{getStatusLabel(pm.status)}
-                          </span>
-                          {CAN_EDIT_TARGETS && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setTargetModal({ clientId: client.id, reportIndex: i, report: pm }); }}
-                              aria-label={`Set targets for ${client.name} PM ${getBusinessTypeShort(pm.reportType)}`}
-                              className="p-1 rounded-lg text-black/30 hover:text-[#204CC7] hover:bg-[#204CC7]/[0.06] transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30">
-                              <Settings className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="px-4 pb-4">
-                        <div className={`grid ${pm.reportType === 'ecommerce' ? 'grid-cols-3' : 'grid-cols-2'} gap-x-4 gap-y-3 mb-3`}>
-                          {metricKeys.map((key) => {
-                            const m = (pm.metrics as unknown as Record<string, { value: number; change: number; target: number }>)[key];
-                            const t = targets[key] || 0;
-                            const inverse = INVERSE_METRICS.has(key);
-                            const changeGood = inverse ? m.change <= 0 : m.change >= 0;
-                            return (
-                              <div key={key}>
-                                <p className="text-caption font-normal text-black/55 mb-0.5">{METRIC_LABELS[key]}</p>
-                                <div className="flex items-baseline gap-1.5">
-                                  <p className="text-caption font-semibold text-black/80">{formatMetricValue(key, m.value)}</p>
-                                  {t > 0 && <span className="text-caption font-normal text-black/35">/ {formatMetricTarget(key, t)}</span>}
-                                  <span className={`text-caption font-medium ${changeGood ? 'text-[#00C875]' : 'text-[#E2445C]'}`}>{m.change >= 0 ? '+' : ''}{m.change}%</span>
+                              <td className="px-5">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-7 h-7 rounded-lg bg-[#7C3AED]/[0.08] flex items-center justify-center text-[#7C3AED] text-[11px] font-bold shrink-0">
+                                    {row.client.name.charAt(0)}
+                                  </div>
+                                  <span className="text-body font-semibold text-black/80 truncate">{row.client.name}</span>
                                 </div>
-                                {t > 0 && <ProgressBar value={m.value} target={t} inverse={inverse} />}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="pt-2.5 border-t border-black/[0.04]">
-                          <span className="text-caption font-light text-black/55">Updated {pm.lastUpdated}</span>
-                        </div>
-                      </div>
-                    </div>
-                    );
-                  })}
-
-                  {client.atReports.map((at, i) => (
-                    <div key={`at-${i}`} className="p-4 rounded-xl border border-black/[0.06] transition-all">
-                      <div className="flex items-center justify-between mb-3.5">
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-[#00C875]" />
-                          <span className="text-caption font-semibold text-black/75">A&T · {getBusinessTypeShort(at.businessType)}</span>
-                        </div>
-                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-caption font-medium ${STATUS_STYLES[at.status].bg} ${STATUS_STYLES[at.status].text}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${STATUS_STYLES[at.status].dot}`} aria-hidden="true" />{getStatusLabel(at.status)}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-x-4 gap-y-2.5 mb-3">
-                        <div><p className="text-caption font-normal text-black/55 mb-0.5">Revenue</p><p className="text-caption font-semibold text-black/80">₹{formatNumber(at.metrics.revenue.value)}</p><span className={`text-caption font-medium ${at.metrics.revenue.change >= 0 ? 'text-[#00C875]' : 'text-[#E2445C]'}`}>{at.metrics.revenue.change >= 0 ? '+' : ''}{at.metrics.revenue.change}%</span></div>
-                        <div><p className="text-caption font-normal text-black/55 mb-0.5">Expenses</p><p className="text-caption font-semibold text-black/80">₹{formatNumber(at.metrics.expenses.value)}</p><span className={`text-caption font-medium ${at.metrics.expenses.change <= 0 ? 'text-[#00C875]' : 'text-[#E2445C]'}`}>{at.metrics.expenses.change >= 0 ? '+' : ''}{at.metrics.expenses.change}%</span></div>
-                        <div><p className="text-caption font-normal text-black/55 mb-0.5">Bank Balance</p><p className="text-caption font-semibold text-black/80">₹{formatNumber(at.metrics.bankBalance.value)}</p><span className={`text-caption font-medium ${at.metrics.bankBalance.change >= 0 ? 'text-[#00C875]' : 'text-[#E2445C]'}`}>{at.metrics.bankBalance.change >= 0 ? '+' : ''}{at.metrics.bankBalance.change}%</span></div>
-                        <div><p className="text-caption font-normal text-black/55 mb-0.5">Debtors</p><p className="text-caption font-semibold text-black/80">₹{formatNumber(at.metrics.debtors.value)}</p><span className={`text-caption font-medium ${at.metrics.debtors.change <= 0 ? 'text-[#00C875]' : 'text-[#E2445C]'}`}>{at.metrics.debtors.change >= 0 ? '+' : ''}{at.metrics.debtors.change}%</span></div>
-                        <div><p className="text-caption font-normal text-black/55 mb-0.5">Creditors</p><p className="text-caption font-semibold text-black/80">₹{formatNumber(at.metrics.creditors.value)}</p><span className={`text-caption font-medium ${at.metrics.creditors.change <= 0 ? 'text-[#00C875]' : 'text-[#E2445C]'}`}>{at.metrics.creditors.change >= 0 ? '+' : ''}{at.metrics.creditors.change}%</span></div>
-                      </div>
-                      <div className="pt-2.5 border-t border-black/[0.04]">
-                        <span className="text-caption font-light text-black/55">Updated {at.lastUpdated}</span>
-                      </div>
-                    </div>
-                  ))}
+                              </td>
+                              <td className="px-4 text-caption text-black/55 truncate">{row.client.code}</td>
+                              <td className="px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <span className="text-body font-semibold text-black/80 tabular-nums">{formatCurrency(m.adSpend.value)}</span>
+                                  <ChangeIndicator value={m.adSpend.change} />
+                                </div>
+                                {targets.adSpend > 0 && <p className="text-[11px] text-black/40 tabular-nums mt-0.5">Target: {formatCurrency(targets.adSpend)}</p>}
+                              </td>
+                              <td className="px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <span className="text-body font-semibold text-black/80 tabular-nums">{formatNumber(m.leads.value)}</span>
+                                  <ChangeIndicator value={m.leads.change} />
+                                </div>
+                                {targets.leads > 0 && <p className="text-[11px] text-black/40 tabular-nums mt-0.5">Target: {formatNumber(targets.leads)}</p>}
+                              </td>
+                              <td className="px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <span className="text-body font-semibold text-black/80 tabular-nums">₹{formatNumber(m.cpl.value)}</span>
+                                  <ChangeIndicator value={m.cpl.change} inverse />
+                                </div>
+                                {targets.cpl > 0 && <p className="text-[11px] text-black/40 tabular-nums mt-0.5">Target: ₹{formatNumber(targets.cpl)}</p>}
+                              </td>
+                              <td className="px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <span className="text-body font-semibold text-black/80 tabular-nums">{m.ctr.value}%</span>
+                                  <ChangeIndicator value={m.ctr.change} />
+                                </div>
+                                {targets.ctr > 0 && <p className="text-[11px] text-black/40 tabular-nums mt-0.5">Target: {targets.ctr}%</p>}
+                              </td>
+                              <td className="px-4 text-center">
+                                <StatusBadge status={row.report.status} />
+                              </td>
+                              <td className="px-1 text-center">
+                                <div className="flex items-center gap-0.5 justify-center">
+                                  {hasRequest && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setReviewModal({ clientId: row.client.id, reportIndex: row.reportIndex, report: row.report }); }}
+                                      className="p-1 rounded-lg text-amber-500 hover:text-amber-600 hover:bg-amber-50 transition-all"
+                                      title="Change Request"
+                                    >
+                                      <ArrowRightLeft className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  {CAN_EDIT_TARGETS && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setTargetModal({ clientId: row.client.id, reportIndex: row.reportIndex, report: row.report }); }}
+                                      className="p-1 rounded-lg text-black/25 hover:text-[#204CC7] hover:bg-[#204CC7]/[0.06] transition-all opacity-0 group-hover:opacity-100"
+                                      title="Set Targets"
+                                    >
+                                      <Settings className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-5 text-right">
+                                <span className="text-caption text-black/50 whitespace-nowrap">{row.report.lastUpdated}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            </div>
-          );
-        })}
+              )}
 
-        {filteredClients.length === 0 && (
-          <div className="py-16 text-center bg-white rounded-xl border border-black/[0.06]" role="status">
-            <Search className="w-10 h-10 text-black/15 mx-auto mb-3" aria-hidden="true" />
-            <p className="text-black/65 text-body font-medium">No clients match your filters</p>
-            <button onClick={clearAll} className="mt-2 text-[#204CC7] hover:underline text-caption rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30">Reset filters</button>
-          </div>
-        )}
-      </div>
-
-      {/* Pagination */}
-      {filteredClients.length > 0 && (
-        <nav aria-label="Pagination" className="flex items-center justify-between pt-1 pb-2">
-          <span className="text-caption text-black/55">Showing {startIdx}–{endIdx} of {filteredClients.length} client{filteredClients.length !== 1 ? 's' : ''}</span>
-          {totalPages > 1 && (
-            <div className="flex items-center gap-1" role="group" aria-label="Page navigation">
-              <button onClick={() => setCurrentPage(1)} disabled={safePage === 1} aria-label="First page" className="p-1.5 rounded-lg text-black/55 hover:text-black/70 hover:bg-black/[0.04] disabled:opacity-30 disabled:pointer-events-none transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30"><ChevronsLeft className="w-4 h-4" /></button>
-              <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} aria-label="Previous page" className="p-1.5 rounded-lg text-black/55 hover:text-black/70 hover:bg-black/[0.04] disabled:opacity-30 disabled:pointer-events-none transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30"><ChevronLeft className="w-4 h-4" /></button>
-              {getPageNumbers().map((pg, idx) => pg === 'ellipsis' ? (
-                <span key={`e-${idx}`} className="w-8 text-center text-caption text-black/35 select-none" aria-hidden="true">…</span>
-              ) : (
-                <button key={pg} onClick={() => setCurrentPage(pg)} aria-label={`Page ${pg}`} aria-current={pg === safePage ? 'page' : undefined}
-                  className={`min-w-[32px] h-8 rounded-lg text-caption transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30 ${pg === safePage ? 'bg-[#204CC7] text-white shadow-sm' : 'text-black/60 hover:bg-black/[0.04] hover:text-black/80'}`}>{pg}</button>
-              ))}
-              <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} aria-label="Next page" className="p-1.5 rounded-lg text-black/55 hover:text-black/70 hover:bg-black/[0.04] disabled:opacity-30 disabled:pointer-events-none transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30"><ChevronRight className="w-4 h-4" /></button>
-              <button onClick={() => setCurrentPage(totalPages)} disabled={safePage === totalPages} aria-label="Last page" className="p-1.5 rounded-lg text-black/55 hover:text-black/70 hover:bg-black/[0.04] disabled:opacity-30 disabled:pointer-events-none transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30"><ChevronsRight className="w-4 h-4" /></button>
+              {pmRows.length === 0 && (
+                <div className="py-16 text-center bg-white rounded-xl border border-black/[0.06]" role="status">
+                  <Search className="w-10 h-10 text-black/15 mx-auto mb-3" aria-hidden="true" />
+                  <p className="text-black/70 text-body font-medium">No PM reports match your filters</p>
+                  <button onClick={clearAll} className="mt-2 text-[#204CC7] hover:underline text-caption rounded">Reset filters</button>
+                </div>
+              )}
             </div>
           )}
-        </nav>
-      )}
+
+          {/* Pagination */}
+          {currentRows.length > CLIENTS_PER_PAGE && (
+            <nav aria-label="Pagination" className="flex items-center justify-between pt-4 pb-2">
+              <span className="text-caption text-black/60">
+                Showing {startIdx + 1}–{endIdx} of {currentRows.length} report{currentRows.length !== 1 ? 's' : ''}
+              </span>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1" role="group" aria-label="Page navigation">
+                  <button onClick={() => setCurrentPage(1)} disabled={safePage === 1} aria-label="First page" className="p-1.5 rounded-lg text-black/55 hover:text-black/70 hover:bg-black/[0.04] disabled:opacity-30 disabled:pointer-events-none transition-all"><ChevronsLeft className="w-4 h-4" /></button>
+                  <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} aria-label="Previous page" className="p-1.5 rounded-lg text-black/55 hover:text-black/70 hover:bg-black/[0.04] disabled:opacity-30 disabled:pointer-events-none transition-all"><ChevronLeft className="w-4 h-4" /></button>
+                  {getPageNumbers().map((pg, idx) => pg === 'ellipsis' ? (
+                    <span key={`e-${idx}`} className="w-8 text-center text-caption text-black/55 select-none" aria-hidden="true">…</span>
+                  ) : (
+                    <button key={pg} onClick={() => setCurrentPage(pg)} aria-label={`Page ${pg}`} aria-current={pg === safePage ? 'page' : undefined}
+                      className={`min-w-[32px] h-8 rounded-lg text-caption transition-all ${pg === safePage ? 'bg-[#204CC7] text-white shadow-sm' : 'text-black/60 hover:bg-black/[0.04] hover:text-black/80'}`}>{pg}</button>
+                  ))}
+                  <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} aria-label="Next page" className="p-1.5 rounded-lg text-black/55 hover:text-black/70 hover:bg-black/[0.04] disabled:opacity-30 disabled:pointer-events-none transition-all"><ChevronRight className="w-4 h-4" /></button>
+                  <button onClick={() => setCurrentPage(totalPages)} disabled={safePage === totalPages} aria-label="Last page" className="p-1.5 rounded-lg text-black/55 hover:text-black/70 hover:bg-black/[0.04] disabled:opacity-30 disabled:pointer-events-none transition-all"><ChevronsRight className="w-4 h-4" /></button>
+                </div>
+              )}
+            </nav>
+          )}
+        </div>
+      </div>
 
       {/* Target Settings Modal */}
       {targetModal && (() => {
@@ -1130,7 +1520,6 @@ export function ReportingModule() {
           />
         );
       })()}
-
     </div>
   );
 }
