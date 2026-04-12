@@ -1,15 +1,5 @@
-'use client';
-
-import { useSearchParams } from 'next/navigation';
-
+"use client";
+import { EmployeesNew } from '@/adminland/EmployeesNew';
 export default function EmployeesPage() {
-  const searchParams = useSearchParams();
-
-  const id = searchParams.get('id');
-
-  return (
-    <div>
-      Employee ID: {id}
-    </div>
-  );
+  return <EmployeesNew />;
 }

@@ -1,9 +1,5 @@
-'use client';
-
-import { useSearchParams } from 'next/navigation';
-
+"use client";
+import { FeedbackData } from '@/adminland/FeedbackData';
 export default function FeedbacksPage() {
-  const searchParams = useSearchParams();
-
-  return <div>{searchParams.get('id')}</div>;
+  return <FeedbackData />;
 }

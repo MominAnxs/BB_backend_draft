@@ -1,10 +1,7 @@
-// ClientsPage.tsx
-'use client';
-
-import { useSearchParams } from 'next/navigation';
-
+"use client";
+import { AllClients } from '@/adminland/AllClients';
+import { useRouter } from 'next/navigation';
 export default function ClientsPage() {
-  const searchParams = useSearchParams();
-
-  return <div>{searchParams.get('id')}</div>;
+  const router = useRouter();
+  return <AllClients onNavigateToIncidents={() => router.push('/adminland/incidents')} />;
 }
