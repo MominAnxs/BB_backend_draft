@@ -1,5 +1,10 @@
-"use client";
-import { FeedbackData } from '@/adminland/FeedbackData';
-export default function FeedbacksPage() {
-  return <FeedbackData />;
+import { Suspense } from 'react';
+import FeedbacksPage from './FeedbacksPage';
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <FeedbacksPage />
+    </Suspense>
+  );
 }
