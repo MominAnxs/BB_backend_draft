@@ -1,5 +1,10 @@
-"use client";
-import { ProfileSettings } from '@/ProfileSettings';
-export default function ProfilePage() {
-  return <ProfileSettings />;
+import { Suspense } from 'react';
+import ProfilePage from './ProfilePage';
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ProfilePage />
+    </Suspense>
+  );
 }
