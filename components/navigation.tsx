@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { StatusBadge } from '@/components/status-badge';
+import { NotificationsDrawer, initialUnreadCount } from '@/components/NotificationsDrawer';
 
 /** Minimal Material Symbols icon helper */
 function MIcon({ name, className = '' }: { name: string; className?: string }) {
@@ -27,6 +28,12 @@ const navItems = [
 
 export function Navigation() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  // Drawer for notifications. Lives at the navbar level so it can
+  // overlay every page without per-route plumbing. The unread
+  // badge below pulls its initial value from the same store the
+  // drawer reads, so the navbar count and the drawer header
+  // count are always in lockstep on first render.
+  const [showNotifications, setShowNotifications] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -115,16 +122,32 @@ export function Navigation() {
               <MIcon name="timeline" className="text-[20px]" />
             </button>
 
-            {/* Notification Bell */}
+            {/* Notification Bell — toggles the right-side
+                NotificationsDrawer. Active state mirrors the
+                Activity Log button (brand-blue tint + border)
+                while the drawer is open so the trigger reads as
+                "this thing is currently open". The unread count
+                comes from the drawer's mock store; the badge
+                hides itself when count = 0. */}
             <button
-              className="relative w-10 h-10 border border-black/10 rounded-xl hover:bg-black/[0.03] transition-all flex items-center justify-center"
-              aria-label="Notifications — 1 unread"
+              type="button"
+              onClick={() => setShowNotifications(true)}
+              aria-expanded={showNotifications}
+              aria-haspopup="dialog"
+              aria-label={`Notifications${initialUnreadCount > 0 ? ` — ${initialUnreadCount} unread` : ''}`}
+              className={`relative w-10 h-10 border rounded-xl transition-all flex items-center justify-center ${
+                showNotifications
+                  ? 'border-[#204CC7]/20 bg-[#EEF1FB] text-[#204CC7]'
+                  : 'border-black/10 hover:bg-black/[0.03] text-black/55'
+              }`}
             >
-              <MIcon name="notifications" className="text-[20px] text-black/55" />
-              <span
-                className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-rose-500 rounded-full border-2 border-white flex items-center justify-center text-white text-[9px] font-bold leading-none"
-                aria-hidden="true"
-              >3</span>
+              <MIcon name="notifications" className="text-[20px]" />
+              {initialUnreadCount > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-[#E2445C] rounded-full border-2 border-white flex items-center justify-center text-white text-[10px] font-bold leading-none tabular-nums"
+                  aria-hidden="true"
+                >{initialUnreadCount}</span>
+              )}
             </button>
 
             {/* Profile Dropdown */}
@@ -180,7 +203,9 @@ export function Navigation() {
                       </div>
                     </div>
 
-                    {/* Menu Items */}
+                    {/* Menu Items — Adminland link removed; everything
+                        that lived there has migrated to the Home module
+                        sidebar (Customers / Employees sub-tabs). */}
                     <div className="p-2">
                       <button
                         onClick={() => { router.push('/profile'); setShowProfileMenu(false); }}
@@ -189,14 +214,6 @@ export function Navigation() {
                       >
                         <MIcon name="account_circle" className="text-[20px] text-black/60" />
                         <span>Profile</span>
-                      </button>
-                      <button
-                        onClick={() => { router.push('/adminland'); setShowProfileMenu(false); }}
-                        className="w-full px-3 py-2 text-left text-body font-normal text-black/70 hover:bg-black/5 rounded-xl flex items-center gap-2.5 transition-colors"
-                        role="menuitem"
-                      >
-                        <MIcon name="settings" className="text-[20px] text-black/60" />
-                        <span>Adminland</span>
                       </button>
                       <div className="border-t border-black/5 my-2" role="separator" />
                       <button
@@ -215,6 +232,14 @@ export function Navigation() {
           </div>
         </div>
       </div>
+
+      {/* Global notifications drawer — mounted at the navbar level
+          so it overlays every page without per-route wiring. Toggled
+          via the bell button above. */}
+      <NotificationsDrawer
+        open={showNotifications}
+        onClose={() => setShowNotifications(false)}
+      />
     </header>
   );
 }

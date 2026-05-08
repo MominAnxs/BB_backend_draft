@@ -85,7 +85,7 @@ export function PMClientDashboard({ client, report, onBack }: PMClientDashboardP
   }, []);
 
   return (
-    <div className="flex h-full bg-[#F8F9FB]" role="main" aria-label={`${client.name} PM dashboard`}>
+    <div data-client-detail="true" className="flex h-full bg-[#F8F9FB]" role="main" aria-label={`${client.name} PM dashboard`}>
       {/* ── Left Sidebar ── */}
       <aside className="w-[220px] bg-white border-r border-black/[0.06] flex flex-col shrink-0" aria-label="Dashboard navigation">
         <nav className="flex-1 overflow-y-auto py-3 px-3" aria-label="Dashboard sections">

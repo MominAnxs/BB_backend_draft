@@ -1,10 +1,7 @@
-import { Suspense } from 'react';
-import PageClient from './PageClient';
+import { redirect } from 'next/navigation';
+import { SUPER_ADMIN_HOME_ROUTES } from '@/lib/super-admin-home-routes';
 
-export default function Page() {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <PageClient />
-    </Suspense>
-  );
+// Legacy alias — Incidents moved to the Home Customers tab.
+export default function IncidentsPage() {
+  redirect(SUPER_ADMIN_HOME_ROUTES.customers.incidents);
 }

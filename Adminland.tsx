@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Building2, AlertTriangle, MessageSquare, Heart, UserX, UserCircle2, Briefcase, CreditCard, Zap } from 'lucide-react';
+import { Building2, AlertTriangle, MessageSquare, Heart, UserX, UserCircle2, Briefcase, CreditCard, Zap, Layers } from 'lucide-react';
 import { AllClients } from './adminland/AllClients';
 import { IncidentData } from './adminland/IncidentData';
 import { FeedbackData } from './adminland/FeedbackData';
@@ -10,8 +10,9 @@ import { LostClients } from './adminland/LostClients';
 import { OnboardingModule } from './adminland/OnboardingModule';
 import { BillingDetails } from './adminland/BillingDetails';
 import { Integrations } from './adminland/Integrations';
+import { Database } from './adminland/Database';
 
-type AdminTab = 'all-clients' | 'lost-clients' | 'incidents' | 'feedback' | 'relationships' | 'employees' | 'services' | 'billing' | 'integrations';
+type AdminTab = 'all-clients' | 'lost-clients' | 'incidents' | 'feedback' | 'relationships' | 'employees' | 'services' | 'billing' | 'integrations' | 'database';
 
 export function Adminland() {
   const [activeTab, setActiveTab] = useState<AdminTab>('all-clients');
@@ -23,6 +24,7 @@ export function Adminland() {
     { id: 'feedback' as AdminTab, label: 'Feedbacks', icon: MessageSquare },
     { id: 'relationships' as AdminTab, label: 'Client Relationships', icon: Heart },
     { id: 'employees' as AdminTab, label: 'Employees', icon: UserCircle2 },
+    { id: 'database' as AdminTab, label: 'Database', icon: Layers },
     { id: 'services' as AdminTab, label: 'Onboarding', icon: Briefcase },
     { id: 'billing' as AdminTab, label: 'Billing', icon: CreditCard },
     { id: 'integrations' as AdminTab, label: 'Integrations', icon: Zap },
@@ -90,6 +92,7 @@ export function Adminland() {
           {activeTab === 'feedback' && <FeedbackData />}
           {activeTab === 'relationships' && <ClientRelationshipData />}
           {activeTab === 'employees' && <EmployeesNew />}
+          {activeTab === 'database' && <Database />}
           {activeTab === 'services' && <OnboardingModule />}
           {activeTab === 'billing' && <BillingDetails />}
           {activeTab === 'integrations' && <Integrations />}

@@ -35,7 +35,7 @@
 | Green         | `#00C875` | Success, positive       |
 | Orange        | `#FDAB3D` | Warnings                |
 | Red           | `#E2445C` | Destructive, errors     |
-| PM Purple     | `#7C3AED` | Performance Marketing   |
+| SEM Purple    | `#7C3AED` | Performance Marketing (display short-form: `SEM`) |
 | A&T Cyan      | `#06B6D4` | Accounts & Taxation     |
 
 ### Spacing
@@ -71,7 +71,7 @@ Defined in `components/navigation.tsx`:
 | `/dashboard`        | Dashboard | Overview.tsx              |
 | `/inbox`            | Inbox     | Inbox.tsx                 |
 | `/reports`          | Reports   | Various report components |
-| `/workspace`        | Workspace | TaskManagement, A&T, PM   |
+| `/workspace`        | Workspace | TaskManagement, A&T, SEM  |
 | `/dataroom`         | Dataroom  | Dataroom.tsx              |
 | `/profile`          | Profile   | ProfileSettings.tsx       |
 | `/adminland`        | Adminland | Adminland.tsx             |
@@ -107,7 +107,7 @@ Defined in `components/navigation.tsx`:
 
 ### Dataroom (`Dataroom.tsx`, ~850 lines)
 - **Design reference:** Google Drive (will use Google Drive API)
-- Google Drive-like file browser with workspace switcher (A&T, PM, Brego Group)
+- Google Drive-like file browser with workspace switcher (A&T, SEM, Brego Group)
 - Sidebar: Quick Access nav, Folder Tree, Owner Filter, Storage indicator
 - Main content: breadcrumb nav, search, list/grid view toggle, sortable columns, bulk actions bar
 - Nested folder navigation via `parentId` relationships + breadcrumb array
@@ -133,15 +133,17 @@ Defined in `components/navigation.tsx`:
 | Name            | Role           | Initials | Colour    |
 |----------------|----------------|----------|-----------|
 | Tejas Atha     | COO            | TA       | `#3B82F6` |
-| Chinmay Pawar  | PM HOD         | CP       | `#7C3AED` |
+| Chinmay Pawar  | SEM HOD        | CP       | `#7C3AED` |
 | Zubear Shaikh  | A&T HOD        | ZS       | `#06B6D4` |
 | Mihir L.       | Admin          | ML       | `#F59E0B` |
 | Harshal R.     | Operations     | HR       | `#10B981` |
 
 ### Services
-- **Performance Marketing (PM)** — colour `#7C3AED`
+Brego has exactly two service lines. "Brego Group" is the parent-company entity (used for the dataroom workspace, internal departments, internal hires) and is **not** a service line — never list it under services.
+- **Performance Marketing (SEM)** — short-form displayed as `SEM`; colour `#7C3AED`.
 - **Accounts & Taxation (A&T)** — colour `#06B6D4`
-- **Brego Group (BG)** — colour `#204CC7`
+
+> **Short-form display rule (mandatory):** Performance Marketing's short-form in the UI is **always `SEM`** — never `PM`. This applies to every user-visible string: card titles, drawer headers, subtitles, aria-labels, tooltips, table column values, badges, sidebar labels, anywhere text reaches the screen. The internal TypeScript discriminant for the service-type literal is still `'PM'` (don't refactor those — they're load-bearing across many files). Always map through `serviceMeta[service].label` / `svcLabel(s)` / `getServiceLabel(s)` so the literal `'PM'` never reaches a render. When writing new strings inline (e.g. "Open SEM Tasks", "All SEM clients", "SEM business overview"), use `SEM` directly. If you find a user-facing `PM` anywhere, it's a bug — fix it.
 
 ### Workstations
 Mumbai HQ, Remote, Goa Office, Alibag Office, Hybrid
@@ -170,7 +172,7 @@ Mumbai HQ, Remote, Goa Office, Alibag Office, Hybrid
 ├── workspace/
 │   ├── TaskManagement.tsx      # Task board + My Assignments
 │   ├── AccountsTaxation.tsx    # A&T workspace
-│   ├── PerformanceMarketing.tsx# PM workspace
+│   ├── PerformanceMarketing.tsx# SEM workspace (short-form: SEM)
 │   ├── task-data.ts            # Task types & mock data
 │   └── shared/                 # Shared workspace components
 ├── Inbox.tsx                   # Slack-like messaging

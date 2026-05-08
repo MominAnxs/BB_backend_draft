@@ -1,6 +1,7 @@
 'use client';
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, ArrowUpDown, ChevronDown, ChevronUp, TrendingDown, DollarSign, Users, Calendar, Filter, X, Check, AlertTriangle, Clock, Building2 } from 'lucide-react';
+import { Search, ArrowUpDown, ChevronDown, ChevronUp, TrendingDown, DollarSign, Users, Calendar, Filter, X, Check, Clock, Building2, CalendarRange } from 'lucide-react';
+import { TeamHoverPopover } from '@/components/team-hover-popover';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 // ── Types ──
@@ -14,7 +15,7 @@ interface LostClient {
   reason: 'Budget Cuts' | 'Poor Results' | 'Switched to Competitor' | 'In-House Team' | 'Business Closed' | 'Service Not Needed';
   accountManager: string;
   tenure: number; // months with Brego
-  exitChecklist: 'Pending' | 'In Progress' | 'Done';
+  exitChecklist: 'Pending' | 'Done';
   lastContact: string; // YYYY-MM-DD
   recoverable: boolean;
 }
@@ -23,7 +24,7 @@ type SortField = 'lostDate' | 'monthlyBilling' | 'tenure' | 'companyName';
 type SortDir = 'asc' | 'desc';
 type ServiceFilter = 'All' | 'Performance Marketing' | 'Accounts & Taxation';
 type ReasonFilter = 'All' | LostClient['reason'];
-type ChecklistFilter = 'All' | 'Pending' | 'In Progress' | 'Done';
+type ChecklistFilter = 'All' | 'Pending' | 'Done';
 type RecoverableFilter = 'All' | 'Recoverable' | 'Not Recoverable';
 
 interface Filters {
@@ -35,16 +36,147 @@ interface Filters {
 
 const DEFAULT_FILTERS: Filters = { service: 'All', reason: 'All', checklist: 'All', recoverable: 'All' };
 
+// ── Date range filter ─────────────────────────────────────────────────────────
+//
+// The trigger pill on the top bar shows the current selection (e.g.
+// "Last 30 days"). Clicking opens a popover with preset shortcuts plus a
+// custom-range section that admins can use for anything outside the
+// presets. The filter applies to `lostDate`.
+type DatePreset = 'all' | '30d' | '3m' | '6m' | '12m' | 'ytd' | 'lastYear' | 'custom';
+
+interface DateFilter {
+  preset: DatePreset;
+  customFrom?: string; // YYYY-MM-DD, only used when preset === 'custom'
+  customTo?: string;
+}
+
+const DATE_PRESETS: { id: DatePreset; label: string }[] = [
+  { id: 'all',      label: 'All time' },
+  { id: '30d',      label: 'Last 30 days' },
+  { id: '3m',       label: 'Last 3 months' },
+  { id: '6m',       label: 'Last 6 months' },
+  { id: '12m',      label: 'Last 12 months' },
+  { id: 'ytd',      label: 'This year' },
+  { id: 'lastYear', label: 'Last year' },
+];
+
+const DEFAULT_DATE_FILTER: DateFilter = { preset: 'all' };
+
+/** Compute a {start, end} range for the active filter, or `null` for "all time". */
+function dateRangeFor(f: DateFilter): { start: Date; end: Date } | null {
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  const startOfDay = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+  const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const addMonths = (d: Date, n: number) => { const x = new Date(d); x.setMonth(x.getMonth() + n); return x; };
+  switch (f.preset) {
+    case 'all':       return null;
+    case '30d':       return { start: startOfDay(addDays(today, -30)), end: today };
+    case '3m':        return { start: startOfDay(addMonths(today, -3)), end: today };
+    case '6m':        return { start: startOfDay(addMonths(today, -6)), end: today };
+    case '12m':       return { start: startOfDay(addMonths(today, -12)), end: today };
+    case 'ytd':       return { start: new Date(today.getFullYear(), 0, 1, 0, 0, 0, 0), end: today };
+    case 'lastYear': {
+      const y = today.getFullYear() - 1;
+      return { start: new Date(y, 0, 1, 0, 0, 0, 0), end: new Date(y, 11, 31, 23, 59, 59, 999) };
+    }
+    case 'custom':
+      if (!f.customFrom || !f.customTo) return null;
+      return { start: startOfDay(parseDate(f.customFrom)), end: (() => { const x = parseDate(f.customTo); x.setHours(23, 59, 59, 999); return x; })() };
+  }
+}
+
+/** Short human-readable label for the trigger pill. */
+function dateFilterLabel(f: DateFilter): string {
+  if (f.preset === 'custom') {
+    if (f.customFrom && f.customTo) {
+      const fmt = (s: string) => {
+        const d = parseDate(s);
+        return `${d.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]} ${String(d.getFullYear()).slice(-2)}`;
+      };
+      return `${fmt(f.customFrom)} – ${fmt(f.customTo)}`;
+    }
+    return 'Custom range';
+  }
+  return DATE_PRESETS.find(p => p.id === f.preset)?.label ?? 'All time';
+}
+
+// ── Team directory ───────────────────────────────────────────────────────────
+//
+// Each lost-client row used to surface only the Account Manager, but the
+// real engagement always includes an HOD on top, a Manager owning the
+// relationship, and 1–2 Executives doing the day-to-day work. The
+// Employees column now shows a small avatar stack assembled from this
+// directory — service-specific HOD on the left, the data-driven Manager
+// next, and a deterministic pair of Executives picked from the pool by
+// client id so the team stays stable across renders. Hovering any
+// avatar reveals the person's name + role.
+type TeamRole = 'HOD' | 'Manager' | 'Executive';
+interface TeamMember {
+  initials: string;
+  name: string;
+  role: TeamRole;
+  color: string;
+}
+
+const HOD_BY_SERVICE: Record<LostClient['service'], TeamMember> = {
+  'Performance Marketing': { initials: 'CP', name: 'Chinmay Pawar', role: 'HOD', color: '#7C3AED' },
+  'Accounts & Taxation':   { initials: 'ZS', name: 'Zubear Shaikh', role: 'HOD', color: '#06B6D4' },
+};
+
+const MANAGER_LOOKUP: Record<string, { initials: string; color: string }> = {
+  'Priya Sharma': { initials: 'PS', color: '#3B82F6' },
+  'Rohan Desai':  { initials: 'RD', color: '#10B981' },
+  'Akshay Mehta': { initials: 'AM', color: '#F59E0B' },
+  'Sneha Patel':  { initials: 'SP', color: '#E2445C' },
+};
+
+const EXECUTIVE_POOL: { initials: string; name: string; color: string }[] = [
+  { initials: 'KI', name: 'Kavya Iyer',    color: '#06B6D4' },
+  { initials: 'NA', name: 'Nisha Agarwal', color: '#0EA5E9' },
+  { initials: 'IM', name: 'Irshad Mulla',  color: '#EC4899' },
+  { initials: 'ND', name: 'Neha Desai',    color: '#8B5CF6' },
+  { initials: 'RK', name: 'Rohan Kapoor',  color: '#14B8A6' },
+  { initials: 'AS', name: 'Aanya Sharma',  color: '#F97316' },
+];
+
+function buildTeamFor(client: LostClient): TeamMember[] {
+  const hod = HOD_BY_SERVICE[client.service];
+  const m = MANAGER_LOOKUP[client.accountManager];
+  const manager: TeamMember = m
+    ? { initials: m.initials, name: client.accountManager, role: 'Manager', color: m.color }
+    : {
+        // Fallback for any account manager not in the lookup — derive
+        // initials from the first letters of each word in the name.
+        initials: client.accountManager.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
+        name: client.accountManager,
+        role: 'Manager',
+        color: '#3B82F6',
+      };
+  // Deterministic executive pair — id-based seed keeps the team stable
+  // for a given client across re-renders. `+3` offsets so the two execs
+  // don't collide on small ids.
+  const seed = parseInt(client.id, 10) || 0;
+  const e1 = EXECUTIVE_POOL[seed % EXECUTIVE_POOL.length];
+  const e2 = EXECUTIVE_POOL[(seed + 3) % EXECUTIVE_POOL.length];
+  return [
+    hod,
+    manager,
+    { initials: e1.initials, name: e1.name, role: 'Executive', color: e1.color },
+    { initials: e2.initials, name: e2.name, role: 'Executive', color: e2.color },
+  ];
+}
+
 // ── Realistic Mock Data ──
-const lostClients: LostClient[] = [
+const INITIAL_LOST_CLIENTS: LostClient[] = [
   { id: '1', companyName: 'Zenith Retail Pvt Ltd', ownerName: 'Rahul Jain', service: 'Performance Marketing', lostDate: '2025-03-18', monthlyBilling: 85000, reason: 'Budget Cuts', accountManager: 'Priya Sharma', tenure: 14, exitChecklist: 'Pending', lastContact: '2025-03-20', recoverable: true },
   { id: '2', companyName: 'NovaTech Solutions', ownerName: 'Ankit Gupta', service: 'Accounts & Taxation', lostDate: '2025-03-12', monthlyBilling: 42000, reason: 'Switched to Competitor', accountManager: 'Rohan Desai', tenure: 8, exitChecklist: 'Done', lastContact: '2025-03-15', recoverable: false },
-  { id: '3', companyName: 'Bloom Botanics', ownerName: 'Sneha Agarwal', service: 'Performance Marketing', lostDate: '2025-03-05', monthlyBilling: 65000, reason: 'Poor Results', accountManager: 'Akshay Mehta', tenure: 6, exitChecklist: 'In Progress', lastContact: '2025-03-08', recoverable: true },
+  { id: '3', companyName: 'Bloom Botanics', ownerName: 'Sneha Agarwal', service: 'Performance Marketing', lostDate: '2025-03-05', monthlyBilling: 65000, reason: 'Poor Results', accountManager: 'Akshay Mehta', tenure: 6, exitChecklist: 'Pending', lastContact: '2025-03-08', recoverable: true },
   { id: '4', companyName: 'Meridian Healthcare', ownerName: 'Dr. Vikram Rao', service: 'Accounts & Taxation', lostDate: '2025-02-28', monthlyBilling: 38000, reason: 'In-House Team', accountManager: 'Priya Sharma', tenure: 22, exitChecklist: 'Done', lastContact: '2025-03-01', recoverable: false },
   { id: '5', companyName: 'UrbanNest Realty', ownerName: 'Kavita Deshmukh', service: 'Performance Marketing', lostDate: '2025-02-20', monthlyBilling: 120000, reason: 'Budget Cuts', accountManager: 'Sneha Patel', tenure: 18, exitChecklist: 'Done', lastContact: '2025-02-25', recoverable: true },
   { id: '6', companyName: 'FreshBite Foods', ownerName: 'Arjun Malhotra', service: 'Performance Marketing', lostDate: '2025-02-15', monthlyBilling: 55000, reason: 'Switched to Competitor', accountManager: 'Rohan Desai', tenure: 10, exitChecklist: 'Pending', lastContact: '2025-02-18', recoverable: false },
   { id: '7', companyName: 'CloudSphere IT', ownerName: 'Meera Iyer', service: 'Accounts & Taxation', lostDate: '2025-02-10', monthlyBilling: 30000, reason: 'Business Closed', accountManager: 'Akshay Mehta', tenure: 4, exitChecklist: 'Done', lastContact: '2025-02-12', recoverable: false },
-  { id: '8', companyName: 'SparkEdge Media', ownerName: 'Nikhil Choudhary', service: 'Performance Marketing', lostDate: '2025-01-28', monthlyBilling: 95000, reason: 'Poor Results', accountManager: 'Priya Sharma', tenure: 12, exitChecklist: 'In Progress', lastContact: '2025-02-01', recoverable: true },
+  { id: '8', companyName: 'SparkEdge Media', ownerName: 'Nikhil Choudhary', service: 'Performance Marketing', lostDate: '2025-01-28', monthlyBilling: 95000, reason: 'Poor Results', accountManager: 'Priya Sharma', tenure: 12, exitChecklist: 'Pending', lastContact: '2025-02-01', recoverable: true },
   { id: '9', companyName: 'GreenLeaf Organics', ownerName: 'Pooja Shetty', service: 'Accounts & Taxation', lostDate: '2025-01-20', monthlyBilling: 25000, reason: 'Service Not Needed', accountManager: 'Sneha Patel', tenure: 3, exitChecklist: 'Done', lastContact: '2025-01-22', recoverable: false },
   { id: '10', companyName: 'AutoPrime Motors', ownerName: 'Suresh Nair', service: 'Performance Marketing', lostDate: '2025-01-15', monthlyBilling: 150000, reason: 'In-House Team', accountManager: 'Akshay Mehta', tenure: 24, exitChecklist: 'Done', lastContact: '2025-01-18', recoverable: false },
   { id: '11', companyName: 'PeakFit Wellness', ownerName: 'Divya Kapoor', service: 'Performance Marketing', lostDate: '2025-01-08', monthlyBilling: 48000, reason: 'Budget Cuts', accountManager: 'Rohan Desai', tenure: 7, exitChecklist: 'Pending', lastContact: '2025-01-10', recoverable: true },
@@ -111,9 +243,14 @@ function LostClientsFilterPanel({ filters, onChange, onClose, onReset, activeCou
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const handleClickOutside = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
   }, [onClose]);
 
   return (
@@ -126,7 +263,14 @@ function LostClientsFilterPanel({ filters, onChange, onClose, onReset, activeCou
         </div>
         <div className="flex items-center gap-2">
           {activeCount > 0 && <button onClick={onReset} className="text-caption font-medium text-[#204CC7] hover:underline">Reset</button>}
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-black/[0.04] text-black/40"><X className="w-4 h-4" /></button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close filters"
+            className="p-1 rounded-md hover:bg-black/[0.04] text-black/55 hover:text-black/80 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/30"
+          >
+            <X className="w-4 h-4" aria-hidden="true" />
+          </button>
         </div>
       </div>
       <div className="p-3 space-y-4 max-h-[420px] overflow-y-auto">
@@ -152,7 +296,7 @@ function LostClientsFilterPanel({ filters, onChange, onClose, onReset, activeCou
         <div>
           <p className="text-caption font-semibold text-black/50 uppercase tracking-wide px-1 mb-1.5">Exit Checklist</p>
           <div className="space-y-0.5">
-            {(['All', 'Pending', 'In Progress', 'Done'] as ChecklistFilter[]).map(opt => (
+            {(['All', 'Pending', 'Done'] as ChecklistFilter[]).map(opt => (
               <FilterOption key={opt} label={opt === 'All' ? 'All Statuses' : opt} value={opt} selected={filters.checklist === opt} onSelect={v => onChange({ ...filters, checklist: v })} />
             ))}
           </div>
@@ -179,6 +323,71 @@ export function LostClients() {
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
 
+  // Date range filter — popover-driven. Default is "All time" so the demo
+  // data is fully visible; admins can narrow via presets or set a custom
+  // range from the popover.
+  const [dateFilter, setDateFilter] = useState<DateFilter>(DEFAULT_DATE_FILTER);
+  const [showDateFilter, setShowDateFilter] = useState(false);
+  const dateFilterRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!showDateFilter) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dateFilterRef.current && !dateFilterRef.current.contains(e.target as Node)) {
+        setShowDateFilter(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowDateFilter(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [showDateFilter]);
+  const dateFilterActive = dateFilter.preset !== 'all';
+
+  // Roster lives in state so the Recovery dropdown in the table can flip a
+  // client between "Yes" (recoverable) and "No" inline. Resets on reload —
+  // no backend wiring yet.
+  const [lostClients, setLostClients] = useState<LostClient[]>(INITIAL_LOST_CLIENTS);
+  const setRecoverable = (id: string, value: boolean) =>
+    setLostClients(prev => prev.map(c => (c.id === id ? { ...c, recoverable: value } : c)));
+
+  // Tracks which row's Recovery dropdown is open + the screen coords of
+  // the trigger button. We position the popover with `position: fixed`
+  // anchored to those coords so it escapes the table's `overflow-x-auto`
+  // clipping (which would otherwise hide the dropdown below the row).
+  const [openRecoveryDropdown, setOpenRecoveryDropdown] = useState<
+    { id: string; top: number; left: number } | null
+  >(null);
+  const recoveryDropdownRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!openRecoveryDropdown) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (recoveryDropdownRef.current && !recoveryDropdownRef.current.contains(e.target as Node)) {
+        setOpenRecoveryDropdown(null);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenRecoveryDropdown(null);
+    };
+    // Close on scroll / resize too — otherwise the fixed-position popover
+    // detaches from its trigger as the page moves underneath it.
+    const handleViewportChange = () => setOpenRecoveryDropdown(null);
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKey);
+    window.addEventListener('scroll', handleViewportChange, true);
+    window.addEventListener('resize', handleViewportChange);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKey);
+      window.removeEventListener('scroll', handleViewportChange, true);
+      window.removeEventListener('resize', handleViewportChange);
+    };
+  }, [openRecoveryDropdown]);
+
   const filterCount = (filters.service !== 'All' ? 1 : 0) + (filters.reason !== 'All' ? 1 : 0) + (filters.checklist !== 'All' ? 1 : 0) + (filters.recoverable !== 'All' ? 1 : 0);
 
   const handleSort = (field: SortField) => {
@@ -191,6 +400,7 @@ export function LostClients() {
   };
 
   const filteredClients = useMemo(() => {
+    const range = dateRangeFor(dateFilter);
     let result = lostClients.filter(c => {
       const q = searchQuery.toLowerCase();
       if (q && !(c.companyName.toLowerCase().includes(q) || c.ownerName.toLowerCase().includes(q) || c.accountManager.toLowerCase().includes(q) || c.reason.toLowerCase().includes(q))) return false;
@@ -199,6 +409,10 @@ export function LostClients() {
       if (filters.checklist !== 'All' && c.exitChecklist !== filters.checklist) return false;
       if (filters.recoverable === 'Recoverable' && !c.recoverable) return false;
       if (filters.recoverable === 'Not Recoverable' && c.recoverable) return false;
+      if (range) {
+        const lost = parseDate(c.lostDate);
+        if (lost < range.start || lost > range.end) return false;
+      }
       return true;
     });
 
@@ -214,7 +428,7 @@ export function LostClients() {
     });
 
     return result;
-  }, [searchQuery, filters, sortField, sortDir]);
+  }, [lostClients, searchQuery, filters, dateFilter, sortField, sortDir]);
 
   // ── KPIs (from filtered data) ──
   const totalLost = filteredClients.length;
@@ -228,26 +442,26 @@ export function LostClients() {
   const pmBilling = filteredClients.filter(c => c.service === 'Performance Marketing').reduce((s, c) => s + c.monthlyBilling, 0);
   const atBilling = filteredClients.filter(c => c.service === 'Accounts & Taxation').reduce((s, c) => s + c.monthlyBilling, 0);
 
-  // Reason breakdown for top reason
-  const reasonCounts: Record<string, number> = {};
-  filteredClients.forEach(c => { reasonCounts[c.reason] = (reasonCounts[c.reason] || 0) + 1; });
-  const topReason = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1])[0];
-
-  const SortHeader = ({ field, children, className = '' }: { field: SortField; children: React.ReactNode; className?: string }) => (
-    <th
-      className={`px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide cursor-pointer hover:text-black/80 transition-colors select-none ${className}`}
-      onClick={() => handleSort(field)}
-    >
-      <div className="flex items-center gap-1">
-        {children}
-        {sortField === field ? (
-          sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
-        ) : (
-          <ArrowUpDown className="w-3 h-3 text-black/25" />
-        )}
-      </div>
-    </th>
-  );
+  const SortHeader = ({ field, children, className = '' }: { field: SortField; children: React.ReactNode; className?: string }) => {
+    const isCurrent = sortField === field;
+    const ariaSort = isCurrent ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined;
+    return (
+      <th
+        scope="col"
+        aria-sort={ariaSort}
+        className={`px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide select-none ${className}`}
+      >
+        <button
+          type="button"
+          onClick={() => handleSort(field)}
+          className="inline-flex items-center gap-1 hover:text-black/80 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/30 rounded transition-colors"
+        >
+          {children}
+          {isCurrent ? (sortDir === 'asc' ? <ChevronUp className="w-3 h-3" aria-hidden="true" /> : <ChevronDown className="w-3 h-3" aria-hidden="true" />) : <ArrowUpDown className="w-3 h-3 text-black/30" aria-hidden="true" />}
+        </button>
+      </th>
+    );
+  };
 
   const getReasonColor = (reason: string) => {
     switch (reason) {
@@ -264,64 +478,192 @@ export function LostClients() {
   const getChecklistColor = (status: string) => {
     switch (status) {
       case 'Done': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      case 'In Progress': return 'bg-blue-50 text-blue-700 border-blue-200';
-      case 'Pending': return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'Pending': return 'bg-rose-50 text-rose-700 border-rose-200';
       default: return 'bg-black/[0.04] text-black/60 border-black/10';
     }
   };
 
   return (
     <div className="space-y-4">
-      {/* Header Row */}
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-h2 font-bold text-black/90">Lost Clients</h2>
-          <p className="text-caption font-normal text-black/50 mt-0.5">Track client attrition and recover revenue</p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Result count */}
-          {(filterCount > 0 || searchQuery) && (
-            <span className="text-caption font-medium text-black/40">{filteredClients.length} of {lostClients.length} results</span>
-          )}
-
-          {/* Search */}
-          <div className="relative w-56">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-black/35" />
-            <input
-              type="text"
-              placeholder="Search clients..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-caption border border-black/10 rounded-lg bg-white text-black placeholder:text-black/40 focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all"
-            />
+      {/*
+        Page top bar — bleeds full-width via `-mx-6 -mt-6 px-6 mb-6` to
+        match the chrome on CustomersOverview, All Customers, and CLAs.
+        Title + subtitle anchor the left; the page-specific controls
+        (result count, Search, Filter) hang on the right so every
+        Customers sub-page reads with the same visual rhythm.
+      */}
+      <div className="bg-white border-b border-black/5 sticky top-0 z-10 -mx-6 -mt-6 px-6 mb-6">
+        <div className="flex items-center justify-between py-3 gap-4 flex-wrap">
+          <div className="shrink-0">
+            <p className="text-black/90 text-body font-semibold">Lost Clients</p>
+            <p className="text-black/60 mt-0.5 text-caption font-normal whitespace-nowrap">Track client attrition and recover revenue</p>
           </div>
 
-          {/* Filter */}
-          <div className="relative">
-            <button
-              onClick={() => setShowFilterPanel(!showFilterPanel)}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg transition-all text-caption ${
-                filterCount > 0
-                  ? 'border-[#204CC7]/30 bg-[#204CC7]/[0.04] text-[#204CC7] font-semibold'
-                  : 'border-black/10 bg-white text-black/70 hover:bg-black/5'
-              }`}
-            >
-              <Filter className="w-3.5 h-3.5" />
-              <span>Filter</span>
-              {filterCount > 0 && (
-                <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-[#204CC7] text-white text-caption font-semibold min-w-[18px] text-center leading-none">{filterCount}</span>
-              )}
-            </button>
-            {showFilterPanel && (
-              <LostClientsFilterPanel
-                filters={filters}
-                onChange={setFilters}
-                onClose={() => setShowFilterPanel(false)}
-                onReset={() => setFilters(DEFAULT_FILTERS)}
-                activeCount={filterCount}
-              />
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {/* Result count — only when filters, search, or date range are narrowing the table */}
+            {(filterCount > 0 || searchQuery || dateFilterActive) && (
+              <span role="status" aria-live="polite" className="text-caption font-medium text-black/60">
+                {filteredClients.length} of {lostClients.length} results
+              </span>
             )}
+
+            {/* Date range filter — preset shortcuts + custom range. Sits to
+                the left of Search so it reads as a primary scope control. */}
+            <div className="relative" ref={showDateFilter ? dateFilterRef : undefined}>
+              <button
+                type="button"
+                onClick={() => setShowDateFilter(s => !s)}
+                aria-expanded={showDateFilter}
+                aria-haspopup="dialog"
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 border rounded-md transition-all text-caption font-medium focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 ${
+                  dateFilterActive
+                    ? 'border-[#204CC7]/30 bg-[#204CC7]/[0.04] text-[#204CC7] font-semibold'
+                    : 'border-black/10 bg-white text-black/70 hover:bg-black/[0.02] hover:border-black/20'
+                }`}
+              >
+                <CalendarRange className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>{dateFilterLabel(dateFilter)}</span>
+                <ChevronDown className={`w-3 h-3 transition-transform ${showDateFilter ? 'rotate-180' : ''}`} aria-hidden="true" />
+              </button>
+
+              {showDateFilter && (
+                <div
+                  role="dialog"
+                  aria-label="Date range filter"
+                  className="absolute top-full right-0 mt-2 w-[280px] bg-white rounded-xl shadow-xl border border-black/[0.06] z-50 overflow-hidden"
+                >
+                  <div className="p-2">
+                    {DATE_PRESETS.map(p => {
+                      const isActive = dateFilter.preset === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => { setDateFilter({ preset: p.id }); setShowDateFilter(false); }}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-caption transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30 ${
+                            isActive ? 'bg-[#204CC7]/[0.06] text-[#204CC7] font-semibold' : 'text-black/70 hover:bg-black/[0.03]'
+                          }`}
+                        >
+                          <span>{p.label}</span>
+                          {isActive && <Check className="w-3.5 h-3.5" aria-hidden="true" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Custom range — admins can pick any date window. The
+                      Apply button only enables once both ends are set and
+                      the start isn't after the end. */}
+                  <div className="border-t border-black/[0.05] p-3 space-y-2.5 bg-black/[0.015]">
+                    <p className="text-caption font-semibold text-black/65 uppercase tracking-wide px-1">Custom range</p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <label htmlFor="lc-date-from" className="sr-only">From date</label>
+                        <input
+                          id="lc-date-from"
+                          type="date"
+                          value={dateFilter.preset === 'custom' ? (dateFilter.customFrom ?? '') : ''}
+                          onChange={(e) => setDateFilter(f => ({
+                            preset: 'custom',
+                            customFrom: e.target.value,
+                            customTo: f.preset === 'custom' ? f.customTo : '',
+                          }))}
+                          className="w-full px-2.5 py-1.5 rounded-md border border-black/10 bg-white text-caption text-black/80 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7]/30 transition-all"
+                        />
+                      </div>
+                      <span className="text-caption text-black/45" aria-hidden="true">→</span>
+                      <div className="flex-1">
+                        <label htmlFor="lc-date-to" className="sr-only">To date</label>
+                        <input
+                          id="lc-date-to"
+                          type="date"
+                          value={dateFilter.preset === 'custom' ? (dateFilter.customTo ?? '') : ''}
+                          onChange={(e) => setDateFilter(f => ({
+                            preset: 'custom',
+                            customFrom: f.preset === 'custom' ? f.customFrom : '',
+                            customTo: e.target.value,
+                          }))}
+                          className="w-full px-2.5 py-1.5 rounded-md border border-black/10 bg-white text-caption text-black/80 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7]/30 transition-all"
+                        />
+                      </div>
+                    </div>
+                    {(() => {
+                      const from = dateFilter.preset === 'custom' ? dateFilter.customFrom : undefined;
+                      const to = dateFilter.preset === 'custom' ? dateFilter.customTo : undefined;
+                      const ready = !!from && !!to;
+                      const invalid = ready && from! > to!;
+                      return (
+                        <div className="flex items-center justify-end gap-2">
+                          {invalid && (
+                            <span className="text-caption text-[#E2445C]">From must be on or before To</span>
+                          )}
+                          <button
+                            type="button"
+                            disabled={!ready || invalid}
+                            onClick={() => setShowDateFilter(false)}
+                            className="px-3 py-1.5 rounded-md bg-[#204CC7] text-white text-caption font-medium hover:bg-[#1a3d9f] focus:outline-none focus:ring-2 focus:ring-[#204CC7]/40 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#204CC7] transition-all"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Search */}
+            <div className="relative w-[240px]">
+              <Search className="w-3.5 h-3.5 text-black/55 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
+              <label htmlFor="lost-clients-search" className="sr-only">Search lost clients</label>
+              <input
+                id="lost-clients-search"
+                type="text"
+                placeholder="Search clients…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-8 py-1.5 rounded-md border border-black/10 bg-white text-caption placeholder:text-black/55 outline-none focus:border-[#204CC7]/30 focus:ring-2 focus:ring-[#204CC7]/20 transition-all"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-black/5"
+                  aria-label="Clear search"
+                >
+                  <X className="w-3.5 h-3.5 text-black/60 hover:text-black/70" />
+                </button>
+              )}
+            </div>
+
+            {/* Filter */}
+            <div className="relative">
+              <button
+                onClick={() => setShowFilterPanel(!showFilterPanel)}
+                aria-expanded={showFilterPanel}
+                aria-haspopup="dialog"
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 border rounded-md transition-all text-caption font-medium focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 ${
+                  filterCount > 0
+                    ? 'border-[#204CC7]/30 bg-[#204CC7]/[0.04] text-[#204CC7] font-semibold'
+                    : 'border-black/10 bg-white text-black/70 hover:bg-black/[0.02] hover:border-black/20'
+                }`}
+              >
+                <Filter className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Filter</span>
+                {filterCount > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-[#204CC7] text-white text-caption font-semibold min-w-[18px] text-center leading-none">{filterCount}</span>
+                )}
+              </button>
+              {showFilterPanel && (
+                <LostClientsFilterPanel
+                  filters={filters}
+                  onChange={setFilters}
+                  onClose={() => setShowFilterPanel(false)}
+                  onReset={() => setFilters(DEFAULT_FILTERS)}
+                  activeCount={filterCount}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -329,10 +671,10 @@ export function LostClients() {
       {/* Active Filter Tags */}
       {filterCount > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-caption font-medium text-black/40">Filtered by:</span>
+          <span className="text-caption font-medium text-black/55">Filtered by:</span>
           {filters.service !== 'All' && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#204CC7]/[0.06] text-[#204CC7] text-caption font-medium">
-              {filters.service === 'Performance Marketing' ? 'PM' : 'A&T'}
+              {filters.service === 'Performance Marketing' ? 'SEM' : 'A&T'}
               <button onClick={() => setFilters(f => ({ ...f, service: 'All' }))} className="hover:bg-[#204CC7]/10 rounded p-0.5"><X className="w-3 h-3" /></button>
             </span>
           )}
@@ -354,114 +696,133 @@ export function LostClients() {
               <button onClick={() => setFilters(f => ({ ...f, recoverable: 'All' }))} className="hover:bg-[#204CC7]/10 rounded p-0.5"><X className="w-3 h-3" /></button>
             </span>
           )}
-          <button onClick={() => setFilters(DEFAULT_FILTERS)} className="text-caption font-medium text-black/40 hover:text-[#204CC7] transition-colors">Clear all</button>
+          <button onClick={() => setFilters(DEFAULT_FILTERS)} className="text-caption font-medium text-black/55 hover:text-[#204CC7] transition-colors">Clear all</button>
         </div>
       )}
 
-      {/* KPI Widgets */}
-      <div className="grid grid-cols-4 gap-4">
-        {/* Clients Lost */}
-        <div className="bg-white border border-black/[0.06] rounded-2xl p-5 flex flex-col gap-4 hover:shadow-sm transition-shadow">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <p className="text-black/50 text-caption font-medium uppercase tracking-wide">Clients Lost</p>
-              <p className="text-[#E2445C] text-h1 font-bold">{totalLost}</p>
-            </div>
-            <div className="w-10 h-10 bg-[#E2445C]/[0.06] rounded-xl flex items-center justify-center">
-              <Users className="w-5 h-5 text-[#E2445C]/60" />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="flex h-2 rounded-full overflow-hidden bg-black/[0.04]">
-              {pmLost > 0 && <div className="bg-[#7C3AED] rounded-l-full" style={{ width: `${(pmLost / Math.max(totalLost, 1)) * 100}%` }} />}
-              {atLost > 0 && <div className="bg-[#06B6D4]" style={{ width: `${(atLost / Math.max(totalLost, 1)) * 100}%` }} />}
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#7C3AED]" /><span className="text-black/50 text-caption font-normal">PM: {pmLost}</span></div>
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#06B6D4]" /><span className="text-black/50 text-caption font-normal">A&T: {atLost}</span></div>
-            </div>
-          </div>
-        </div>
+      {/*
+        KPI widgets — first two cards are info (the count + revenue
+        headlines you want to see at a glance); the last two are clickable
+        slices of the table's Recovery and Exit Checklist columns. Active
+        card gets a brand-blue border so the user always sees which slice
+        the table is filtered to.
+      */}
+      {(() => {
+        const exitPendingCount = filteredClients.filter(c => c.exitChecklist === 'Pending').length;
+        const isRecoverableActive = filters.recoverable === 'Recoverable';
+        const isExitPendingActive = filters.checklist === 'Pending';
 
-        {/* Billing Lost */}
-        <div className="bg-white border border-black/[0.06] rounded-2xl p-5 flex flex-col gap-4 hover:shadow-sm transition-shadow">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <p className="text-black/50 text-caption font-medium uppercase tracking-wide">Monthly Billing Lost</p>
-              <p className="text-[#E2445C] text-h1 font-bold">{formatCurrency(totalBillingLost)}</p>
-            </div>
-            <div className="w-10 h-10 bg-[#E2445C]/[0.06] rounded-xl flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-[#E2445C]/60" />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="flex h-2 rounded-full overflow-hidden bg-black/[0.04]">
-              {pmBilling > 0 && <div className="bg-[#7C3AED] rounded-l-full" style={{ width: `${(pmBilling / Math.max(totalBillingLost, 1)) * 100}%` }} />}
-              {atBilling > 0 && <div className="bg-[#06B6D4]" style={{ width: `${(atBilling / Math.max(totalBillingLost, 1)) * 100}%` }} />}
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#7C3AED]" /><span className="text-black/50 text-caption font-normal">PM: {formatCurrency(pmBilling)}</span></div>
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#06B6D4]" /><span className="text-black/50 text-caption font-normal">A&T: {formatCurrency(atBilling)}</span></div>
-            </div>
-          </div>
-        </div>
+        const toneClasses = {
+          good: { value: 'text-[#00C875]', iconBg: 'bg-[#00C875]/[0.08]', iconFg: 'text-[#00C875]/80' },
+          warn: { value: 'text-[#FDAB3D]', iconBg: 'bg-[#FDAB3D]/[0.08]', iconFg: 'text-[#FDAB3D]/80' },
+          bad:  { value: 'text-[#E2445C]', iconBg: 'bg-[#E2445C]/[0.08]', iconFg: 'text-[#E2445C]/80' },
+        } as const;
+        const labelCls = 'text-black/55 text-caption font-medium uppercase tracking-wide';
+        const captionCls = 'text-black/60 text-caption';
 
-        {/* Pending Checklists */}
-        <div className="bg-white border border-black/[0.06] rounded-2xl p-5 flex flex-col gap-4 hover:shadow-sm transition-shadow">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <p className="text-black/50 text-caption font-medium uppercase tracking-wide">Pending Exit Checklists</p>
-              <p className={`text-h1 font-bold ${pendingChecklists > 0 ? 'text-[#FDAB3D]' : 'text-[#00C875]'}`}>{pendingChecklists}</p>
-            </div>
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pendingChecklists > 0 ? 'bg-[#FDAB3D]/[0.08]' : 'bg-[#00C875]/[0.08]'}`}>
-              <Clock className={`w-5 h-5 ${pendingChecklists > 0 ? 'text-[#FDAB3D]/70' : 'text-[#00C875]/70'}`} />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="flex h-2 rounded-full overflow-hidden bg-black/[0.04]">
-              <div className="bg-[#00C875] rounded-l-full" style={{ width: `${totalLost > 0 ? ((totalLost - pendingChecklists) / totalLost) * 100 : 0}%` }} />
-              <div className="bg-[#FDAB3D]" style={{ width: `${totalLost > 0 ? (pendingChecklists / totalLost) * 100 : 0}%` }} />
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#00C875]" /><span className="text-black/50 text-caption font-normal">Done: {totalLost - pendingChecklists}</span></div>
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#FDAB3D]" /><span className="text-black/50 text-caption font-normal">Pending: {pendingChecklists}</span></div>
-            </div>
-          </div>
-        </div>
+        const buttonCard = (active: boolean) =>
+          `bg-white border rounded-2xl p-5 flex flex-col gap-4 transition-all text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30 ${
+            active
+              ? 'border-[#204CC7]/40 bg-[#204CC7]/[0.02] shadow-sm'
+              : 'border-black/[0.06] hover:border-black/[0.12] hover:shadow-sm'
+          }`;
+        const staticCard = 'bg-white border border-black/[0.06] rounded-2xl p-5 flex flex-col gap-4';
 
-        {/* Recoverable */}
-        <div className="bg-white border border-black/[0.06] rounded-2xl p-5 flex flex-col gap-4 hover:shadow-sm transition-shadow">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <p className="text-black/50 text-caption font-medium uppercase tracking-wide">Recoverable</p>
-              <p className="text-[#204CC7] text-h1 font-bold">{recoverableCount}</p>
-            </div>
-            <div className="w-10 h-10 bg-[#204CC7]/[0.06] rounded-xl flex items-center justify-center">
-              <TrendingDown className="w-5 h-5 text-[#204CC7]/60" />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="flex h-2 rounded-full overflow-hidden bg-black/[0.04]">
-              <div className="bg-[#204CC7] rounded-l-full" style={{ width: `${totalLost > 0 ? (recoverableCount / totalLost) * 100 : 0}%` }} />
-              <div className="bg-black/10" style={{ width: `${totalLost > 0 ? ((totalLost - recoverableCount) / totalLost) * 100 : 0}%` }} />
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#204CC7]" /><span className="text-black/50 text-caption font-normal">Yes: {recoverableCount}</span></div>
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-black/15" /><span className="text-black/50 text-caption font-normal">No: {totalLost - recoverableCount}</span></div>
-            </div>
-          </div>
-        </div>
-      </div>
+        const toggleRecoverable = () =>
+          setFilters(f => ({ ...f, recoverable: f.recoverable === 'Recoverable' ? 'All' : 'Recoverable' }));
+        const toggleExitPending = () =>
+          setFilters(f => ({ ...f, checklist: f.checklist === 'Pending' ? 'All' : 'Pending' }));
 
-      {/* Top Reason Insight */}
-      {topReason && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-amber-50/50 border border-amber-100 rounded-xl">
-          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-          <p className="text-caption font-medium text-amber-800">
-            Top loss reason: <span className="font-semibold">{topReason[0]}</span> — accounts for {topReason[1]} of {totalLost} lost clients ({totalLost > 0 ? Math.round((topReason[1] / totalLost) * 100) : 0}%)
-          </p>
-        </div>
-      )}
+        return (
+          <div className="grid grid-cols-4 gap-4">
+            {/* Clients Lost — neutral counter, never red/green */}
+            <div className={staticCard}>
+              <div className="flex items-start justify-between gap-3">
+                <p className={labelCls}>Clients Lost</p>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-black/[0.04]">
+                  <Users className="w-4 h-4 text-black/55" aria-hidden="true" />
+                </div>
+              </div>
+              <div>
+                <p className="text-h1 font-bold text-black/90">{totalLost}</p>
+                <p className={captionCls}>
+                  {totalLost === 0 ? 'No churn on record' : `${pmLost} SEM · ${atLost} A&T`}
+                </p>
+              </div>
+            </div>
+
+            {/* Monthly Billing Lost — info, red since lost revenue is bad */}
+            <div className={staticCard}>
+              <div className="flex items-start justify-between gap-3">
+                <p className={labelCls}>Monthly Billing Lost</p>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${totalBillingLost > 0 ? toneClasses.bad.iconBg : toneClasses.good.iconBg}`}>
+                  <DollarSign className={`w-4 h-4 ${totalBillingLost > 0 ? toneClasses.bad.iconFg : toneClasses.good.iconFg}`} aria-hidden="true" />
+                </div>
+              </div>
+              <div>
+                <p className={`text-h1 font-bold ${totalBillingLost > 0 ? toneClasses.bad.value : toneClasses.good.value}`}>
+                  {formatCurrency(totalBillingLost)}
+                </p>
+                <p className={captionCls}>
+                  {totalBillingLost === 0
+                    ? 'No revenue lost'
+                    : `${formatCurrency(pmBilling)} SEM · ${formatCurrency(atBilling)} A&T`}
+                </p>
+              </div>
+            </div>
+
+            {/* Recoverable — clicks set Recovery filter to Recoverable */}
+            <button
+              type="button"
+              onClick={toggleRecoverable}
+              aria-pressed={isRecoverableActive}
+              className={buttonCard(isRecoverableActive)}
+            >
+              <div className="flex items-start justify-between gap-3 w-full">
+                <p className={labelCls}>Recoverable</p>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-[#204CC7]/[0.08]">
+                  <TrendingDown className="w-4 h-4 text-[#204CC7]/80" aria-hidden="true" />
+                </div>
+              </div>
+              <div>
+                <p className="text-h1 font-bold text-[#204CC7]">{recoverableCount}</p>
+                <p className={captionCls}>
+                  {totalLost === 0 ? 'No clients to recover' : `of ${totalLost} lost`}
+                </p>
+              </div>
+            </button>
+
+            {/* Exit Pending — clicks set Exit Checklist filter to Pending */}
+            <button
+              type="button"
+              onClick={toggleExitPending}
+              aria-pressed={isExitPendingActive}
+              className={buttonCard(isExitPendingActive)}
+            >
+              <div className="flex items-start justify-between gap-3 w-full">
+                <p className={labelCls}>Exit Pending</p>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${exitPendingCount > 0 ? toneClasses.warn.iconBg : toneClasses.good.iconBg}`}>
+                  {exitPendingCount > 0
+                    ? <Clock className={`w-4 h-4 ${toneClasses.warn.iconFg}`} aria-hidden="true" />
+                    : <Check className={`w-4 h-4 ${toneClasses.good.iconFg}`} aria-hidden="true" />}
+                </div>
+              </div>
+              <div>
+                <p className={`text-h1 font-bold ${exitPendingCount > 0 ? toneClasses.warn.value : toneClasses.good.value}`}>
+                  {exitPendingCount}
+                </p>
+                <p className={captionCls}>
+                  {totalLost === 0
+                    ? 'No exits to process'
+                    : exitPendingCount === 0
+                    ? 'All exit checklists started'
+                    : `${exitPendingCount} not yet started`}
+                </p>
+              </div>
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Client Table */}
       <div className="bg-white border border-black/[0.06] rounded-xl overflow-hidden">
@@ -476,7 +837,7 @@ export function LostClients() {
                 <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Reason</th>
                 <SortHeader field="tenure">Tenure</SortHeader>
                 <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Exit Checklist</th>
-                <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Manager</th>
+                <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Team</th>
                 <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Recovery</th>
               </tr>
             </thead>
@@ -500,7 +861,7 @@ export function LostClients() {
                     <td className="px-4 py-3">
                       <div>
                         <p className="text-body font-medium text-black/90">{client.companyName}</p>
-                        <p className="text-caption font-normal text-black/45 mt-0.5">{client.ownerName}</p>
+                        <p className="text-caption font-normal text-black/60 mt-0.5">{client.ownerName}</p>
                       </div>
                     </td>
 
@@ -509,7 +870,7 @@ export function LostClients() {
                       <span className={`inline-flex px-2 py-0.5 rounded-md text-caption font-medium border ${
                         client.service === 'Performance Marketing' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-cyan-50 text-cyan-700 border-cyan-200'
                       }`}>
-                        {client.service === 'Performance Marketing' ? 'PM' : 'A&T'}
+                        {client.service === 'Performance Marketing' ? 'SEM' : 'A&T'}
                       </span>
                     </td>
 
@@ -517,7 +878,7 @@ export function LostClients() {
                     <td className="px-4 py-3">
                       <div>
                         <p className="text-caption font-normal text-black/65">{formatDate(client.lostDate)}</p>
-                        <p className="text-caption font-normal text-black/35 mt-0.5">{daysAgo}d ago</p>
+                        <p className="text-caption font-normal text-black/55 mt-0.5">{daysAgo}d ago</p>
                       </div>
                     </td>
 
@@ -545,25 +906,80 @@ export function LostClients() {
                       </span>
                     </td>
 
-                    {/* Manager */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-black/70 to-black/50 flex items-center justify-center border-2 border-white">
-                          <span className="text-white text-[10px] font-semibold">{client.accountManager.split(' ').map(n => n[0]).join('')}</span>
-                        </div>
-                        <span className="text-caption font-normal text-black/65">{client.accountManager.split(' ')[0]}</span>
-                      </div>
+                    {/* Team — HOD + Manager + Executives. The whole avatar
+                        stack is one hover trigger that pops a single list
+                        of every member with their role, so the user reads
+                        the team in one glance instead of having to hover
+                        each circle individually. */}
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <TeamHoverPopover team={buildTeamFor(client)} />
                     </td>
 
-                    {/* Recovery */}
+                    {/* Recovery — inline Yes/No dropdown. The popover is
+                        position-fixed (anchored to viewport coords captured
+                        on click) so it escapes the table's `overflow-x-auto`
+                        clipping. Click-outside, Escape, scroll, or resize
+                        all close it without committing. */}
                     <td className="px-4 py-3">
-                      {client.recoverable ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-caption font-medium bg-[#204CC7]/[0.06] text-[#204CC7] border border-[#204CC7]/20">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#204CC7]" />
-                          Yes
-                        </span>
-                      ) : (
-                        <span className="text-caption font-normal text-black/35">—</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (openRecoveryDropdown?.id === client.id) {
+                            setOpenRecoveryDropdown(null);
+                          } else {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setOpenRecoveryDropdown({ id: client.id, top: rect.bottom + 6, left: rect.left });
+                          }
+                        }}
+                        aria-haspopup="listbox"
+                        aria-expanded={openRecoveryDropdown?.id === client.id}
+                        aria-label={`Recovery: ${client.recoverable ? 'Yes' : 'No'} — change for ${client.companyName}`}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-caption font-semibold transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30 ${
+                          client.recoverable
+                            ? 'bg-[#204CC7]/[0.06] text-[#204CC7] border-[#204CC7]/20 hover:bg-[#204CC7]/[0.1]'
+                            : 'bg-black/[0.03] text-black/65 border-black/10 hover:bg-black/[0.06]'
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${client.recoverable ? 'bg-[#204CC7]' : 'bg-black/35'}`} aria-hidden="true" />
+                        {client.recoverable ? 'Yes' : 'No'}
+                        <ChevronDown className={`w-3 h-3 transition-transform ${openRecoveryDropdown?.id === client.id ? 'rotate-180' : ''}`} aria-hidden="true" />
+                      </button>
+
+                      {openRecoveryDropdown?.id === client.id && (
+                        <div
+                          ref={recoveryDropdownRef}
+                          role="listbox"
+                          aria-label={`Recovery options for ${client.companyName}`}
+                          style={{ position: 'fixed', top: openRecoveryDropdown.top, left: openRecoveryDropdown.left }}
+                          className="bg-white rounded-xl shadow-xl border border-black/[0.06] py-1.5 z-[60] min-w-[120px]"
+                        >
+                          {([
+                            { value: true,  label: 'Yes', dot: 'bg-[#204CC7]', text: 'text-[#204CC7]' },
+                            { value: false, label: 'No',  dot: 'bg-black/35',  text: 'text-black/70' },
+                          ] as const).map(opt => (
+                            <button
+                              key={opt.label}
+                              type="button"
+                              role="option"
+                              aria-selected={client.recoverable === opt.value}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRecoverable(client.id, opt.value);
+                                setOpenRecoveryDropdown(null);
+                              }}
+                              className={`w-full px-3 py-1.5 text-left flex items-center gap-2 transition-colors text-caption font-medium ${
+                                client.recoverable === opt.value
+                                  ? `bg-[#204CC7]/[0.04] ${opt.text} font-semibold`
+                                  : 'text-black/70 hover:bg-black/[0.03]'
+                              }`}
+                            >
+                              <span className={`w-2 h-2 rounded-full ${opt.dot}`} aria-hidden="true" />
+                              <span className="flex-1 text-left">{opt.label}</span>
+                              {client.recoverable === opt.value && <Check className="w-3.5 h-3.5" aria-hidden="true" />}
+                            </button>
+                          ))}
+                        </div>
                       )}
                     </td>
                   </tr>

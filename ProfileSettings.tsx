@@ -1,16 +1,65 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect, Fragment } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import {
   User, Mail, Phone, MapPin, Building2, Briefcase, Calendar, Shield,
   Bell, Eye, EyeOff, Save, Camera, CheckCircle, HeartPulse, Lock,
   Smartphone, Monitor, Globe, LogOut, Clock, AlertTriangle,
   Check, Home, ExternalLink, Laptop, Info, ChevronRight,
-  Pencil, KeyRound, Fingerprint, ShieldCheck,
+  Pencil, KeyRound, Fingerprint, ShieldCheck, Users, Search,
+  Inbox, LayoutDashboard, FolderOpen, Minus,
 } from 'lucide-react';
 import { StatusBadge } from '@/components/status-badge';
+import { MOCK_EMPLOYEES, type EmployeeRecord, type EmployeeStatus } from '@/adminland/Database';
 
 /* ─────────── Types ─────────── */
-type TabId = 'profile' | 'security' | 'notifications' | 'status';
+type TabId = 'profile' | 'security' | 'notifications' | 'status' | 'user-management';
+
+/* ─────────── Platform roles ───────────
+ * Authoritative list of roles the platform recognises for access
+ * gating. Mirrors the role values used inside the Employees module's
+ * MOCK_EMPLOYEES table — the source of truth for who-is-who in the
+ * org. The User Management screen on this page is the single place
+ * Admins promote/demote employees between these roles, so the list
+ * here must stay synced with the role values that downstream
+ * surfaces (Dashboard, SuperAdminHome, scoped overviews) read.
+ *
+ * Why these seven specifically:
+ *   - Admin              → full platform access (CEO / COO / CPO / Ops Lead)
+ *   - HOD                → service-line head (PM / A&T / Sales etc.)
+ *   - POD Head           → POD-level lead inside a service line
+ *   - Manager            → team manager (covers Sr. Manager too)
+ *   - Assistant Manager  → sub-team lead
+ *   - Executive          → individual contributor on the delivery floor
+ *   - Intern             → temporary, restricted access
+ *
+ * The row's actual `role` string in the mock can be a finer-grained
+ * label like "SEM HOD" or "COO" — `normalizeRole()` snaps those to
+ * one of the seven canonical buckets for the dropdown's selected
+ * value, so the admin sees a stable picker without losing the
+ * underlying label. */
+const PLATFORM_ROLES = [
+  'Admin',
+  'HOD',
+  'POD Head',
+  'Manager',
+  'Assistant Manager',
+  'Executive',
+  'Intern',
+] as const;
+type PlatformRole = typeof PLATFORM_ROLES[number];
+
+function normalizeRole(role: string): PlatformRole {
+  // CEO / COO / CPO / Ops-Lead all sit at "Admin" platform-access
+  // level even though their designation strings differ.
+  if (role === 'Admin' || role === 'COO' || role === 'CEO' || role === 'CPO') return 'Admin';
+  if (role.includes('HOD'))     return 'HOD';        // 'SEM HOD' / 'A&T HOD' → HOD
+  if (role === 'POD Head')      return 'POD Head';
+  if (role === 'Assistant Manager') return 'Assistant Manager';
+  if (role.includes('Manager')) return 'Manager';    // 'Sr. Manager' → Manager
+  if (role === 'Intern')        return 'Intern';
+  return 'Executive';                                 // 'Sr. Executive' etc.
+}
 type WorkingStatus = 'in-office' | 'out-sick' | 'work-from-home' | 'working-outside';
 
 interface NavItem {
@@ -26,6 +75,10 @@ const navItems: NavItem[] = [
   { id: 'security', label: 'Security', icon: Shield, description: 'Password & sessions' },
   { id: 'notifications', label: 'Notifications', icon: Bell, description: 'Email & push alerts' },
   { id: 'status', label: 'Status', icon: HeartPulse, description: 'Working status' },
+  // Admin-only — surfaced only when the signed-in user has
+  // platform role 'Admin'. Filtered out of the rendered nav list
+  // for every other role so the tab simply doesn't exist for them.
+  { id: 'user-management', label: 'User Management', icon: Users, description: 'Roles & platform access' },
 ];
 
 const statusOptions: { id: WorkingStatus; label: string; description: string; icon: typeof Laptop; color: string; bg: string; border: string; dot: string; iconBg: string }[] = [
@@ -131,9 +184,352 @@ function InfoRow({ label, value, icon: Icon, badge }: {
   );
 }
 
+/* ─────────── User Management Panel (Admin-only tab content) ───────────
+ * MODULE × ROLE permissions matrix. Each row is an action inside a
+ * module (Inbox / Dashboard / Workspace / Dataroom); each column is
+ * one of the seven PlatformRoles. A cell shows whether the role has
+ * access to that action — granted (brand-blue check) or denied
+ * (muted dash). Cells are click-to-toggle so admins can adjust
+ * access without leaving the page.
+ *
+ * Why a matrix and not a per-employee table:
+ *   The previous version listed every employee with a single "Role"
+ *   dropdown. That answered "who is what role" but never "what can
+ *   each role actually DO". The matrix makes the permission rules
+ *   themselves the editable surface — change once at the role
+ *   level, applies to everyone in that role.
+ *
+ * Module rows are grouped under section headers so the action list
+ * is scannable; the modules use their familiar lucide icons (Inbox,
+ * Dashboard, Workspace, Dataroom) so admins recognise them at a
+ * glance.
+ */
+type PermissionAction = {
+  id: string;
+  label: string;
+  description: string;
+  byRole: Record<PlatformRole, boolean>;
+};
+type PermissionModule = {
+  id: 'inbox' | 'dashboard' | 'workspace' | 'dataroom';
+  name: string;
+  icon: typeof Inbox;
+  iconColor: string;
+  description: string;
+  actions: PermissionAction[];
+};
+
+// Default permissions — the seed the matrix renders before any
+// admin overrides. These represent Brego's working assumptions:
+//   • Admins (founder/COO tier) can do everything, everywhere.
+//   • HOD + POD Head act as service-line leaders — broad reach
+//     across their service plus full dataroom + checklist control.
+//   • Manager / Assistant Manager run team execution — they can
+//     view widely but their write access narrows on client-facing
+//     surfaces (e.g. they cannot send messages on a client's
+//     Inbox channel; only HOD-and-up can talk directly with
+//     clients).
+//   • Executive / Intern are individual contributors — they own
+//     their own task lane, can read team context, and have no
+//     destructive permissions (delete, share-out, configure).
+const DEFAULT_PERMISSIONS: PermissionModule[] = [
+  {
+    id: 'inbox',
+    name: 'Inbox',
+    icon: Inbox,
+    iconColor: '#204CC7',
+    description: 'Team & client channels',
+    actions: [
+      { id: 'inbox.view-team', label: 'View team channels', description: 'Read messages on internal channels',
+        byRole: { 'Admin': true, 'HOD': true, 'POD Head': true, 'Manager': true, 'Assistant Manager': true, 'Executive': true, 'Intern': true } },
+      { id: 'inbox.send-team', label: 'Send team messages', description: 'Post in internal channels',
+        byRole: { 'Admin': true, 'HOD': true, 'POD Head': true, 'Manager': true, 'Assistant Manager': true, 'Executive': true, 'Intern': true } },
+      { id: 'inbox.view-client', label: 'View client channels', description: 'Read messages on client-facing channels',
+        byRole: { 'Admin': true, 'HOD': true, 'POD Head': true, 'Manager': true, 'Assistant Manager': true, 'Executive': true, 'Intern': false } },
+      { id: 'inbox.send-client', label: 'Send messages on client channels', description: 'Talk directly with the client',
+        byRole: { 'Admin': true, 'HOD': true, 'POD Head': true, 'Manager': false, 'Assistant Manager': false, 'Executive': false, 'Intern': false } },
+    ],
+  },
+  {
+    id: 'dashboard',
+    name: 'Dashboard',
+    icon: LayoutDashboard,
+    iconColor: '#7C3AED',
+    description: 'Overview, metrics, financials',
+    actions: [
+      { id: 'dashboard.view', label: 'View module dashboards', description: 'Open the Home, Customers, Employees overviews',
+        byRole: { 'Admin': true, 'HOD': true, 'POD Head': true, 'Manager': true, 'Assistant Manager': true, 'Executive': true, 'Intern': true } },
+      { id: 'dashboard.financials', label: 'View client financial details', description: 'Sales, expenses, payables, receivables on the A&T dashboards',
+        byRole: { 'Admin': true, 'HOD': true, 'POD Head': true, 'Manager': true, 'Assistant Manager': false, 'Executive': false, 'Intern': false } },
+    ],
+  },
+  {
+    id: 'workspace',
+    name: 'Workspace',
+    icon: Briefcase,
+    iconColor: '#06B6D4',
+    description: 'Tasks, A&T checklists, SEM plans',
+    actions: [
+      { id: 'workspace.view-own', label: 'View own tasks', description: 'My Assignments and personal task list',
+        byRole: { 'Admin': true, 'HOD': true, 'POD Head': true, 'Manager': true, 'Assistant Manager': true, 'Executive': true, 'Intern': true } },
+      { id: 'workspace.view-team', label: 'View team-wide tasks', description: 'See what everyone in the team is working on',
+        byRole: { 'Admin': true, 'HOD': true, 'POD Head': true, 'Manager': true, 'Assistant Manager': false, 'Executive': false, 'Intern': false } },
+      { id: 'workspace.assign', label: 'Create & assign tasks', description: 'Hand work out to teammates',
+        byRole: { 'Admin': true, 'HOD': true, 'POD Head': true, 'Manager': true, 'Assistant Manager': true, 'Executive': false, 'Intern': false } },
+      { id: 'workspace.checklist', label: 'Edit A&T checklists', description: 'Modify the recurring deliverables for a client',
+        byRole: { 'Admin': true, 'HOD': true, 'POD Head': true, 'Manager': true, 'Assistant Manager': false, 'Executive': false, 'Intern': false } },
+    ],
+  },
+  {
+    id: 'dataroom',
+    name: 'Dataroom',
+    icon: FolderOpen,
+    iconColor: '#10B981',
+    description: 'Files, folders, sharing',
+    actions: [
+      { id: 'dataroom.view', label: 'View files & folders', description: 'Browse the dataroom',
+        byRole: { 'Admin': true, 'HOD': true, 'POD Head': true, 'Manager': true, 'Assistant Manager': true, 'Executive': true, 'Intern': true } },
+      { id: 'dataroom.upload', label: 'Upload files', description: 'Add documents to existing folders',
+        byRole: { 'Admin': true, 'HOD': true, 'POD Head': true, 'Manager': true, 'Assistant Manager': true, 'Executive': true, 'Intern': false } },
+      { id: 'dataroom.move', label: 'Move & rename files', description: 'Reorganise within the dataroom',
+        byRole: { 'Admin': true, 'HOD': true, 'POD Head': true, 'Manager': true, 'Assistant Manager': false, 'Executive': false, 'Intern': false } },
+      { id: 'dataroom.delete', label: 'Delete files & folders', description: 'Permanent removal',
+        byRole: { 'Admin': true, 'HOD': true, 'POD Head': false, 'Manager': false, 'Assistant Manager': false, 'Executive': false, 'Intern': false } },
+      { id: 'dataroom.share', label: 'Share files externally', description: 'Generate a public / client-shareable link',
+        byRole: { 'Admin': true, 'HOD': true, 'POD Head': false, 'Manager': false, 'Assistant Manager': false, 'Executive': false, 'Intern': false } },
+    ],
+  },
+];
+
+function UserManagementPanel() {
+  // Mutable copy of the seed matrix. Each cell click flips the
+  // corresponding boolean. A real backend wiring would persist
+  // each toggle; for now changes live in this component's state.
+  const [permissions, setPermissions] = useState<PermissionModule[]>(DEFAULT_PERMISSIONS);
+
+  const togglePermission = (moduleId: PermissionModule['id'], actionId: string, role: PlatformRole) => {
+    setPermissions(prev => prev.map(mod => {
+      if (mod.id !== moduleId) return mod;
+      return {
+        ...mod,
+        actions: mod.actions.map(act => {
+          if (act.id !== actionId) return act;
+          return { ...act, byRole: { ...act.byRole, [role]: !act.byRole[role] } };
+        }),
+      };
+    }));
+  };
+
+  // Short labels for the column headers — the role column is
+  // narrow so we abbreviate longer names. Full names live in the
+  // aria-label on each cell so screen readers always hear the
+  // unambiguous version.
+  const roleHeader: Record<PlatformRole, { short: string; full: string }> = {
+    'Admin': { short: 'Admin', full: 'Admin' },
+    'HOD': { short: 'HOD', full: 'HOD' },
+    'POD Head': { short: 'POD', full: 'POD Head' },
+    'Manager': { short: 'Manager', full: 'Manager' },
+    'Assistant Manager': { short: 'Asst. Mgr', full: 'Assistant Manager' },
+    'Executive': { short: 'Exec', full: 'Executive' },
+    'Intern': { short: 'Intern', full: 'Intern' },
+  };
+
+  return (
+    // Full-width inside the Profile content area — the panel
+    // bleeds end-to-end so the matrix uses every available pixel.
+    // The 7 role columns are still pinned by the colgroup below
+    // (78px each) so they stay uniform; whatever width's left
+    // goes to the Module/Action column and gives the action
+    // descriptions room to breathe on wider viewports.
+    <div className="space-y-6">
+      {/* Admin-only callout — establishes context up-front so the
+          admin understands they're editing platform-wide access
+          rules, and a flip on a single cell affects every employee
+          in that role. */}
+      <div className="rounded-xl bg-[#204CC7]/[0.04] border border-[#204CC7]/15 px-5 py-4 flex items-start gap-3" id="permissions-context">
+        <div className="w-9 h-9 rounded-lg bg-[#204CC7]/10 flex items-center justify-center flex-shrink-0">
+          <ShieldCheck className="w-4 h-4 text-[#204CC7]" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[14px] font-semibold text-black/85">Module access by role</p>
+          <p className="text-[13px] text-black/60 mt-0.5 leading-relaxed">
+            Each cell controls whether a role can perform that action. Changes apply to every employee in that role across the platform.
+          </p>
+        </div>
+      </div>
+
+      {/* Legend — clarifies the icon vocabulary used in cells. Sits
+          above the matrix so the symbols are decoded before the
+          eye reaches the data. Hint text contrast was bumped from
+          black/45 to black/65 so the "Click any cell to toggle"
+          line passes WCAG AA at 4.5:1 against white. */}
+      <div className="flex items-center gap-5 text-[13px] text-black/65" id="permissions-legend">
+        <span className="inline-flex items-center gap-2">
+          <span className="w-6 h-6 rounded-md bg-[#204CC7]/[0.10] inline-flex items-center justify-center" aria-hidden="true">
+            <Check className="w-3.5 h-3.5 text-[#204CC7]" />
+          </span>
+          <span>Granted</span>
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span className="w-6 h-6 rounded-md bg-black/[0.06] inline-flex items-center justify-center" aria-hidden="true">
+            <Minus className="w-3.5 h-3.5 text-black/55" />
+          </span>
+          <span>Denied</span>
+        </span>
+        <span className="ml-auto text-[12.5px] text-black/65">Click any cell to toggle</span>
+      </div>
+
+      {/* Matrix — module rows grouped, action sub-rows below. The
+          earlier rev used `position: sticky` on the first column
+          plus `bg-inherit`, which broke against alternating-row
+          tints (cells from columns to the right showed through
+          the sticky cell). Drop both: at 920px max-width all 7
+          role columns + the action column fit without horizontal
+          scroll, so sticky isn't needed and zebra striping was
+          adding noise without earning its keep. Clean white rows
+          with a single 1px divider between them now. */}
+      <SectionCard className="overflow-hidden">
+        <table
+          className="w-full table-fixed"
+          role="table"
+          aria-label="Module permissions by role"
+          aria-describedby="permissions-legend"
+        >
+          {/* colgroup pins each role column to a uniform 96px so
+              the table's intrinsic width math is predictable and
+              role-column whitespace stays even across the seven
+              columns; the first column takes whatever's left so
+              action descriptions get the slack on wider screens. */}
+          <colgroup>
+            <col />
+            {PLATFORM_ROLES.map(role => <col key={role} style={{ width: 96 }} />)}
+          </colgroup>
+          <thead>
+            <tr className="border-b border-black/[0.06] bg-[#FAFBFD]">
+              <th
+                scope="col"
+                className="text-left text-[11px] font-semibold uppercase tracking-wider text-black/55 px-5 py-3"
+              >
+                Module / Action
+              </th>
+              {PLATFORM_ROLES.map(role => (
+                <th key={role} scope="col" className="text-center px-1 py-3" title={roleHeader[role].full}>
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-black/55 whitespace-nowrap">
+                    {roleHeader[role].short}
+                  </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {permissions.map((mod, modIdx) => {
+              const ModuleIcon = mod.icon;
+              return (
+                <Fragment key={mod.id}>
+                  {/* Module section header — coloured icon + name +
+                      sub-label. Spans all columns so the module
+                      name reads as a clear band that opens its
+                      action group below. The 6px tinted gap above
+                      every section after the first separates one
+                      module's group from the next. */}
+                  <tr className={`bg-white ${modIdx > 0 ? 'border-t-[6px] border-[#F7F7F9]' : ''}`}>
+                    <th
+                      scope="rowgroup"
+                      colSpan={1 + PLATFORM_ROLES.length}
+                      className="px-5 py-3 text-left bg-white"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                          style={{ backgroundColor: `${mod.iconColor}14` }}
+                          aria-hidden="true"
+                        >
+                          <ModuleIcon className="w-4 h-4" style={{ color: mod.iconColor }} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[14px] font-bold text-black/85">{mod.name}</p>
+                          <p className="text-[12.5px] text-black/55 font-normal">{mod.description}</p>
+                        </div>
+                      </div>
+                    </th>
+                  </tr>
+
+                  {/* Action sub-rows — one per editable permission.
+                      Action label + muted description in column 1;
+                      a 36×36 toggle button in each role column.
+                      The 36×36 cell size is up from 28×28 so the
+                      tap target lands inside WCAG 2.5.5 spec
+                      (44×44 is the strict minimum, but 36px works
+                      for desktop-only surfaces and is the agreed
+                      compromise across Brego's other inline
+                      pickers). */}
+                  {mod.actions.map(act => (
+                    <tr
+                      key={act.id}
+                      className="border-t border-black/[0.04] bg-white hover:bg-black/[0.012] transition-colors"
+                    >
+                      <td className="px-5 py-3">
+                        <p className="text-[13.5px] font-medium text-black/85 leading-tight">{act.label}</p>
+                        <p className="text-[12.5px] text-black/55 mt-0.5 leading-snug">{act.description}</p>
+                      </td>
+                      {PLATFORM_ROLES.map(role => {
+                        const granted = act.byRole[role];
+                        return (
+                          <td key={role} className="px-1 py-3 text-center align-middle">
+                            <button
+                              type="button"
+                              onClick={() => togglePermission(mod.id, act.id, role)}
+                              aria-pressed={granted}
+                              aria-label={`${roleHeader[role].full} — ${act.label}: ${granted ? 'granted' : 'denied'}. Activate to ${granted ? 'deny' : 'grant'}.`}
+                              className={`w-9 h-9 rounded-md inline-flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/40 ${
+                                granted
+                                  ? 'bg-[#204CC7]/[0.10] text-[#204CC7] hover:bg-[#204CC7]/[0.16]'
+                                  : 'bg-black/[0.05] text-black/55 hover:bg-black/[0.10] hover:text-black/75'
+                              }`}
+                            >
+                              {granted
+                                ? <Check className="w-4 h-4" aria-hidden="true" />
+                                : <Minus className="w-4 h-4" aria-hidden="true" />}
+                            </button>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </SectionCard>
+    </div>
+  );
+}
+
+/* Suppress unused-symbol warnings for typings imported for context. */
+type _PreserveEmployeeStatus = EmployeeStatus;
+type _PreserveEmployeeRecord = EmployeeRecord;
+
 /* ─────────── Component ─────────── */
+const TAB_IDS: readonly TabId[] = ['profile', 'security', 'notifications', 'status', 'user-management'];
+function isTabId(v: string | null): v is TabId {
+  return v !== null && (TAB_IDS as readonly string[]).includes(v);
+}
+
 export function ProfileSettings() {
-  const [activeTab, setActiveTab] = useState<TabId>('profile');
+  // App Router wiring — every left-nav tab is its own URL via the
+  // `?tab=<id>` query param so the sections are bookmarkable, the
+  // browser back button steps through them, and a deep-link from
+  // anywhere else in the app lands on the correct tab. The default
+  // (no `tab` param) is 'profile'. Unknown values are normalised
+  // back to 'profile' on mount via a router.replace so we don't
+  // leave junk in the URL.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams?.get('tab') ?? null;
+  const activeTab: TabId = isTabId(tabParam) ? tabParam : 'profile';
+
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -148,6 +544,10 @@ export function ProfileSettings() {
     location: 'Mumbai, India',
     department: 'Brego Group',
     role: 'Founder & CEO',
+    // Platform role (NOT designation). Drives access gating. Mirrors
+    // the EmployeeRecord.role value on Mihir Lunia in MOCK_EMPLOYEES,
+    // and is what controls whether the User Management tab appears.
+    platformRole: 'Admin' as PlatformRole,
     employeeId: 'BB-BG-2022-001',
     dateOfJoining: '2022-01-01',
     reportingTo: 'N/A',
@@ -164,6 +564,53 @@ export function ProfileSettings() {
     inboxMessages: true,
     systemUpdates: false,
   });
+
+  // Admin-only gate — the User Management nav item is filtered out
+  // when this is false. Keep the check stable + boolean so it's
+  // trivial to swap for a real auth-context lookup later.
+  const isAdmin = formData.platformRole === 'Admin';
+  const visibleNavItems = useMemo(
+    () => navItems.filter(item => item.id !== 'user-management' || isAdmin),
+    [isAdmin],
+  );
+
+  // URL hygiene — strip an unknown / inaccessible `tab` value off
+  // the URL so the address bar always agrees with what's on
+  // screen. Two cases:
+  //   1. `tab` is set but isn't one of the five known TabIds
+  //      (e.g. `?tab=foo`) → wipe it.
+  //   2. `tab=user-management` but the user isn't an Admin →
+  //      gate-protected route, redirect to the default Profile
+  //      tab so the User Management screen never renders behind
+  //      the gate.
+  // Uses replace (not push) so the cleanup doesn't leave a dead
+  // entry in the browser history.
+  useEffect(() => {
+    const stripUnknown = tabParam !== null && !isTabId(tabParam);
+    const blockedByGate = tabParam === 'user-management' && !isAdmin;
+    if (!stripUnknown && !blockedByGate) return;
+    const next = new URLSearchParams(searchParams?.toString() ?? '');
+    next.delete('tab');
+    const qs = next.toString();
+    router.replace(`${pathname}${qs ? `?${qs}` : ''}`);
+  }, [tabParam, isAdmin, pathname, router, searchParams]);
+
+  // Build a `?tab=<id>` href for the nav buttons. Preserves any
+  // other query params that may be on the URL (e.g. analytics
+  // params) so navigating between tabs doesn't drop them.
+  const buildTabHref = (id: TabId): string => {
+    const next = new URLSearchParams(searchParams?.toString() ?? '');
+    if (id === 'profile') {
+      // 'profile' is the default — keep the URL clean by omitting
+      // the `tab` param entirely on this tab.
+      next.delete('tab');
+    } else {
+      next.set('tab', id);
+    }
+    const qs = next.toString();
+    return `${pathname}${qs ? `?${qs}` : ''}`;
+  };
+  const goToTab = (id: TabId) => router.push(buildTabHref(id));
 
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -220,13 +667,13 @@ export function ProfileSettings() {
 
         {/* Navigation items */}
         <nav className="flex-1 px-3 py-4 space-y-1" aria-label="Profile sections">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => goToTab(item.id)}
                 className={`w-full px-3 py-2.5 flex items-center gap-3 rounded-xl text-left transition-all ${
                   isActive
                     ? 'bg-[#204CC7]/[0.07] text-[#204CC7]'
@@ -269,7 +716,7 @@ export function ProfileSettings() {
         <header className="h-[58px] px-8 flex items-center justify-between border-b border-black/[0.06] bg-white flex-shrink-0">
           <div>
             <h1 className="text-[18px] font-bold text-black/90">
-              {navItems.find(n => n.id === activeTab)?.label}
+              {visibleNavItems.find(n => n.id === activeTab)?.label}
             </h1>
           </div>
           <div className="flex items-center gap-3">
@@ -283,7 +730,7 @@ export function ProfileSettings() {
               <button
                 onClick={handleSave}
                 disabled={saveState === 'saving'}
-                className={`h-[36px] px-5 flex items-center gap-2 rounded-lg text-[13px] font-semibold transition-all ${
+                className={`h-[36px] px-5 flex items-center gap-2 rounded-md text-[13px] font-semibold transition-all ${
                   saveState === 'saving'
                     ? 'bg-[#204CC7]/70 text-white cursor-wait'
                     : 'bg-[#204CC7] text-white hover:bg-[#1a3fa3] shadow-sm hover:shadow-md'
@@ -296,9 +743,19 @@ export function ProfileSettings() {
           </div>
         </header>
 
-        {/* Scrollable content */}
+        {/* Scrollable content. The inner container caps width for the
+            settings-form tabs (Profile / Security / Notifications /
+            Status) at 720px so form fields read at a comfortable
+            line-length, but User Management's permissions matrix
+            needs the full content width to fit all 7 role columns
+            without horizontal scroll — so on that tab we drop the
+            max-width and use a thinner horizontal pad. */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-[720px] mx-auto px-8 py-8">
+          <div className={
+            activeTab === 'user-management'
+              ? 'w-full px-8 py-8'
+              : 'max-w-[720px] mx-auto px-8 py-8'
+          }>
 
             {/* ═══════════ PROFILE TAB ═══════════ */}
             {activeTab === 'profile' && (
@@ -473,7 +930,7 @@ export function ProfileSettings() {
                     <div className="pt-1">
                       <button
                         disabled={!formData.currentPassword || !formData.newPassword || !passwordsMatch}
-                        className={`h-[38px] px-6 rounded-lg text-[13px] font-semibold transition-all ${
+                        className={`h-[38px] px-6 rounded-md text-[13px] font-semibold transition-all ${
                           formData.currentPassword && formData.newPassword && passwordsMatch
                             ? 'bg-[#204CC7] text-white hover:bg-[#1a3fa3] shadow-sm hover:shadow-md'
                             : 'bg-black/[0.05] text-black/25 cursor-not-allowed'
@@ -679,6 +1136,16 @@ export function ProfileSettings() {
                   </div>
                 </section>
               </div>
+            )}
+
+            {/* ═══════════ USER MANAGEMENT TAB (Admin-only) ═══════════
+                Visibility is double-gated: the nav item is filtered
+                out of `visibleNavItems` for non-admins, AND the
+                content render checks `isAdmin` so a stale
+                ?activeTab=user-management deep-link can't show the
+                screen to a non-admin who manages to set the state. */}
+            {activeTab === 'user-management' && isAdmin && (
+              <UserManagementPanel />
             )}
           </div>
         </div>

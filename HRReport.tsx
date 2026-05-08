@@ -88,9 +88,9 @@ interface Incident {
 const resourceRequirements: ResourceRequirement[] = [
   { id: 1, head: 'Product', team: 'Pooja', company: 'Brego Group', department: 'Finance', position: 'Floaters - 4/5', experience: '3+ yrs', budget: '25k-35k', status: 'Active', comments: ['Chetan — Will be moved from 10th April', 'Parul Offered: Joined', 'Nisha Offered: 33.2K, DOJ: 06th April 2026, DOCS: Done', 'Jyoti Offered: 41.5K, DOJ: 04th May 2026, DOCS: Pending', 'Amisha shortlisted for final round — Scheduled for Friday evening with Irshad'] },
   { id: 2, head: 'Product', team: 'Pooja', company: 'Brego Group', department: 'Finance', position: '1x Manager', experience: '6+ yrs', budget: '45k-55k', status: 'Interviewing', comments: ['No shortlist for final round'] },
-  { id: 3, head: 'Growth', team: 'Ujwal / Priyanka', company: 'Forsyth', department: 'Sales', position: '7x BDE - 0/7', experience: '2-5 years', budget: '30k-50k', status: 'Active', comments: ['No shortlist for final round'] },
-  { id: 4, head: 'Growth', team: 'Ujwal / Priyanka', company: 'Brego Land', department: 'Sales', position: '1x BDE - 0/1', experience: '2-5 years', budget: '30k-50k', status: 'Active', comments: ['No shortlist for final round'] },
-  { id: 5, head: 'Growth', team: 'Ujwal / Priyanka', company: 'Brego Business', department: 'Sales', position: '8x Business Dev Execs', experience: '2-5 years', budget: '30k-50k', status: 'Offer Sent', comments: ['Maaz offered: 54k, DOJ: 02nd April 2026, DOCS — Done', 'Vaishnavi offered: 45k, DOJ: 20th April 2026, DOCS — Done', 'Arya Offered: 60k, DOJ: Yet to confirm, DOCS — Done'] },
+  { id: 3, head: 'Growth', team: 'Priyanka', company: 'Forsyth', department: 'Sales', position: '7x BDE - 0/7', experience: '2-5 years', budget: '30k-50k', status: 'Active', comments: ['No shortlist for final round'] },
+  { id: 4, head: 'Growth', team: 'Priyanka', company: 'Brego Land', department: 'Sales', position: '1x BDE - 0/1', experience: '2-5 years', budget: '30k-50k', status: 'Active', comments: ['No shortlist for final round'] },
+  { id: 5, head: 'Growth', team: 'Priyanka', company: 'Brego Business', department: 'Sales', position: '8x Business Dev Execs', experience: '2-5 years', budget: '30k-50k', status: 'Offer Sent', comments: ['Maaz offered: 54k, DOJ: 02nd April 2026, DOCS — Done', 'Vaishnavi offered: 45k, DOJ: 20th April 2026, DOCS — Done', 'Arya Offered: 60k, DOJ: Yet to confirm, DOCS — Done'] },
   { id: 6, head: 'Product', team: 'Ravina', company: 'Brego Group', department: 'SEM', position: 'Floaters - 0/3', experience: '3+ years', budget: '45-50K', status: 'Active', comments: ['No shortlist for final round'] },
   { id: 7, head: 'Product', team: 'Ravina', company: 'Brego Group', department: 'SEM', position: '2x SEM Manager / QC', experience: '3+ years', budget: '70-85K', status: 'Interviewing', comments: ['Harsh Offered: 83k, DOJ: 1st May 2026, Docs: Pending', 'Nachiket to be interviewed on Tuesday at 6:00 PM (Virtual)', 'Ashish to be interviewed on Tuesday at 6:00 PM (Virtual)'] },
   { id: 8, head: 'Product', team: 'Ravina', company: 'Brego Group', department: 'Technology', position: 'Full Stack Developer', experience: '3+', budget: '80k-1.2L', status: 'Offer Sent', comments: ['Sadashiav offered 15 lac, DOJ: 13th April 2026, Docs: Pending'] },
@@ -131,7 +131,7 @@ const recruiterEfforts: RecruiterEfforts[] = [
     ],
   },
   {
-    name: 'Ujjwal', initials: 'UB', color: '#10B981',
+    name: 'Siddharth', initials: 'SK', color: '#10B981',
     rows: [
       { metric: 'Sourced Candidates', jan: null, janPct: null, feb: null, febPct: null, mar: null, marPct: null, apr: 100, aprPct: null },
       { metric: 'Calls Connected', jan: null, janPct: null, feb: null, febPct: null, mar: null, marPct: null, apr: 86, aprPct: '86%' },
@@ -170,7 +170,7 @@ const onboardingEmployees: OnboardingEmployee[] = [
   { name: 'Parul', department: 'Finance', status: 'Settling', comments: 'She joined on 1st of April, hence need time to understand and see the performance' },
   { name: 'Naeela', department: 'Finance', status: 'Settling', comments: 'We are moving her to P0, need time to observe and confirm by this month end' },
   { name: 'Prathamesh Tervankar', department: 'Finance', status: 'Settling', comments: 'Tricky client (Goglocal), hence need time for him to settle. We might replace him with Vinay and then check the performance' },
-  { name: 'Ujjwal Bobhate', department: 'HR', status: 'Settling', comments: 'Have aligned her with the expectations and kept under observation till this month end' },
+  { name: 'Siddharth K.', department: 'HR', status: 'Settling', comments: 'Have aligned with the expectations and kept under observation till this month end' },
   { name: 'Purva Patankar', department: 'Operations', status: 'Settling', comments: 'Have moved her to Sales Ops completely and will be observing her till this month end then will take the decision' },
   { name: 'Luiza Shaikh', department: 'Performance Marketing', status: 'Settling', comments: 'Have aligned her with the expectations and kept under observation' },
   { name: 'Daniya Shaikh', department: 'Technology', status: 'Settling', comments: 'Have aligned her with the expectations and kept under observation by April end' },
@@ -618,11 +618,11 @@ export function HRReport({ activeSection = 'overview' }: { activeSection?: HRSec
                                     return (
                                       <div key={i} className={`flex items-start gap-3 px-4 py-3 rounded-lg text-body leading-relaxed ${
                                         isOffer ? 'bg-emerald-50/60 text-emerald-900/65 border border-emerald-200/40' :
-                                        isPending ? 'bg-amber-50/50 text-amber-900/65 border border-amber-200/30' :
+                                        isPending ? 'bg-rose-50/50 text-rose-900/65 border border-rose-200/30' :
                                         'bg-white text-black/55 border border-black/[0.05]'
                                       }`}>
                                         <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-[6px] ${
-                                          isDone ? 'bg-emerald-500' : isPending ? 'bg-amber-400' : 'bg-black/15'
+                                          isDone ? 'bg-emerald-500' : isPending ? 'bg-rose-400' : 'bg-black/15'
                                         }`} aria-hidden="true" />
                                         <span className="flex-1">{c}</span>
                                       </div>

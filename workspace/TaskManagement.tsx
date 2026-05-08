@@ -3,11 +3,14 @@ import { useState, useRef, useEffect, useMemo, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Search, Plus, ChevronLeft, ChevronDown, ChevronRight, Circle, CheckCircle2,
-  Calendar, Filter, ArrowUpDown, Clock, AlertTriangle, GripVertical,
+  Calendar, Filter, ArrowUpDown, ArrowLeft, Clock, AlertTriangle, GripVertical,
   X, Paperclip, MessageSquare, Activity, MoreVertical, FileText,
   Sparkles, FolderPlus
 } from 'lucide-react';
 import { BregoGroupDetail } from './BregoGroupDetail';
+import { TaskDetailPanel } from './shared/TaskDetailPanel';
+import { TaskListRow, CompletedCheck } from './shared/TaskListRow';
+import { WORKSPACE_ROUTES } from '@/lib/workspace-routes';
 import {
   Task, TaskStatus, Priority, SortOption, QuickFilter, Project,
   priorityConfig, statusConfig, teamMembers, mockProjects, generateTasks,
@@ -16,6 +19,29 @@ import {
 
 // ── Types ──
 type View = 'overview' | 'serviceClients' | 'clientTodoList' | 'bregoGroupDetail';
+
+// Deterministic baseline task counts per client. Padded on top of the
+// actual tracked tasks so the workspace cards reflect the realistic
+// scale of a delivery team running many clients — each A&T client
+// typically carries dozens of monthly deliverables + accumulated Done
+// history; SEM clients carry campaign assets + review tasks. The Brego
+// Delivery Team (internal) gets lighter baselines since its workload is
+// coordination, not client delivery.
+function clientBaselineCounts(clientId: string, isBDT: boolean): { overdue: number; pending: number; done: number } {
+  const hash = clientId.split('').reduce((s, c) => s + c.charCodeAt(0), 0);
+  if (isBDT) {
+    return {
+      overdue: hash % 2,          // 0–1
+      pending: 5 + (hash % 6),    // 5–10
+      done:    10 + (hash % 8),   // 10–17
+    };
+  }
+  return {
+    overdue: hash % 4,            // 0–3
+    pending: 8 + (hash % 10),     // 8–17
+    done:    18 + (hash % 20),    // 18–37
+  };
+}
 
 // ── Progress Ring Component ──
 function ProgressRing({ completed, total, size = 48, strokeWidth = 4 }: { completed: number; total: number; size?: number; strokeWidth?: number }) {
@@ -353,165 +379,6 @@ function AddTodoModal({ onClose, onAdd, projectName }: { onClose: () => void; on
     </div>
   );
 }
-
-// ── Task Detail Side Panel ──
-function TaskDetailPanel({ task, project, onClose, onToggle }: { task: Task; project: Project; onClose: () => void; onToggle: () => void }) {
-  const [activeTab, setActiveTab] = useState<'details' | 'activity'>('details');
-  const pc = priorityConfig[task.priority];
-  const sc = statusConfig[task.status];
-  const isCompleted = task.status === 'Completed';
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose} role="dialog" aria-modal="true" aria-label="Task details">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" />
-
-      {/* Panel */}
-      <div className="relative w-[480px] bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-200" onClick={e => e.stopPropagation()}>
-
-        {/* ── Header ── */}
-        <div className="px-7 pt-7 pb-5 border-b border-black/[0.06]">
-          {/* Top row: Priority + Project + Close */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2.5">
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-caption font-semibold ${pc.bg} ${pc.text}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${pc.dot}`} aria-hidden="true" />{pc.label}
-              </span>
-              <span className="text-caption font-medium text-muted-fg">{project.name}</span>
-            </div>
-            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center hover:bg-black/5 rounded-lg transition-colors" aria-label="Close panel">
-              <X className="w-4.5 h-4.5 text-muted-fg" aria-hidden="true" />
-            </button>
-          </div>
-
-          {/* Title */}
-          <h2 className="text-h3 font-bold text-foreground mb-5 leading-snug">{task.title}</h2>
-
-          {/* Meta chips */}
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-caption font-medium ${sc.bg} ${sc.text} ${sc.border}`}>
-              <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />{task.status}
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-black/[0.06] text-caption font-medium text-muted-fg">
-              <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
-              <time dateTime={task.dueDateISO}>{task.dueDate}</time>
-            </span>
-            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-black/[0.06] text-caption font-medium text-muted-fg">
-              <span className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[8px] font-bold" style={{ backgroundColor: task.assignedTo.color }}>{task.assignedTo.initials}</span>
-              {task.assignedTo.name}
-            </span>
-          </div>
-        </div>
-
-        {/* ── Tabs ── */}
-        <div className="flex items-center px-7 border-b border-black/[0.06]" role="tablist">
-          {[
-            { id: 'details' as const, label: 'Details', icon: FileText },
-            { id: 'activity' as const, label: 'Activity', icon: Activity },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-4 py-3.5 border-b-2 text-caption font-medium transition-all ${
-                activeTab === tab.id
-                  ? 'border-[#204CC7] text-[#204CC7] font-semibold'
-                  : 'border-transparent text-muted-fg hover:text-foreground'
-              }`}
-            >
-              <tab.icon className="w-3.5 h-3.5" aria-hidden="true" />{tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Tab Content ── */}
-        <div className="flex-1 overflow-y-auto px-7 py-6" role="tabpanel">
-
-          {/* Details Tab */}
-          {activeTab === 'details' && (
-            <div className="space-y-7">
-              {/* Description */}
-              <div>
-                <label className="text-caption font-semibold text-muted-fg uppercase tracking-wider block mb-3">Description</label>
-                <p className="text-body font-normal text-foreground leading-relaxed">{task.description}</p>
-              </div>
-
-              {/* Assigned By */}
-              <div>
-                <label className="text-caption font-semibold text-muted-fg uppercase tracking-wider block mb-3">Assigned By</label>
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ backgroundColor: task.assignedBy.color }}>{task.assignedBy.initials}</div>
-                  <div>
-                    <span className="text-body font-medium text-foreground block">{task.assignedBy.name}</span>
-                    <span className="text-caption text-muted-fg">Task creator</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Assigned To */}
-              <div>
-                <label className="text-caption font-semibold text-muted-fg uppercase tracking-wider block mb-3">Assigned To</label>
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ backgroundColor: task.assignedTo.color }}>{task.assignedTo.initials}</div>
-                  <div>
-                    <span className="text-body font-medium text-foreground block">{task.assignedTo.name}</span>
-                    <span className="text-caption text-muted-fg">Responsible</span>
-                  </div>
-                </div>
-              </div>
-
-
-              {/* Attachments */}
-              <div>
-                <label className="text-caption font-semibold text-muted-fg uppercase tracking-wider block mb-3">Attachments</label>
-                <div className="flex items-center gap-2.5 px-4 py-3.5 rounded-xl border border-dashed border-black/10 text-caption font-medium text-muted-fg">
-                  <Paperclip className="w-4 h-4" aria-hidden="true" />
-                  <span>No attachments yet — drop files here</span>
-                </div>
-              </div>
-
-              {/* Action Button */}
-              <button
-                onClick={onToggle}
-                className={`w-full py-3 rounded-xl border text-body font-semibold transition-all ${
-                  isCompleted
-                    ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                    : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                }`}
-              >
-                {isCompleted ? '↩ Reopen Task' : '✓ Mark as Completed'}
-              </button>
-            </div>
-          )}
-
-          {/* Activity Tab */}
-          {activeTab === 'activity' && (
-            <div className="space-y-1">
-              {[
-                { action: 'Task created', by: task.assignedBy.name, time: '5 days ago', icon: '➕' },
-                { action: `Assigned to ${task.assignedTo.name}`, by: task.assignedBy.name, time: '5 days ago', icon: '👤' },
-                { action: `Priority set to ${task.priority}`, by: task.assignedBy.name, time: '5 days ago', icon: '🏷' },
-                ...(isCompleted ? [{ action: 'Marked as completed', by: task.assignedTo.name, time: '1 day ago', icon: '✅' }] : []),
-              ].map((log, i) => (
-                <div key={i} className="flex items-start gap-3 py-3 border-b border-black/[0.03] last:border-0">
-                  <span className="w-7 h-7 rounded-lg bg-black/[0.04] flex items-center justify-center text-[12px] flex-shrink-0 mt-0.5" aria-hidden="true">{log.icon}</span>
-                  <div className="flex-1">
-                    <p className="text-body font-normal text-foreground">
-                      <span className="font-semibold">{log.by}</span> {log.action.toLowerCase().startsWith(log.by.toLowerCase()) ? log.action.slice(log.by.length) : `— ${log.action}`}
-                    </p>
-                    <span className="text-caption text-muted-fg">{log.time}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── New Client Group Modal ──
 function NewGroupModal({ projectId, onClose, onCreate }: { projectId: string; onClose: () => void; onCreate: (name: string, color: string) => void }) {
   const [name, setName] = useState('');
@@ -556,7 +423,7 @@ function NewGroupModal({ projectId, onClose, onCreate }: { projectId: string; on
           <button
             onClick={() => { if (name.trim()) { onCreate(name.trim(), selectedColor); onClose(); } }}
             disabled={!name.trim()}
-            className="w-full py-3 rounded-xl bg-[#204CC7] text-white text-body font-semibold hover:bg-[#1a3fa8] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full py-3 rounded-md bg-[#204CC7] text-white text-body font-semibold hover:bg-[#1a3fa8] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Create Group
           </button>
@@ -569,12 +436,35 @@ function NewGroupModal({ projectId, onClose, onCreate }: { projectId: string; on
 // ── Main Component ──
 interface TaskManagementProps {
   onBack?: () => void;
+  /**
+   * When set, TaskManagement skips the "overview" view (the three-card
+   * project picker) and lands directly on the client-groups view for the
+   * given project. Used by the Accounts & Taxation and Performance
+   * Marketing workspace tabs, which are scoped to a single service.
+   */
+  initialProjectId?: 'bg' | 'at' | 'pm';
+  /**
+   * When set together with `initialProjectId`, TaskManagement skips
+   * the client-groups view and lands directly on the client to-do
+   * list for that group — same screen the workspace shows when a
+   * client card is tapped. Used by the Brego Delivery Team widget on
+   * the A&T Deliverables home tab to embed the task screen in place
+   * (so the user stays inside the Deliverables module). The inner
+   * back-to-clients button is replaced with `onBack` in this mode.
+   */
+  initialClientGroupId?: string;
 }
 
-export function TaskManagement({ onBack }: TaskManagementProps) {
+export function TaskManagement({ onBack, initialProjectId, initialClientGroupId }: TaskManagementProps) {
   const router = useRouter();
-  const [currentView, setCurrentView] = useState<View>('overview');
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const forcedProject = initialProjectId ? mockProjects.find(p => p.id === initialProjectId) ?? null : null;
+  const forcedGroup = initialProjectId && initialClientGroupId
+    ? clientGroups.find(g => g.id === initialClientGroupId && g.projectId === initialProjectId) ?? null
+    : null;
+  const [currentView, setCurrentView] = useState<View>(
+    forcedGroup ? 'clientTodoList' : forcedProject ? 'serviceClients' : 'overview'
+  );
+  const [selectedProject, setSelectedProject] = useState<Project | null>(forcedProject);
   const [tasks, setTasks] = useState<Task[]>(generateTasks);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -588,11 +478,11 @@ export function TaskManagement({ onBack }: TaskManagementProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
-  const [clientGroupFilter, setClientGroupFilter] = useState('All');
+  const [clientGroupFilter, setClientGroupFilter] = useState(forcedGroup ? forcedGroup.id : 'All');
   const [clientSearch, setClientSearch] = useState('');
   const [localClientGroups, setLocalClientGroups] = useState<ClientGroup[]>(clientGroups);
   const [showNewGroupModal, setShowNewGroupModal] = useState(false);
-  const [selectedClientGroup, setSelectedClientGroup] = useState<ClientGroup | null>(null);
+  const [selectedClientGroup, setSelectedClientGroup] = useState<ClientGroup | null>(forcedGroup);
   const [assignmentFilter, setAssignmentFilter] = useState<'today' | 'thisWeek'>('thisWeek');
 
   const sortRef = useRef<HTMLDivElement>(null);
@@ -700,118 +590,77 @@ export function TaskManagement({ onBack }: TaskManagementProps) {
     return { groups, ungrouped };
   }, [projectTasks]);
 
-  // Client card stats for serviceClients view
+  // Client card stats for serviceClients view.
+  //
+  // A real A&T / SEM delivery team running 20+ clients carries dozens
+  // of tasks per client (monthly filings, creatives, renewals, reviews,
+  // done-this-quarter history). The mock data seeds only a handful of
+  // explicitly-tracked tasks per client, so we pad each card with a
+  // deterministic baseline derived from the client id — Overdue low,
+  // Pending mid-teens, Done in the twenties — producing realistic
+  // "heavy" stats without generating 500+ Task records.
   const clientCardStats = useMemo(() => {
     if (!selectedProject) return [];
     return localClientGroups
       .filter(g => g.projectId === selectedProject.id)
       .map((group, gi) => {
         const groupTasks = tasks.filter(t => t.clientGroupId === group.id);
-        const completed = groupTasks.filter(t => t.status === 'Completed').length;
-        const total = groupTasks.length;
-        const overdue = groupTasks.filter(t => t.dueDateISO < todayISO && t.status !== 'Completed').length;
+        const actualCompleted = groupTasks.filter(t => t.status === 'Completed').length;
+        const actualOverdue   = groupTasks.filter(t => t.dueDateISO < todayISO && t.status !== 'Completed').length;
+        const actualPending   = groupTasks.length - actualCompleted - actualOverdue;
+
+        const isBDT = group.id.startsWith('cg-bdt-');
+        const baseline = clientBaselineCounts(group.id, isBDT);
+
+        const overdue = actualOverdue + baseline.overdue;
+        const pending = Math.max(0, actualPending) + baseline.pending;
+        const completed = actualCompleted + baseline.done;
+        const total = overdue + pending + completed;
+
         const taskAssignees = [...new Map(groupTasks.map(t => [t.assignedTo.initials, t.assignedTo])).values()];
         // Ensure 10+ members per card by filling from teamMembers roster
         const seen = new Set(taskAssignees.map(a => a.initials));
         const extra = teamMembers.filter(m => !seen.has(m.initials));
-        const offset = (gi * 3) % extra.length;
+        const offset = extra.length > 0 ? (gi * 3) % extra.length : 0;
         const needed = Math.max(0, 11 - taskAssignees.length);
         const filler = [...extra.slice(offset), ...extra.slice(0, offset)].slice(0, needed);
         const assignees = [...taskAssignees, ...filler];
-        return { ...group, total, completed, overdue, assignees };
+        return { ...group, total, completed, overdue, pending, assignees };
       });
   }, [selectedProject, localClientGroups, tasks, todayISO]);
 
-  // Render a single task row (extracted for reuse in grouped rendering)
-  const renderTaskRow = (task: Task) => {
-    const pc = priorityConfig[task.priority];
-    const isOverdue = task.dueDateISO < todayISO && task.status !== 'Completed';
-    const isCompleted = task.status === 'Completed';
-
-    return (
-      <div
-        key={task.id}
-        role="listitem"
-        draggable
-        onDragStart={() => setDragTaskId(task.id)}
-        onDragOver={(e) => { e.preventDefault(); setDragOverTaskId(task.id); }}
-        onDragEnd={() => {
-          if (dragTaskId && dragOverTaskId && dragTaskId !== dragOverTaskId) {
-            setTasks(prev => {
-              const updated = [...prev];
-              const from = updated.findIndex(t => t.id === dragTaskId);
-              const to = updated.findIndex(t => t.id === dragOverTaskId);
-              if (from === -1 || to === -1) return prev;
-              const [moved] = updated.splice(from, 1);
-              updated.splice(to, 0, moved);
-              return updated;
-            });
-          }
-          setDragTaskId(null);
-          setDragOverTaskId(null);
-        }}
-        className={`group/row flex items-start gap-3 px-5 py-5 transition-all cursor-pointer select-none border-l-[3px] ${
-          dragTaskId === task.id
-            ? 'opacity-40 scale-[0.99]'
-            : dragOverTaskId === task.id
-              ? 'bg-[#EEF1FB]/40 border-t-2 border-t-[#204CC7]/20'
-              : 'hover:bg-[#FAFBFF]'
-        }`}
-        style={{ borderLeftColor: isCompleted ? '#D4D4D8' : selectedProject?.color || '#999', cursor: 'grab' }}
-        onClick={() => setSelectedTask(task)}
-      >
-        {/* Drag Handle */}
-        <div className="flex-shrink-0 mt-1 opacity-0 group-hover/row:opacity-100 transition-opacity cursor-grab active:cursor-grabbing" aria-hidden="true">
-          <GripVertical className="w-4 h-4 text-black/20" />
-        </div>
-
-        {/* Checkbox */}
-        <button
-          onClick={e => { e.stopPropagation(); toggleTaskComplete(task.id); }}
-          className="flex-shrink-0 mt-0.5"
-          aria-label={isCompleted ? `Mark "${task.title}" as incomplete` : `Mark "${task.title}" as complete`}
-          aria-pressed={isCompleted}
-        >
-          {isCompleted ? (
-            <CheckCircle2 className="w-[20px] h-[20px] text-emerald-500 fill-emerald-500" />
-          ) : (
-            <Circle className="w-[20px] h-[20px] text-black/25 group-hover/row:text-[#204CC7]/50 transition-colors" />
-          )}
-        </button>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <p className={`text-body font-medium leading-snug mb-2 ${isCompleted ? 'line-through text-muted-fg' : 'text-foreground'}`}>
-            {task.title}
-          </p>
-          <div className="flex items-center gap-3 text-caption text-muted-fg flex-wrap">
-            <span className="font-medium">by {task.assignedBy.name}</span>
-            <span className="flex items-center gap-1.5 font-medium">
-              <span className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0" style={{ backgroundColor: task.assignedTo.color }} title={task.assignedTo.name}>{task.assignedTo.initials}</span>
-              {task.assignedTo.name}
-            </span>
-            <span className={`flex items-center gap-1 font-medium ${isOverdue ? 'text-red-600' : ''}`}>
-              <Calendar className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
-              <time dateTime={task.dueDateISO}>{task.dueDate}</time>
-              {isOverdue && <span aria-hidden="true"> (overdue)</span>}
-            </span>
-          </div>
-        </div>
-
-        {/* Right: Comments + Priority */}
-        <div className="flex items-center gap-3 flex-shrink-0 mt-0.5">
-          {task.comments > 0 && (
-            <span className="flex items-center gap-1 text-caption text-muted-fg" aria-label={`${task.comments} comments`}>
-              <MessageSquare className="w-3.5 h-3.5" aria-hidden="true" />{task.comments}
-            </span>
-          )}
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-caption font-semibold ${pc.bg} ${pc.text}`} aria-label={`Priority ${pc.label}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${pc.dot}`} aria-hidden="true" />{pc.label}
-          </span>
-        </div>
-      </div>
-    );
-  };
+  // Render a single task row — delegates to the shared TaskListRow so
+  // every Workspace view uses the same Basecamp-inspired layout. Drag-
+  // and-drop is preserved via the optional props on TaskListRow.
+  const renderTaskRow = (task: Task) => (
+    <TaskListRow
+      key={task.id}
+      task={task}
+      accentColor={selectedProject?.color}
+      onToggle={() => toggleTaskComplete(task.id)}
+      onOpen={() => setSelectedTask(task)}
+      draggable
+      isDragging={dragTaskId === task.id}
+      isDragTarget={dragOverTaskId === task.id}
+      onDragStart={() => setDragTaskId(task.id)}
+      onDragOver={(e) => { e.preventDefault(); setDragOverTaskId(task.id); }}
+      onDragEnd={() => {
+        if (dragTaskId && dragOverTaskId && dragTaskId !== dragOverTaskId) {
+          setTasks(prev => {
+            const updated = [...prev];
+            const from = updated.findIndex(t => t.id === dragTaskId);
+            const to = updated.findIndex(t => t.id === dragOverTaskId);
+            if (from === -1 || to === -1) return prev;
+            const [moved] = updated.splice(from, 1);
+            updated.splice(to, 0, moved);
+            return updated;
+          });
+        }
+        setDragTaskId(null);
+        setDragOverTaskId(null);
+      }}
+    />
+  );
 
   // Schedule mock data
   const mockSchedule = [
@@ -891,9 +740,9 @@ export function TaskManagement({ onBack }: TaskManagementProps) {
           })}
         </div>
 
-        {/* Bottom: My Assignments + Schedule */}
+        {/* Bottom: My Tasks + Schedule */}
         <div className="grid grid-cols-[1fr_340px] gap-5" style={{ maxHeight: '520px' }}>
-          <div className="bg-white rounded-xl border border-black/[0.06] overflow-hidden flex flex-col max-h-[520px]" role="region" aria-label="My Assignments">
+          <div className="bg-white rounded-xl border border-black/[0.06] overflow-hidden flex flex-col max-h-[520px]" role="region" aria-label="My Tasks">
             {/* Header */}
             {(() => {
               const displayTasks = assignmentFilter === 'today' ? todayTasks : thisWeekTasks;
@@ -901,7 +750,7 @@ export function TaskManagement({ onBack }: TaskManagementProps) {
               return (<>
             <div className="flex items-center justify-between px-6 py-4 border-b border-black/[0.05]">
               <div className="flex items-center gap-3">
-                <h2 className="text-h3 font-bold text-foreground">My Assignments</h2>
+                <h2 className="text-h3 font-bold text-foreground">My Tasks</h2>
                 <span className="min-w-[24px] h-6 px-1.5 bg-black/[0.05] rounded-md text-caption font-semibold text-muted-fg flex items-center justify-center" aria-label={`${displayCount} tasks`}>{displayCount}</span>
               </div>
               <div className="flex items-center gap-1.5" role="tablist" aria-label="Filter by time">
@@ -931,9 +780,9 @@ export function TaskManagement({ onBack }: TaskManagementProps) {
                 </button>
                 <div className="w-px h-5 bg-black/10 mx-1" aria-hidden="true" />
                 <button
-                  onClick={() => router.push('/workspace/task-management/my-assignments')}
+                  onClick={() => router.push(WORKSPACE_ROUTES.myTasks)}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-caption font-semibold text-[#204CC7] hover:bg-[#EEF1FB] transition-all"
-                  aria-label="See all assignments"
+                  aria-label="See all tasks"
                 >
                   See all <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
                 </button>
@@ -941,7 +790,7 @@ export function TaskManagement({ onBack }: TaskManagementProps) {
             </div>
 
             {/* Task Rows */}
-            <div className="divide-y divide-black/[0.04] flex-1 overflow-y-auto" role="list" aria-label="Assignment list">
+            <div className="divide-y divide-black/[0.04] flex-1 overflow-y-auto" role="list" aria-label="Task list">
               {displayTasks.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center px-6">
                   <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center mb-2.5">
@@ -964,7 +813,7 @@ export function TaskManagement({ onBack }: TaskManagementProps) {
                     key={task.id}
                     role="listitem"
                     className="group flex items-start gap-3.5 px-6 py-4 hover:bg-[#FAFBFF] transition-all cursor-pointer"
-                    onClick={() => router.push('/workspace/task-management/my-assignments')}
+                    onClick={() => router.push(WORKSPACE_ROUTES.myTasks)}
                   >
                     {/* Checkbox */}
                     <button
@@ -974,7 +823,7 @@ export function TaskManagement({ onBack }: TaskManagementProps) {
                       aria-pressed={isCompleted}
                     >
                       {isCompleted ? (
-                        <CheckCircle2 className="w-[18px] h-[18px] text-emerald-500 fill-emerald-500" />
+                        <CompletedCheck />
                       ) : (
                         <Circle className="w-[18px] h-[18px] text-black/25 group-hover:text-[#204CC7]/50 transition-colors" />
                       )}
@@ -1016,10 +865,10 @@ export function TaskManagement({ onBack }: TaskManagementProps) {
             {displayTasks.length > 5 && (
               <div className="px-6 py-3.5 border-t border-black/[0.05]">
                 <button
-                  onClick={() => router.push('/workspace/task-management/my-assignments')}
+                  onClick={() => router.push(WORKSPACE_ROUTES.myTasks)}
                   className="w-full text-center text-caption font-semibold text-[#204CC7] hover:text-[#1a3fa8] transition-colors"
                 >
-                  View all {displayCount} assignments →
+                  View all {displayCount} tasks →
                 </button>
               </div>
             )}
@@ -1143,7 +992,14 @@ export function TaskManagement({ onBack }: TaskManagementProps) {
     const projectTaskCount = tasks.filter(t => t.projectId === selectedProject.id).length;
     const projectCompletedCount = tasks.filter(t => t.projectId === selectedProject.id && t.status === 'Completed').length;
     const projectOverdueCount = tasks.filter(t => t.projectId === selectedProject.id && t.dueDateISO < todayISO && t.status !== 'Completed').length;
-    const filteredClients = clientCardStats.filter(c => clientSearch === '' || c.name.toLowerCase().includes(clientSearch.toLowerCase()));
+    // Hide the Brego Delivery Team card from the workspace client grid.
+    // The group itself stays in `localClientGroups` so the
+    // `?group=cg-bdt-at` deep link from the A&T Deliverables home tab
+    // still resolves and lands on its task list — but the card no
+    // longer takes up real estate alongside actual client groups.
+    const filteredClients = clientCardStats
+      .filter(c => !c.id.startsWith('cg-bdt-'))
+      .filter(c => clientSearch === '' || c.name.toLowerCase().includes(clientSearch.toLowerCase()));
 
     return (
       <div className="-mx-8 -mt-6">
@@ -1152,9 +1008,15 @@ export function TaskManagement({ onBack }: TaskManagementProps) {
           <div className="px-6 py-4">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 flex-shrink-0">
-                <button onClick={() => { setCurrentView('overview'); setSelectedProject(null); }} className="p-2 hover:bg-black/[0.04] rounded-xl transition-colors active:scale-95" aria-label="Back to Task Management">
-                  <ChevronLeft className="w-5 h-5 text-black/60" />
-                </button>
+                {/* Back to overview — only rendered when this page is the
+                    3-project overview host. When `initialProjectId` is
+                    set (A&T or SEM workspace tabs) there's no overview
+                    to return to, so the button is suppressed. */}
+                {!initialProjectId && (
+                  <button onClick={() => { setCurrentView('overview'); setSelectedProject(null); }} className="p-2 hover:bg-black/[0.04] rounded-xl transition-colors active:scale-95" aria-label="Back to Task Management">
+                    <ChevronLeft className="w-5 h-5 text-black/60" />
+                  </button>
+                )}
                 <h1 className="text-black/90 text-h2 font-bold">{selectedProject.name}</h1>
               </div>
 
@@ -1191,13 +1053,12 @@ export function TaskManagement({ onBack }: TaskManagementProps) {
               <p className="text-caption text-muted-fg mt-1">Try a different search or create a new group</p>
             </div>
           ) : (() => {
-            const sortedClients = [...filteredClients].sort((a, b) => a.id.startsWith('cg-bdt-') ? -1 : b.id.startsWith('cg-bdt-') ? 1 : 0);
+            // BDT is filtered out above, so no need to pin it; the grid
+            // simply shows client groups in their natural order.
             return (
               <div className="grid grid-cols-2 gap-5">
-                {sortedClients.map(client => {
+                {filteredClients.map(client => {
                   const isBDT = client.id.startsWith('cg-bdt-');
-                  const inProgress = client.total - client.completed - client.overdue;
-                  const pending = client.total - client.completed - inProgress - client.overdue;
                   return (
                     <div
                       key={client.id}
@@ -1246,17 +1107,18 @@ export function TaskManagement({ onBack }: TaskManagementProps) {
                         <span className={`text-caption font-medium ${isBDT ? 'text-[#204CC7]/50' : 'text-black/55'}`}>{client.assignees.length} member{client.assignees.length !== 1 ? 's' : ''}</span>
                       </div>
 
-                      {/* Stats row */}
+                      {/* Stats row — three tiers (Overdue · Pending · Done)
+                          with heavy numbers. Overdue/Done punch colour only
+                          when non-zero so calm clients read calm. */}
                       <div className={`flex pt-4 border-t ${isBDT ? 'border-[#204CC7]/8' : 'border-black/[0.04]'}`}>
                         {[
-                          { val: client.overdue, label: 'Overdue', color: 'text-red-600' },
-                          { val: inProgress, label: 'In Progress', color: 'text-amber-600' },
-                          { val: pending >= 0 ? pending : 0, label: 'Pending', color: 'text-black/65' },
-                          { val: client.completed, label: 'Done', color: 'text-emerald-600' },
+                          { val: client.overdue,   label: 'Overdue', color: client.overdue > 0 ? 'text-rose-600'     : 'text-black/35' },
+                          { val: client.pending,   label: 'Pending', color: client.pending > 0 ? 'text-amber-700'    : 'text-black/35' },
+                          { val: client.completed, label: 'Done',    color: 'text-emerald-700' },
                         ].map((s, i) => (
                           <div key={s.label} className={`flex-1 text-center ${i > 0 ? (isBDT ? 'border-l border-[#204CC7]/8' : 'border-l border-black/[0.04]') : ''}`}>
-                            <div className={`text-h3 font-bold ${s.color}`}>{s.val}</div>
-                            <div className="text-black/55 text-micro mt-[2px]">{s.label}</div>
+                            <div className={`text-h2 font-bold tabular-nums leading-none ${s.color}`}>{s.val}</div>
+                            <div className="text-black/60 text-caption font-medium mt-1.5">{s.label}</div>
                           </div>
                         ))}
                       </div>
@@ -1289,15 +1151,162 @@ export function TaskManagement({ onBack }: TaskManagementProps) {
 
   // ── Client To-Do List View (Level 3) ──
   if (currentView === 'clientTodoList' && selectedProject) {
+    // Embedded mode (deep-linked from the A&T Deliverables home tab)
+    // shows a single-row top bar that mirrors the Overdue items
+    // screen on Deliverables — sticky white strip, ArrowLeft in a
+    // 9×9 button, h3 title with inline count, and h-9 filter
+    // controls (Search · Status · Priority · Assigned · Clear · Add).
+    // Workspace mode keeps the richer two-row chrome with team
+    // avatars + progress bar + collapsible filter panel.
+    const isEmbedded = !!initialClientGroupId;
+    const titleText = selectedClientGroup?.name || selectedProject.name;
     return (
       <div className="-mx-8 -mt-6">
         {/* ═══ STICKY TOP BAR ═══ */}
-        <div className="sticky -top-6 z-30 bg-white border-b border-black/5">
+        <div className={isEmbedded
+          ? 'bg-white border-b border-black/5 sticky top-0 z-30 px-6'
+          : 'sticky -top-6 z-30 bg-white border-b border-black/5'
+        }>
+          {isEmbedded ? (
+            /* ── Embedded chrome: matches OverdueView ── */
+            <div className="flex items-center justify-between gap-3 py-3 flex-wrap">
+
+              {/* Left cluster: Back · Title with inline count */}
+              <div className="flex items-center gap-3 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => onBack?.()}
+                  aria-label="Back to Recurring Checklist"
+                  title="Back to Recurring Checklist"
+                  className="w-9 h-9 rounded-md hover:bg-black/[0.05] flex items-center justify-center text-black/65 hover:text-black/85 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7] focus-visible:ring-offset-1 shrink-0"
+                >
+                  <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+                </button>
+                <h1 className="text-black/90 text-h3 font-bold truncate">
+                  {titleText}
+                  <span className="text-black/55 font-normal ml-1.5">· {projectTasks.length} {projectTasks.length === 1 ? 'task' : 'tasks'}</span>
+                </h1>
+              </div>
+
+              {/* Right cluster: filters · clear · add — all h-9 so the row reads as one strip */}
+              <div className="flex items-center gap-2 min-w-0">
+
+                {/* Search */}
+                <div className="relative w-[240px]">
+                  <Search className="w-3.5 h-3.5 text-black/45 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
+                  <label htmlFor="team-search" className="sr-only">Search tasks</label>
+                  <input
+                    id="team-search"
+                    type="text"
+                    placeholder="Search tasks…"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full h-9 pl-7 pr-7 rounded-md border border-black/10 bg-white text-caption placeholder:text-black/40 outline-none focus:border-[#204CC7]/30 focus:ring-2 focus:ring-[#204CC7]/20 transition-all"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-black/5"
+                      aria-label="Clear search"
+                    >
+                      <X className="w-3 h-3 text-black/45 hover:text-black/70" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Status dropdown */}
+                <div className="relative">
+                  <label htmlFor="team-status-filter" className="sr-only">Filter by status</label>
+                  <select
+                    id="team-status-filter"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="appearance-none bg-white pl-3 pr-8 h-9 rounded-md text-caption font-medium text-black/70 border border-black/10 hover:border-black/20 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7]/30 transition-all cursor-pointer"
+                  >
+                    <option value="All">All status</option>
+                    <option value="Pending">Pending</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-black/55 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
+                </div>
+
+                {/* Priority dropdown */}
+                <div className="relative">
+                  <label htmlFor="team-priority-filter" className="sr-only">Filter by priority</label>
+                  <select
+                    id="team-priority-filter"
+                    value={priorityFilter}
+                    onChange={(e) => setPriorityFilter(e.target.value)}
+                    className="appearance-none bg-white pl-3 pr-8 h-9 rounded-md text-caption font-medium text-black/70 border border-black/10 hover:border-black/20 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7]/30 transition-all cursor-pointer"
+                  >
+                    <option value="All">All priority</option>
+                    <option value="P1">P1 — Urgent</option>
+                    <option value="P2">P2 — High</option>
+                    <option value="P3">P3 — Normal</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-black/55 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
+                </div>
+
+                {/* Assigned dropdown */}
+                <div className="relative">
+                  <label htmlFor="team-assigned-filter" className="sr-only">Filter by assigner</label>
+                  <select
+                    id="team-assigned-filter"
+                    value={assignedByFilter}
+                    onChange={(e) => setAssignedByFilter(e.target.value)}
+                    className="appearance-none bg-white pl-3 pr-8 h-9 rounded-md text-caption font-medium text-black/70 border border-black/10 hover:border-black/20 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7]/30 transition-all cursor-pointer"
+                  >
+                    <option value="All">All assigned</option>
+                    <option value="You">By you</option>
+                    <option value="Others">By others</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-black/55 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
+                </div>
+
+                {/* Clear chip — visible only when ≥1 filter is set */}
+                {(clientActiveFilterCount > 0 || searchQuery.trim()) && (
+                  <button
+                    type="button"
+                    onClick={() => { setSearchQuery(''); setStatusFilter('All'); setPriorityFilter('All'); setAssignedByFilter('All'); setQuickFilter('all'); }}
+                    className="inline-flex items-center gap-1 h-9 px-3 rounded-md text-caption font-medium text-rose-700 hover:bg-rose-50 transition-colors"
+                    aria-label="Clear all filters"
+                  >
+                    <X className="w-3 h-3" aria-hidden="true" /> Clear
+                  </button>
+                )}
+
+                <div className="w-px h-5 bg-black/10 mx-0.5" aria-hidden="true" />
+
+                {/* Add To-Do — primary CTA, anchors the right edge */}
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(true)}
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-[#204CC7] text-white text-caption font-medium hover:bg-[#1a3d9f] focus:outline-none focus:ring-2 focus:ring-[#204CC7]/40 transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                  Add To-Do
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* ── Workspace chrome: existing two-cluster layout with avatars + progress + collapsible filters ── */
+            <>
           {/* Primary row: Back + Title | Search + Filter + Add To-Do */}
           <div className="px-6 py-4">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4 flex-shrink-0">
-                <button onClick={() => { setCurrentView('serviceClients'); setSelectedClientGroup(null); setClientGroupFilter('All'); setShowFilters(false); }} className="p-2 hover:bg-black/[0.04] rounded-xl transition-colors active:scale-95" aria-label="Back to client list">
+                <button
+                  onClick={() => {
+                    setCurrentView('serviceClients');
+                    setSelectedClientGroup(null);
+                    setClientGroupFilter('All');
+                    setShowFilters(false);
+                  }}
+                  className="p-2 hover:bg-black/[0.04] rounded-xl transition-colors active:scale-95"
+                  aria-label="Back to client list"
+                >
                   <ChevronLeft className="w-5 h-5 text-black/60" />
                 </button>
                 <h1 className="text-black/90 text-h2 font-bold">{selectedClientGroup?.name || selectedProject.name}</h1>
@@ -1365,9 +1374,13 @@ export function TaskManagement({ onBack }: TaskManagementProps) {
               </div>
             </div>
           </div>
+            </>
+          )}
 
-          {/* Collapsible filter panel — single row */}
-          {showFilters && (() => {
+          {/* Collapsible filter panel — workspace mode only. The
+              embedded mode renders all filters inline on the top
+              row above, so the panel below is suppressed. */}
+          {!isEmbedded && showFilters && (() => {
             const scopedTasks = tasks.filter(t => t.projectId === selectedProject.id && (clientGroupFilter === 'All' || t.clientGroupId === clientGroupFilter));
             const scopedTotal = scopedTasks.length;
             const scopedOverdue = scopedTasks.filter(t => t.dueDateISO < todayISO && t.status !== 'Completed').length;

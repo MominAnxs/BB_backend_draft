@@ -1,11 +1,12 @@
 'use client';
 import { useState, useMemo, Fragment } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   ChevronLeft, ChevronRight, Plus, Search, Clock,
   CheckCircle2, Circle, AlertCircle, LayoutGrid, Filter,
   X, MoreVertical, FolderPlus, ChevronDown, FileText
 } from 'lucide-react';
+import { TaskListRow } from './shared/TaskListRow';
+import { TaskDetailPanel } from './shared/TaskDetailPanel';
 
 // ─────────────────────────────────────────
 //  Types
@@ -40,6 +41,8 @@ interface Task {
   dueDateISO: string;
   assignedTo: TeamMember;
   assignedBy: TeamMember;
+  /** Additional collaborators on the task beyond assignedTo. */
+  coAssignees?: TeamMember[];
   groupId: string;
 }
 
@@ -107,11 +110,24 @@ const initialGroups: Group[] = [
 
 const todayISO = '2026-03-27';
 
+// Deterministic baseline task counts per department. Padded on top of
+// the actual tracked tasks so cards reflect each department's real
+// workload (monthly SOPs, accumulated Done history, in-flight work)
+// rather than just the handful seeded in initialTasks.
+function departmentBaselineCounts(groupId: string): { overdue: number; pending: number; done: number } {
+  const hash = groupId.split('').reduce((s, c) => s + c.charCodeAt(0), 0);
+  return {
+    overdue: hash % 3,            // 0–2
+    pending: 6 + (hash % 9),      // 6–14
+    done:    14 + (hash % 16),    // 14–29
+  };
+}
+
 const initialTasks: Task[] = [
   // Operations & Finance
   { id: 'bf1', title: 'Reconcile Q4 expense reports and flag discrepancies', status: 'In Progress', priority: 'P1', dueDate: 'Mon, 24 Mar', dueDateISO: '2026-03-24', assignedTo: teamRoster[3], assignedBy: teamRoster[0], groupId: 'ops-finance' },
   { id: 'bf2', title: 'Finalise Q1 hiring pipeline and schedule interviews', status: 'Pending', priority: 'P2', dueDate: 'Thu, 27 Mar', dueDateISO: '2026-03-27', assignedTo: teamRoster[1], assignedBy: teamRoster[0], groupId: 'ops-finance' },
-  { id: 'bf3', title: 'Prepare resource allocation plan for Q2', status: 'Pending', priority: 'P1', dueDate: 'Mon, 31 Mar', dueDateISO: '2026-03-31', assignedTo: teamRoster[2], assignedBy: teamRoster[0], groupId: 'ops-finance' },
+  { id: 'bf3', title: 'Prepare resource allocation plan for Q2', status: 'Pending', priority: 'P1', dueDate: 'Mon, 31 Mar', dueDateISO: '2026-03-31', assignedTo: teamRoster[2], assignedBy: teamRoster[0], coAssignees: [teamRoster[3], teamRoster[1]], groupId: 'ops-finance' },
   { id: 'bf4', title: 'Update client onboarding SOP with new compliance checklist', status: 'In Progress', priority: 'P2', dueDate: 'Tue, 1 Apr', dueDateISO: '2026-04-01', assignedTo: teamRoster[0], assignedBy: teamRoster[0], groupId: 'ops-finance' },
   { id: 'bf5', title: 'Complete monthly payroll processing for March', status: 'Completed', priority: 'P1', dueDate: 'Mon, 24 Mar', dueDateISO: '2026-03-24', assignedTo: teamRoster[3], assignedBy: teamRoster[0], groupId: 'ops-finance' },
   { id: 'bf6', title: 'File GST returns for March billing cycle', status: 'Pending', priority: 'P1', dueDate: 'Fri, 28 Mar', dueDateISO: '2026-03-28', assignedTo: teamRoster[3], assignedBy: teamRoster[0], groupId: 'ops-finance' },
@@ -119,19 +135,19 @@ const initialTasks: Task[] = [
   // Sales
   { id: 'bs1', title: 'Follow up with Alpine Group for Q2 contract renewal', status: 'Pending', priority: 'P1', dueDate: 'Fri, 28 Mar', dueDateISO: '2026-03-28', assignedTo: teamRoster[4], assignedBy: teamRoster[0], groupId: 'sales' },
   { id: 'bs2', title: 'Review Q1 sales pipeline and update CRM records', status: 'Pending', priority: 'P2', dueDate: 'Fri, 28 Mar', dueDateISO: '2026-03-28', assignedTo: teamRoster[5], assignedBy: teamRoster[4], groupId: 'sales' },
-  { id: 'bs3', title: 'Prepare proposal deck for RetailMax partnership', status: 'In Progress', priority: 'P1', dueDate: 'Wed, 26 Mar', dueDateISO: '2026-03-26', assignedTo: teamRoster[6], assignedBy: teamRoster[4], groupId: 'sales' },
+  { id: 'bs3', title: 'Prepare proposal deck for RetailMax partnership', status: 'In Progress', priority: 'P1', dueDate: 'Wed, 26 Mar', dueDateISO: '2026-03-26', assignedTo: teamRoster[6], assignedBy: teamRoster[4], coAssignees: [teamRoster[5]], groupId: 'sales' },
   { id: 'bs4', title: 'Conduct discovery call with NovaTech prospects', status: 'Completed', priority: 'P2', dueDate: 'Tue, 25 Mar', dueDateISO: '2026-03-25', assignedTo: teamRoster[4], assignedBy: teamRoster[0], groupId: 'sales' },
   { id: 'bs5', title: 'Send revised SOW to CloudFirst Technologies', status: 'Pending', priority: 'P2', dueDate: 'Mon, 31 Mar', dueDateISO: '2026-03-31', assignedTo: teamRoster[5], assignedBy: teamRoster[4], groupId: 'sales' },
 
   // Marketing
-  { id: 'bm1', title: 'Launch Q2 social media content calendar', status: 'In Progress', priority: 'P1', dueDate: 'Fri, 28 Mar', dueDateISO: '2026-03-28', assignedTo: teamRoster[8], assignedBy: teamRoster[7], groupId: 'marketing' },
+  { id: 'bm1', title: 'Launch Q2 social media content calendar', status: 'In Progress', priority: 'P1', dueDate: 'Fri, 28 Mar', dueDateISO: '2026-03-28', assignedTo: teamRoster[8], assignedBy: teamRoster[7], coAssignees: [teamRoster[17]], groupId: 'marketing' },
   { id: 'bm2', title: 'Design updated brand guidelines deck for client pitches', status: 'Pending', priority: 'P2', dueDate: 'Mon, 31 Mar', dueDateISO: '2026-03-31', assignedTo: teamRoster[7], assignedBy: teamRoster[0], groupId: 'marketing' },
   { id: 'bm3', title: 'Write case studies for top 3 Q1 client wins', status: 'Pending', priority: 'P2', dueDate: 'Wed, 2 Apr', dueDateISO: '2026-04-02', assignedTo: teamRoster[8], assignedBy: teamRoster[7], groupId: 'marketing' },
   { id: 'bm4', title: 'Set up email drip campaign for new leads', status: 'Completed', priority: 'P1', dueDate: 'Mon, 24 Mar', dueDateISO: '2026-03-24', assignedTo: teamRoster[7], assignedBy: teamRoster[0], groupId: 'marketing' },
 
   // Technology
   { id: 'bt1', title: 'Deploy updated client portal to staging environment', status: 'In Progress', priority: 'P1', dueDate: 'Wed, 26 Mar', dueDateISO: '2026-03-26', assignedTo: teamRoster[10], assignedBy: teamRoster[9], groupId: 'technology' },
-  { id: 'bt2', title: 'Conduct security audit for production infrastructure', status: 'Pending', priority: 'P1', dueDate: 'Wed, 2 Apr', dueDateISO: '2026-04-02', assignedTo: teamRoster[9], assignedBy: teamRoster[0], groupId: 'technology' },
+  { id: 'bt2', title: 'Conduct security audit for production infrastructure', status: 'Pending', priority: 'P1', dueDate: 'Wed, 2 Apr', dueDateISO: '2026-04-02', assignedTo: teamRoster[9], assignedBy: teamRoster[0], coAssignees: [teamRoster[10], teamRoster[12]], groupId: 'technology' },
   { id: 'bt3', title: 'Design onboarding flow wireframes for new portal', status: 'Completed', priority: 'P3', dueDate: 'Sun, 22 Mar', dueDateISO: '2026-03-22', assignedTo: teamRoster[11], assignedBy: teamRoster[9], groupId: 'technology' },
   { id: 'bt4', title: 'Fix critical bug in invoice generation module', status: 'Pending', priority: 'P1', dueDate: 'Thu, 27 Mar', dueDateISO: '2026-03-27', assignedTo: teamRoster[10], assignedBy: teamRoster[9], groupId: 'technology' },
   { id: 'bt5', title: 'Write integration tests for billing API endpoints', status: 'Pending', priority: 'P2', dueDate: 'Fri, 28 Mar', dueDateISO: '2026-03-28', assignedTo: teamRoster[12], assignedBy: teamRoster[9], groupId: 'technology' },
@@ -201,8 +217,6 @@ interface BregoGroupDetailProps {
 }
 
 export function BregoGroupDetail({ onBack }: BregoGroupDetailProps) {
-  const router = useRouter();
-
   // State
   const [view, setView] = useState<View>('groups');
   const [groups, setGroups] = useState<Group[]>(initialGroups);
@@ -217,27 +231,30 @@ export function BregoGroupDetail({ onBack }: BregoGroupDetailProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [showNewGroupModal, setShowNewGroupModal] = useState(false);
   const [showAddTodoModal, setShowAddTodoModal] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   // ── Derived data ──
+  // Internal departments (Ops/Finance · Sales · Marketing · Technology)
+  // carry a mix of explicitly-tracked tasks plus a deterministic
+  // baseline of accumulated Done history + in-flight Pending so the
+  // cards reflect the realistic scale of each department's workload,
+  // not just the handful of tasks seeded in initialTasks.
   const getGroupStats = (groupId: string) => {
     const groupTasks = tasks.filter(t => t.groupId === groupId);
+    const actualCompleted = groupTasks.filter(t => t.status === 'Completed').length;
+    const actualOverdue   = groupTasks.filter(t => t.dueDateISO < todayISO && t.status !== 'Completed').length;
+    const actualPending   = groupTasks.filter(t => t.status === 'Pending' || t.status === 'In Progress').length - actualOverdue;
+    const baseline = departmentBaselineCounts(groupId);
+    const overdue = actualOverdue + baseline.overdue;
+    const pending = Math.max(0, actualPending) + baseline.pending;
+    const completed = actualCompleted + baseline.done;
     return {
-      total: groupTasks.length,
-      completed: groupTasks.filter(t => t.status === 'Completed').length,
-      inProgress: groupTasks.filter(t => t.status === 'In Progress').length,
-      overdue: groupTasks.filter(t => t.dueDateISO < todayISO && t.status !== 'Completed').length,
-      pending: groupTasks.filter(t => t.status === 'Pending').length,
+      total: overdue + pending + completed,
+      completed,
+      overdue,
+      pending,
     };
   };
-
-  const totalStats = useMemo(() => {
-    return {
-      total: tasks.length,
-      completed: tasks.filter(t => t.status === 'Completed').length,
-      inProgress: tasks.filter(t => t.status === 'In Progress').length,
-      overdue: tasks.filter(t => t.dueDateISO < todayISO && t.status !== 'Completed').length,
-    };
-  }, [tasks]);
 
   // ── Group detail tasks (filtered) ──
   const filteredTasks = useMemo(() => {
@@ -306,25 +323,17 @@ export function BregoGroupDetail({ onBack }: BregoGroupDetailProps) {
   if (view === 'groups') {
     return (
       <div className="-mx-8 -mt-6">
-        {/* ═══ STICKY TOP BAR — consistent with A&T / PM ═══ */}
+        {/* ═══ STICKY TOP BAR — Brego Group is the workspace default, so
+             no breadcrumb or back button. Just the title + search + New
+             Group CTA. ═══ */}
         <div className="sticky -top-6 z-30 bg-white border-b border-black/5">
-          {/* Breadcrumb */}
-          <div className="px-8 pt-5 pb-0">
-            <nav className="flex items-center gap-1.5 text-caption text-muted-fg" aria-label="Breadcrumb">
-              <button onClick={() => onBack ? onBack() : router.push('/workspace/task-management')} className="hover:text-[#204CC7] transition-colors font-medium">Task Management</button>
-              <ChevronRight className="w-3 h-3 text-black/25" />
-              <span className="text-foreground font-semibold">Brego Group</span>
-            </nav>
-          </div>
-
-          {/* Row 1: Back + Title | Search + Status + CTA */}
           <div className="px-6 py-4">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 flex-shrink-0">
-                <button onClick={() => onBack ? onBack() : router.push('/workspace/task-management')} className="p-2 hover:bg-black/[0.04] rounded-xl transition-colors active:scale-95" aria-label="Back to Task Management">
-                  <ChevronLeft className="w-5 h-5 text-black/60" />
-                </button>
                 <h1 className="text-black/90 text-h2 font-bold">Brego Group</h1>
+                <span className="text-caption text-black/55">
+                  {groups.length} {groups.length === 1 ? 'department' : 'departments'} · internal delivery
+                </span>
               </div>
 
               <div className="flex items-center gap-2.5">
@@ -352,8 +361,8 @@ export function BregoGroupDetail({ onBack }: BregoGroupDetailProps) {
           </div>
         </div>
 
-        {/* Group Cards */}
-        <div className="p-8 grid grid-cols-2 gap-5">
+        {/* ═══ Internal Department Widgets ═══ */}
+        <div className="px-8 pt-8 pb-4 grid grid-cols-2 gap-5">
           {groups.map(group => {
             const stats = getGroupStats(group.id);
             const pct = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
@@ -384,17 +393,18 @@ export function BregoGroupDetail({ onBack }: BregoGroupDetailProps) {
                   <span className="text-caption text-black/55 font-medium">{group.team.length} member{group.team.length !== 1 ? 's' : ''}</span>
                 </div>
 
-                {/* Stats row */}
+                {/* Stats row — three tiers (Overdue · Pending · Done) with
+                    calm heavy numbers. Overdue/Pending dim to grey when
+                    zero so a healthy department reads healthy. */}
                 <div className="flex pt-4 border-t border-black/[0.04]">
                   {[
-                    { val: stats.overdue, label: 'Overdue', color: 'text-red-600' },
-                    { val: stats.inProgress, label: 'In Progress', color: 'text-amber-600' },
-                    { val: stats.pending, label: 'Pending', color: 'text-black/65' },
-                    { val: stats.completed, label: 'Done', color: 'text-emerald-600' },
+                    { val: stats.overdue,   label: 'Overdue', color: stats.overdue > 0 ? 'text-rose-600'  : 'text-black/35' },
+                    { val: stats.pending,   label: 'Pending', color: stats.pending > 0 ? 'text-amber-700' : 'text-black/35' },
+                    { val: stats.completed, label: 'Done',    color: 'text-emerald-700' },
                   ].map((s, i) => (
                     <div key={s.label} className={`flex-1 text-center ${i > 0 ? 'border-l border-black/[0.04]' : ''}`}>
-                      <div className={`text-h3 font-bold ${s.color}`}>{s.val}</div>
-                      <div className="text-black/55 text-micro mt-[2px]">{s.label}</div>
+                      <div className={`text-h2 font-bold tabular-nums leading-none ${s.color}`}>{s.val}</div>
+                      <div className="text-black/60 text-caption font-medium mt-1.5">{s.label}</div>
                     </div>
                   ))}
                 </div>
@@ -572,7 +582,7 @@ export function BregoGroupDetail({ onBack }: BregoGroupDetailProps) {
         <div className="mx-8 mt-5 bg-white rounded-xl border border-black/[0.06] overflow-hidden">
 
           {/* Task List */}
-          <div>
+          <div role="list" aria-label={`${selectedGroup?.name ?? ''} tasks`} className="divide-y divide-black/[0.04]">
             {filteredTasks.length === 0 ? (
               <div className="px-5 py-12 text-center">
                 <Search className="w-10 h-10 text-black/10 mx-auto mb-3" />
@@ -580,64 +590,15 @@ export function BregoGroupDetail({ onBack }: BregoGroupDetailProps) {
                 <p className="text-caption text-black/55">Try a different filter or add a new to-do</p>
               </div>
             ) : (
-              filteredTasks.map(task => {
-                const isOverdue = task.dueDateISO < todayISO && task.status !== 'Completed';
-                const isDone = task.status === 'Completed';
-                const prio = prioConfig[task.priority];
-
-                return (
-                  <div
-                    key={task.id}
-                    className="flex items-center gap-3 px-5 py-3.5 border-b border-black/[0.04] last:border-b-0 hover:bg-black/[0.015] transition-colors group/row"
-                  >
-                    {/* Checkbox */}
-                    <button
-                      onClick={() => toggleTask(task.id)}
-                      className={`w-[18px] h-[18px] rounded-full border-[1.5px] flex items-center justify-center flex-shrink-0 transition-all ${
-                        isDone ? 'bg-emerald-500 border-emerald-500' : 'border-black/15 hover:border-[#204CC7]'
-                      }`}
-                      aria-label={isDone ? 'Mark as incomplete' : 'Mark as complete'}
-                    >
-                      {isDone && (
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                      )}
-                    </button>
-
-                    {/* Task content */}
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-body leading-snug mb-0.5 ${isDone ? 'line-through text-black/30' : 'text-black/85 font-medium'}`}>
-                        {task.title}
-                      </p>
-                      <div className="flex items-center gap-2 text-micro">
-                        <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-500 font-bold' : isDone ? 'text-black/30' : 'text-black/55'}`}>
-                          <Clock className="w-[10px] h-[10px]" />
-                          {task.dueDate}
-                          {isOverdue && ' (overdue)'}
-                        </span>
-                        <span className="text-black/15">·</span>
-                        <span className="text-black/55">by {task.assignedBy.name}</span>
-                      </div>
-                    </div>
-
-                    {/* Right side */}
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      {/* Priority */}
-                      <div className={`flex items-center gap-1 text-micro font-bold ${prio.text}`}>
-                        <span className={`w-[5px] h-[5px] rounded-full ${prio.dot}`} />
-                        {task.priority}
-                      </div>
-                      {/* Assignee */}
-                      <div
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-white text-micro font-bold"
-                        style={{ backgroundColor: task.assignedTo.color }}
-                        title={task.assignedTo.name}
-                      >
-                        {task.assignedTo.initials}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
+              filteredTasks.map(task => (
+                <TaskListRow
+                  key={task.id}
+                  task={task}
+                  accentColor={selectedGroup?.color}
+                  onToggle={() => toggleTask(task.id)}
+                  onOpen={() => setSelectedTask(task)}
+                />
+              ))
             )}
           </div>
         </div>
@@ -662,6 +623,22 @@ export function BregoGroupDetail({ onBack }: BregoGroupDetailProps) {
               };
               setTasks(prev => [...prev, newTask]);
               setShowAddTodoModal(false);
+            }}
+          />
+        )}
+
+        {/* Task detail drawer — shared with My Tasks + client-group
+            todo view, so rows open the same panel everywhere. */}
+        {selectedTask && selectedGroup && (
+          <TaskDetailPanel
+            task={selectedTask}
+            project={{ name: selectedGroup.name, color: selectedGroup.color }}
+            onClose={() => setSelectedTask(null)}
+            onToggle={() => {
+              toggleTask(selectedTask.id);
+              setSelectedTask(prev => prev
+                ? { ...prev, status: prev.status === 'Completed' ? 'Pending' : 'Completed' as TaskStatus }
+                : prev);
             }}
           />
         )}
@@ -739,7 +716,7 @@ function NewGroupModal({ onClose, onCreate }: {
           <button
             onClick={() => name.trim() && onCreate(name.trim(), tagline.trim(), color)}
             disabled={!name.trim()}
-            className="px-4 py-2 bg-[#204CC7] text-white text-caption font-semibold rounded-lg hover:bg-[#1a3fa8] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-[#204CC7] text-white text-caption font-semibold rounded-md hover:bg-[#1a3fa8] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Create Group
           </button>

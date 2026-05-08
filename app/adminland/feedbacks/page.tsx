@@ -1,10 +1,7 @@
-import { Suspense } from 'react';
-import FeedbacksPage from './FeedbacksPage';
+import { redirect } from 'next/navigation';
+import { SUPER_ADMIN_HOME_ROUTES } from '@/lib/super-admin-home-routes';
 
-export default function Page() {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <FeedbacksPage />
-    </Suspense>
-  );
+// Legacy alias — Feedbacks moved to the Home Customers tab.
+export default function FeedbacksPage() {
+  redirect(SUPER_ADMIN_HOME_ROUTES.customers.feedbacks);
 }

@@ -235,7 +235,7 @@ export function CLAReport() {
                         : 'bg-[#06B6D4]/10 text-[#06B6D4] border-[#06B6D4]/20'
                     }`}>
                       <div className={`w-1.5 h-1.5 rounded-full ${c.service === 'Performance Marketing' ? 'bg-[#7C3AED]' : 'bg-[#06B6D4]'}`} />
-                      {c.service === 'Performance Marketing' ? 'PM' : 'A&T'}
+                      {c.service === 'Performance Marketing' ? 'SEM' : 'A&T'}
                     </span>
                   </td>
                   <td className="px-5 py-3.5">

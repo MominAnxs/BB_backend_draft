@@ -1,7 +1,7 @@
 'use client';
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { MessageSquare, Search, Filter, Eye, X, Calendar, Building2, Star, ThumbsUp, ThumbsDown, User, Check, ChevronDown, ChevronUp, ChevronRight, ArrowUpDown, Clock, CheckCircle2, AlertTriangle, TrendingUp, TrendingDown, Shield, Minus, BarChart3 } from 'lucide-react';
+import { useModalA11y } from '@/lib/use-modal-a11y';
+import { MessageSquare, Search, Filter, Eye, X, Calendar, Building2, Star, ThumbsUp, ThumbsDown, User, Check, ChevronDown, ChevronUp, ChevronRight, ArrowUpDown, Clock, CheckCircle2, AlertTriangle, AlertCircle, TrendingUp, TrendingDown, Shield, Minus, BarChart3 } from 'lucide-react';
 
 // ── Types ──
 interface Feedback {
@@ -109,7 +109,7 @@ function formatCurrency(num: number): string {
 // ── Realistic Brego Mock Data ──
 const initialFeedbacks: Feedback[] = [
   // ── MONTHLY REVIEWS (March 2026) ──
-  { id: 'FB-001', date: '2026-03-30', type: 'Monthly', period: 'March 2026', clientName: 'Zenith Retail Pvt Ltd', service: 'Performance Marketing', accountManager: 'Priya Sharma', rating: 5, sentiment: 'Positive', trend: 'Improving', category: 'Strategy', feedback: 'Outstanding month. The Meta Ads restructuring delivered ROAS of 4.8x — up from 3.2x last month. The new audience segmentation strategy is working beautifully. This is exactly the kind of proactive optimization we expect.', status: 'Closed', actionTaken: 'Documented as case study. Strategy shared with entire PM team. Client offered premium tier upgrade.', responseDays: 0 },
+  { id: 'FB-001', date: '2026-03-30', type: 'Monthly', period: 'March 2026', clientName: 'Zenith Retail Pvt Ltd', service: 'Performance Marketing', accountManager: 'Priya Sharma', rating: 5, sentiment: 'Positive', trend: 'Improving', category: 'Strategy', feedback: 'Outstanding month. The Meta Ads restructuring delivered ROAS of 4.8x — up from 3.2x last month. The new audience segmentation strategy is working beautifully. This is exactly the kind of proactive optimization we expect.', status: 'Closed', actionTaken: 'Documented as case study. Strategy shared with entire SEM team. Client offered premium tier upgrade.', responseDays: 0 },
   { id: 'FB-002', date: '2026-03-30', type: 'Monthly', period: 'March 2026', clientName: 'Meridian Healthcare', service: 'Accounts & Taxation', accountManager: 'Rohan Desai', rating: 2, sentiment: 'Negative', trend: 'Declining', category: 'Timeliness', feedback: 'Third month in a row where GST filing was delayed. February had a 4-day delay, March had 2-day delay. While improving, this is still unacceptable for a healthcare company where compliance penalties directly affect our licenses.', status: 'Action Taken', actionTaken: 'Dedicated A&T executive assigned. 5-day advance deadline set internally. Weekly compliance checklist implemented. Manager call completed with client.', responseDays: 1 },
   { id: 'FB-003', date: '2026-03-29', type: 'Monthly', period: 'March 2026', clientName: 'NovaTech Solutions', service: 'Accounts & Taxation', accountManager: 'Rohan Desai', rating: 4, sentiment: 'Positive', trend: 'Improving', category: 'Service Quality', feedback: 'Consistent quality with ITR and GST filings. The tax-saving recommendations saved us ₹4.2L this financial year. Response time has improved a lot compared to last month — queries now answered within 24 hours.', status: 'Closed', actionTaken: 'Response SLA set to 24 hours and being met. Client thanked for continued trust.', responseDays: 0 },
   { id: 'FB-004', date: '2026-03-28', type: 'Monthly', period: 'March 2026', clientName: 'Bloom Botanics', service: 'Performance Marketing', accountManager: 'Sneha Patel', rating: 1, sentiment: 'Negative', trend: 'Declining', category: 'Service Quality', feedback: 'February was bad, March was worse. Campaign creatives still have quality issues — wrong product images used twice, copy had brand name misspelled. We spent ₹2.8L on ads with zero conversions this month. Considering terminating the contract.', status: 'New' },
@@ -121,7 +121,7 @@ const initialFeedbacks: Feedback[] = [
   // ── WEEKLY PULSE CHECKS ──
   { id: 'FB-009', date: '2026-03-28', type: 'Weekly', period: 'Week 13 · Mar 2026', clientName: 'UrbanNest Realty', service: 'Performance Marketing', accountManager: 'Akshay Mehta', rating: 3, sentiment: 'Neutral', trend: 'Stable', category: 'Communication', feedback: 'Still no proactive updates this week. Had to call twice to get campaign status. Numbers look decent but the communication gap is frustrating.', status: 'Acknowledged', responseDays: 2 },
   { id: 'FB-010', date: '2026-03-28', type: 'Weekly', period: 'Week 13 · Mar 2026', clientName: 'FreshBite Foods', service: 'Performance Marketing', accountManager: 'Priya Sharma', rating: 4, sentiment: 'Positive', trend: 'Improving', category: 'Value for Money', feedback: 'Great week. CAC dropped from ₹110 to ₹95 after the funnel optimization. The new video ad creative is performing 30% better than static. Keep pushing this format.', status: 'Closed', actionTaken: 'Noted creative preference. Scaling video ads to 60% of budget.', responseDays: 0 },
-  { id: 'FB-011', date: '2026-03-28', type: 'Weekly', period: 'Week 13 · Mar 2026', clientName: 'Metro Logistics', service: 'Performance Marketing', accountManager: 'Akshay Mehta', rating: 2, sentiment: 'Negative', trend: 'Declining', category: 'Communication', feedback: 'Called 3 times this week. One call returned after 6 hours. The other two — no callback at all. This has been escalated internally on our side.', status: 'Action Taken', actionTaken: 'Escalated to PM Head. Akshay put on performance improvement plan. Client given direct line to team lead. Same-day callback SLA enforced.', responseDays: 0 },
+  { id: 'FB-011', date: '2026-03-28', type: 'Weekly', period: 'Week 13 · Mar 2026', clientName: 'Metro Logistics', service: 'Performance Marketing', accountManager: 'Akshay Mehta', rating: 2, sentiment: 'Negative', trend: 'Declining', category: 'Communication', feedback: 'Called 3 times this week. One call returned after 6 hours. The other two — no callback at all. This has been escalated internally on our side.', status: 'Action Taken', actionTaken: 'Escalated to SEM Head. Akshay put on performance improvement plan. Client given direct line to team lead. Same-day callback SLA enforced.', responseDays: 0 },
   { id: 'FB-012', date: '2026-03-21', type: 'Weekly', period: 'Week 12 · Mar 2026', clientName: 'CloudPeak Technologies', service: 'Performance Marketing', accountManager: 'Akshay Mehta', rating: 4, sentiment: 'Positive', trend: 'Improving', category: 'Reporting', feedback: 'The corrected report looks accurate now. Timezone issue is fully fixed. Quality has really improved this week — appreciate the team taking our concerns seriously.', status: 'Closed', actionTaken: 'QA checklist added before report dispatch. Two-person verification for all client reports.', responseDays: 0 },
   { id: 'FB-013', date: '2026-03-21', type: 'Weekly', period: 'Week 12 · Mar 2026', clientName: 'Orbit Fashion', service: 'Performance Marketing', accountManager: 'Sneha Patel', rating: 4, sentiment: 'Positive', trend: 'Stable', category: 'Strategy', feedback: 'The influencer campaign delivered well this week. 12K engagements from 3 micro-influencers. Good ROI. Continue this approach for April collection launch.', status: 'Closed', actionTaken: 'Influencer roster expanded for April campaign. Budget proposal sent for approval.', responseDays: 0 },
   { id: 'FB-014', date: '2026-03-21', type: 'Weekly', period: 'Week 12 · Mar 2026', clientName: 'Spice Route Exports', service: 'Accounts & Taxation', accountManager: 'Kavita Nair', rating: 4, sentiment: 'Positive', trend: 'Improving', category: 'Reporting', feedback: 'The new simplified monthly summary is much better! Our founders can actually understand the P&L now. Small suggestion — add a cash flow forecast section.', status: 'Action Taken', actionTaken: 'Cash flow forecast template being developed. Will be included from April report onwards.', responseDays: 1 },
@@ -136,7 +136,7 @@ const initialExitFeedbacks: ExitFeedback[] = [
   { id: 'EX-002', date: '2026-03-10', clientName: 'NovaTech Solutions', service: 'Accounts & Taxation', accountManager: 'Rohan Desai', tenure: 8, billingPerMonth: 42000, exitReason: 'Switched to Competitor', overallRating: 2, wouldRecommend: false, feedback: 'While the A&T work was decent, we found a boutique CA firm that specializes in IT companies. They understand our sector better and are 15% cheaper. Brego was good but not specialized enough for our niche. The response times were also slower than expected.', improvementAreas: ['Faster response times on queries', 'Industry-specific expertise development', 'Competitive pricing for early-stage companies'], bestAspect: 'Good foundational accounting practices', recoverable: false, status: 'Closed' },
   { id: 'EX-003', date: '2026-02-28', clientName: 'Bloom Botanics', service: 'Performance Marketing', accountManager: 'Sneha Patel', tenure: 6, billingPerMonth: 65000, exitReason: 'Poor Results', overallRating: 1, wouldRecommend: false, feedback: 'Over 6 months, we spent ₹39L with Brego and got minimal results. The creatives had repeated errors, campaign optimization was slow, and we never hit our ROAS targets. It felt like we were a small account that didn\'t get priority attention. We\'ve decided to switch to a larger, more established agency.', improvementAreas: ['Quality control in creative production', 'Faster optimization cycles', 'Dedicated account management for mid-tier clients', 'Transparent performance tracking'], bestAspect: 'Initial strategy was sound, but execution fell short', recoverable: false, status: 'Action Plan Created' },
   { id: 'EX-004', date: '2026-02-15', clientName: 'Meridian Healthcare', service: 'Accounts & Taxation', accountManager: 'Priya Sharma', tenure: 22, billingPerMonth: 38000, exitReason: 'In-House Team', overallRating: 4, wouldRecommend: true, feedback: 'Brego was excellent — no complaints. After 22 months of successful collaboration, we\'ve decided to hire an in-house Finance Manager. This decision is purely internal restructuring and has nothing to do with Brego\'s performance. You\'ve been a reliable partner and we\'ll reach out if we need support in the future.', improvementAreas: [], bestAspect: 'Reliable, compliant, professional service across 22 months', recoverable: true, status: 'Reviewed' },
-  { id: 'EX-005', date: '2026-03-05', clientName: 'UrbanNest Realty', service: 'Performance Marketing', accountManager: 'Sneha Patel', tenure: 18, billingPerMonth: 120000, exitReason: 'Budget Cuts', overallRating: 4, wouldRecommend: true, feedback: 'The PM work was solid — especially the property launch campaigns. We saw good lead generation for our luxury segment. However, due to the real estate market slowdown, we\'ve decided to reduce marketing spend significantly. We still believe in the partnership and will revisit once market conditions improve in Q4.', improvementAreas: ['More flexible retainer structures for seasonal businesses', 'Advance planning for peak/off-peak periods'], bestAspect: 'Creative excellence and luxury market expertise', recoverable: true, status: 'Pending Review' },
+  { id: 'EX-005', date: '2026-03-05', clientName: 'UrbanNest Realty', service: 'Performance Marketing', accountManager: 'Sneha Patel', tenure: 18, billingPerMonth: 120000, exitReason: 'Budget Cuts', overallRating: 4, wouldRecommend: true, feedback: 'The SEM work was solid — especially the property launch campaigns. We saw good lead generation for our luxury segment. However, due to the real estate market slowdown, we\'ve decided to reduce marketing spend significantly. We still believe in the partnership and will revisit once market conditions improve in Q4.', improvementAreas: ['More flexible retainer structures for seasonal businesses', 'Advance planning for peak/off-peak periods'], bestAspect: 'Creative excellence and luxury market expertise', recoverable: true, status: 'Pending Review' },
   { id: 'EX-006', date: '2026-02-20', clientName: 'FreshBite Foods', service: 'Performance Marketing', accountManager: 'Rohan Desai', tenure: 10, billingPerMonth: 55000, exitReason: 'Switched to Competitor', overallRating: 2, wouldRecommend: false, feedback: 'We moved to a food-specific marketing agency that better understands our sector\'s unique dynamics — seasonality, food trends, influencer partnerships. While Brego was competent in general e-commerce, the food & beverage vertical requires specialized knowledge that we felt was missing.', improvementAreas: ['Vertical-specific expertise and case studies', 'Better understanding of food distribution channels', 'Influencer networks in food industry'], bestAspect: 'Good fundamentals in paid ads management', recoverable: false, status: 'Closed' },
   { id: 'EX-007', date: '2026-01-30', clientName: 'CloudSphere IT', service: 'Accounts & Taxation', accountManager: 'Akshay Mehta', tenure: 4, billingPerMonth: 30000, exitReason: 'Business Closed', overallRating: 3, wouldRecommend: true, feedback: 'We had to shut down operations due to unforeseen circumstances. Brego was supportive during the wind-down process — helped with final tax compliance and statutory clearances. No issues on Brego\'s end. This was purely a business decision on our side.', improvementAreas: [], bestAspect: 'Helpful and cooperative during business closure', recoverable: false, status: 'Closed' },
   { id: 'EX-008', date: '2026-03-08', clientName: 'SparkEdge Media', service: 'Performance Marketing', accountManager: 'Priya Sharma', tenure: 12, billingPerMonth: 95000, exitReason: 'Poor Results', overallRating: 2, wouldRecommend: false, feedback: 'Spent ₹1.14 crore over 12 months and ROAS plateaued at 1.8x from month 3 onwards. No innovation, no new strategy proposals, just running the same campaigns. When we requested optimization, the response was slow. Felt like Brego had deprioritized us. Moved to an agency with proven success in our vertical.', improvementAreas: ['Continuous innovation and testing', 'Proactive strategy updates', 'Better account management', 'Performance guarantees or risk-sharing models'], bestAspect: 'Initial setup and first 2 months of optimization', recoverable: false, status: 'Action Plan Created' },
@@ -155,16 +155,31 @@ function FilterOption<T extends string>({ label, value, selected, onSelect }: { 
 function FeedbackFilterPanel({ filters, onChange, onClose, onReset, activeCount }: { filters: Filters; onChange: (f: Filters) => void; onClose: () => void; onReset: () => void; activeCount: number }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const handleClickOutside = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
   }, [onClose]);
 
   return (
     <div ref={ref} className="absolute right-0 top-full mt-1.5 w-[600px] bg-white border border-black/[0.08] rounded-xl shadow-lg z-30 p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-body font-semibold text-black/80">Filters</h3>
-        {activeCount > 0 && <button onClick={onReset} className="text-caption font-medium text-[#204CC7] hover:underline">Reset all</button>}
+        <div className="flex items-center gap-2">
+          {activeCount > 0 && <button onClick={onReset} className="text-caption font-medium text-[#204CC7] hover:underline">Reset all</button>}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close filters"
+            className="p-1 rounded-md hover:bg-black/[0.04] text-black/55 hover:text-black/80 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/30"
+          >
+            <X className="w-4 h-4" aria-hidden="true" />
+          </button>
+        </div>
       </div>
       <div className="grid grid-cols-3 gap-4">
         {/* Type */}
@@ -235,11 +250,13 @@ function TrendBadge({ trend }: { trend: Feedback['trend'] }) {
 }
 
 // ── Main Component ──
+// The page now renders Exit Feedback only — the prior Feedbacks tab
+// (in-flight ratings + status workflow) has been retired here. The
+// `feedbacks` data, filters, drawer, and helpers are kept around in
+// this file for the moment in case they're needed elsewhere; they're
+// just no longer reachable from the UI. Strip them once we're sure
+// nothing else imports the local helpers.
 export function FeedbackData() {
-  const searchParams = useSearchParams();
-  const tabParam = searchParams?.get('tab') as 'feedbacks' | 'exit' | null;
-
-  const [viewMode, setViewMode] = useState<'feedbacks' | 'exit'>(tabParam === 'exit' ? 'exit' : 'feedbacks');
   const [feedbacks, setFeedbacks] = useState<Feedback[]>(initialFeedbacks);
   const [exitFeedbacks, setExitFeedbacks] = useState<ExitFeedback[]>(initialExitFeedbacks);
 
@@ -256,6 +273,8 @@ export function FeedbackData() {
   const [selectedFeedback, setSelectedFeedback] = useState<Feedback | null>(null);
   const [selectedExitFeedback, setSelectedExitFeedback] = useState<ExitFeedback | null>(null);
   const [showDrawer, setShowDrawer] = useState(false);
+  const feedbackDetailRef = useModalA11y(showDrawer && !!selectedFeedback, () => setShowDrawer(false));
+  const exitFeedbackDetailRef = useModalA11y(showDrawer && !!selectedExitFeedback, () => setShowDrawer(false));
   const [openStatusDropdown, setOpenStatusDropdown] = useState<string | null>(null);
   const [openExitStatusDropdown, setOpenExitStatusDropdown] = useState<string | null>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
@@ -278,6 +297,16 @@ export function FeedbackData() {
   const changeExitStatus = (exitId: string, newStatus: ExitFeedback['status']) => {
     setExitFeedbacks(prev => prev.map(ef => ef.id === exitId ? { ...ef, status: newStatus } : ef));
     setOpenExitStatusDropdown(null);
+  };
+
+  // Recovery Opportunity is admin-editable from both the table pill
+  // and the drawer card. Flips the boolean on the source list and,
+  // if the row is currently open in the drawer, mirrors the flip to
+  // the drawer's local copy so the card and the recovery banner
+  // re-render immediately without a re-open.
+  const toggleRecoverable = (exitId: string) => {
+    setExitFeedbacks(prev => prev.map(ef => ef.id === exitId ? { ...ef, recoverable: !ef.recoverable } : ef));
+    setSelectedExitFeedback(prev => prev && prev.id === exitId ? { ...prev, recoverable: !prev.recoverable } : prev);
   };
 
   const handleSort = (field: SortField) => {
@@ -345,7 +374,6 @@ export function FeedbackData() {
   const improvingCount = filteredFeedbacks.filter(f => f.trend === 'Improving').length;
   const newCount = filteredFeedbacks.filter(f => f.status === 'New').length;
   const unresolvedNegative = filteredFeedbacks.filter(f => f.sentiment === 'Negative' && (f.status === 'New' || f.status === 'Acknowledged'));
-  const decliningClients = [...new Set(filteredFeedbacks.filter(f => f.trend === 'Declining').map(f => f.clientName))];
 
   // ── Exit Feedbacks KPIs ──
   const totalExits = filteredExitFeedbacks.length;
@@ -384,7 +412,7 @@ export function FeedbackData() {
       case 'Closed': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
       case 'Action Plan Created': return 'bg-purple-50 text-purple-700 border-purple-200';
       case 'Reviewed': return 'bg-blue-50 text-blue-700 border-blue-200';
-      case 'Pending Review': return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'Pending Review': return 'bg-rose-50 text-rose-700 border-rose-200';
       default: return 'bg-black/5 text-black/50 border-black/10';
     }
   };
@@ -399,564 +427,99 @@ export function FeedbackData() {
     </div>
   );
 
-  const SortHeader = ({ field, children, className = '' }: { field: SortField; children: React.ReactNode; className?: string }) => (
-    <th className={`px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide cursor-pointer hover:text-black/80 transition-colors select-none ${className}`} onClick={() => handleSort(field)}>
-      <div className="flex items-center gap-1">
-        {children}
-        {sortField === field ? (sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 text-black/25" />}
-      </div>
-    </th>
-  );
+  const SortHeader = ({ field, children, className = '' }: { field: SortField; children: React.ReactNode; className?: string }) => {
+    const isCurrent = sortField === field;
+    const ariaSort = isCurrent ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined;
+    return (
+      <th
+        scope="col"
+        aria-sort={ariaSort}
+        className={`px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide select-none ${className}`}
+      >
+        <button
+          type="button"
+          onClick={() => handleSort(field)}
+          className="inline-flex items-center gap-1 hover:text-black/80 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/30 rounded transition-colors"
+        >
+          {children}
+          {isCurrent ? (sortDir === 'asc' ? <ChevronUp className="w-3 h-3" aria-hidden="true" /> : <ChevronDown className="w-3 h-3" aria-hidden="true" />) : <ArrowUpDown className="w-3 h-3 text-black/30" aria-hidden="true" />}
+        </button>
+      </th>
+    );
+  };
 
-  const ExitSortHeader = ({ field, children, className = '' }: { field: 'date' | 'tenure' | 'clientName' | 'status'; children: React.ReactNode; className?: string }) => (
-    <th className={`px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide cursor-pointer hover:text-black/80 transition-colors select-none ${className}`} onClick={() => handleExitSort(field)}>
-      <div className="flex items-center gap-1">
-        {children}
-        {exitSortField === field ? (exitSortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 text-black/25" />}
-      </div>
-    </th>
-  );
+  const ExitSortHeader = ({ field, children, className = '' }: { field: 'date' | 'tenure' | 'clientName' | 'status'; children: React.ReactNode; className?: string }) => {
+    const isCurrent = exitSortField === field;
+    const ariaSort = isCurrent ? (exitSortDir === 'asc' ? 'ascending' : 'descending') : undefined;
+    return (
+      <th
+        scope="col"
+        aria-sort={ariaSort}
+        className={`px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide select-none ${className}`}
+      >
+        <button
+          type="button"
+          onClick={() => handleExitSort(field)}
+          className="inline-flex items-center gap-1 hover:text-black/80 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/30 rounded transition-colors"
+        >
+          {children}
+          {isCurrent ? (exitSortDir === 'asc' ? <ChevronUp className="w-3 h-3" aria-hidden="true" /> : <ChevronDown className="w-3 h-3" aria-hidden="true" />) : <ArrowUpDown className="w-3 h-3 text-black/30" aria-hidden="true" />}
+        </button>
+      </th>
+    );
+  };
 
   return (
     <div className="space-y-4">
-      {/* Tab System */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="inline-flex items-center bg-black/5 rounded-xl p-0.5">
-          <button onClick={() => setViewMode('feedbacks')} className={`px-4 py-1.5 text-caption font-medium rounded-lg transition-all ${viewMode === 'feedbacks' ? 'bg-white text-black shadow-sm' : 'text-black/65 hover:text-black/70'}`}>
-            Feedbacks
-          </button>
-          <button onClick={() => setViewMode('exit')} className={`px-4 py-1.5 text-caption font-medium rounded-lg transition-all ${viewMode === 'exit' ? 'bg-white text-black shadow-sm' : 'text-black/65 hover:text-black/70'}`}>
-            Exit Feedback
-          </button>
-        </div>
+      {/*
+        Page top bar — bleeds full-width via `-mx-6 -mt-6 px-6 mb-6` to
+        match the chrome on every other Customers sub-page. Title +
+        subtitle anchor the left; Search hangs on the right. The prior
+        Feedbacks ↔ Exit Feedback view toggle is gone — this surface
+        is Exit Feedback only.
+      */}
+      <div className="bg-white border-b border-black/5 sticky top-0 z-10 -mx-6 -mt-6 px-6 mb-6">
+        <div className="flex items-center justify-between py-3 gap-4 flex-wrap">
+          <div className="shrink-0">
+            <p className="text-black/90 text-body font-semibold">Exit Feedback</p>
+            <p className="text-black/60 mt-0.5 text-caption font-normal whitespace-nowrap">Why clients leave — themes, regrets, and what we'd do differently</p>
+          </div>
 
-        {/* Search + Filter (shared position, different per tab) */}
-        {viewMode === 'feedbacks' ? (
-          <div className="flex items-center gap-2">
-            {(filterCount > 0 || searchQuery) && (
-              <span className="text-caption font-medium text-black/40">{filteredFeedbacks.length} of {feedbacks.length} results</span>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {/* Exit Feedback search — single read on this surface now
+                that the in-flight Feedbacks tab is retired. */}
+            {exitSearchQuery && (
+              <span role="status" aria-live="polite" className="text-caption font-medium text-black/45">
+                {filteredExitFeedbacks.length} of {exitFeedbacks.length} results
+              </span>
             )}
 
-            <div className="relative w-56">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-black/35" />
-              <input type="text" placeholder="Search feedback..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-caption border border-black/10 rounded-lg bg-white text-black placeholder:text-black/40 focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all" />
-            </div>
-
-            <div className="relative">
-              <button onClick={() => setShowFilterPanel(!showFilterPanel)}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg transition-all text-caption ${filterCount > 0 ? 'border-[#204CC7]/30 bg-[#204CC7]/[0.04] text-[#204CC7] font-semibold' : 'border-black/10 bg-white text-black/70 hover:bg-black/5'}`}>
-                <Filter className="w-3.5 h-3.5" />
-                <span>Filter</span>
-                {filterCount > 0 && <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-[#204CC7] text-white text-caption font-semibold min-w-[18px] text-center leading-none">{filterCount}</span>}
-              </button>
-              {showFilterPanel && (
-                <FeedbackFilterPanel filters={filters} onChange={setFilters} onClose={() => setShowFilterPanel(false)} onReset={() => setFilters(DEFAULT_FILTERS)} activeCount={filterCount} />
+            <div className="relative w-[240px]">
+              <Search className="w-3.5 h-3.5 text-black/55 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
+              <label htmlFor="exit-feedback-search" className="sr-only">Search exit feedback</label>
+              <input
+                id="exit-feedback-search"
+                type="text"
+                placeholder="Search exits…"
+                value={exitSearchQuery}
+                onChange={e => setExitSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-8 py-1.5 rounded-md border border-black/10 bg-white text-caption placeholder:text-black/55 outline-none focus:border-[#204CC7]/30 focus:ring-2 focus:ring-[#204CC7]/20 transition-all"
+              />
+              {exitSearchQuery && (
+                <button
+                  onClick={() => setExitSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-black/5"
+                  aria-label="Clear search"
+                >
+                  <X className="w-3.5 h-3.5 text-black/60 hover:text-black/70" />
+                </button>
               )}
             </div>
           </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            {exitSearchQuery && (
-              <span className="text-caption font-medium text-black/40">{filteredExitFeedbacks.length} of {exitFeedbacks.length} results</span>
-            )}
-
-            <div className="relative w-56">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-black/35" />
-              <input type="text" placeholder="Search exits..." value={exitSearchQuery} onChange={e => setExitSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-caption border border-black/10 rounded-lg bg-white text-black placeholder:text-black/40 focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all" />
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
-      {/* Feedbacks Tab */}
-      {viewMode === 'feedbacks' && (
-        <>
-          {/* Active Filter Tags */}
-          {filterCount > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-caption font-medium text-black/40">Filtered by:</span>
-              {filters.type !== 'All' && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#204CC7]/[0.06] text-[#204CC7] text-caption font-medium">
-                  {filters.type}
-                  <button onClick={() => setFilters(f => ({ ...f, type: 'All' }))} className="hover:bg-[#204CC7]/10 rounded p-0.5"><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {filters.service !== 'All' && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#204CC7]/[0.06] text-[#204CC7] text-caption font-medium">
-                  {getServiceLabel(filters.service)}
-                  <button onClick={() => setFilters(f => ({ ...f, service: 'All' }))} className="hover:bg-[#204CC7]/10 rounded p-0.5"><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {filters.sentiment !== 'All' && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#204CC7]/[0.06] text-[#204CC7] text-caption font-medium">
-                  {filters.sentiment}
-                  <button onClick={() => setFilters(f => ({ ...f, sentiment: 'All' }))} className="hover:bg-[#204CC7]/10 rounded p-0.5"><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {filters.category !== 'All' && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#204CC7]/[0.06] text-[#204CC7] text-caption font-medium">
-                  {filters.category}
-                  <button onClick={() => setFilters(f => ({ ...f, category: 'All' }))} className="hover:bg-[#204CC7]/10 rounded p-0.5"><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {filters.status !== 'All' && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#204CC7]/[0.06] text-[#204CC7] text-caption font-medium">
-                  {filters.status}
-                  <button onClick={() => setFilters(f => ({ ...f, status: 'All' }))} className="hover:bg-[#204CC7]/10 rounded p-0.5"><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {filters.trend !== 'All' && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#204CC7]/[0.06] text-[#204CC7] text-caption font-medium">
-                  {filters.trend}
-                  <button onClick={() => setFilters(f => ({ ...f, trend: 'All' }))} className="hover:bg-[#204CC7]/10 rounded p-0.5"><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              <button onClick={() => setFilters(DEFAULT_FILTERS)} className="text-caption font-medium text-black/40 hover:text-[#204CC7] transition-colors">Clear all</button>
-            </div>
-          )}
-
-          {/* KPI Widgets */}
-          {(() => {
-            const stableCount = filteredFeedbacks.filter(f => f.trend === 'Stable').length;
-            const needsAttentionCount = unresolvedNegative.length + newCount;
-            const uniqueClients = [...new Set(filteredFeedbacks.map(f => f.clientName))].length;
-            return (
-              <div className="grid grid-cols-4 gap-4">
-                <div className="bg-white border border-black/[0.06] rounded-2xl p-5 flex flex-col gap-4 hover:shadow-sm transition-shadow">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <p className="text-black/50 text-caption font-medium uppercase tracking-wide">Avg. Rating</p>
-                      <div className="flex items-baseline gap-1.5">
-                        <p className={`text-h1 font-bold ${avgRating >= 4 ? 'text-[#00C875]' : avgRating >= 3 ? 'text-[#FDAB3D]' : 'text-[#E2445C]'}`}>{avgRating.toFixed(1)}</p>
-                        <span className="text-black/30 text-caption">/5</span>
-                      </div>
-                    </div>
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${avgRating >= 4 ? 'bg-[#00C875]/[0.08]' : avgRating >= 3 ? 'bg-[#FDAB3D]/[0.08]' : 'bg-[#E2445C]/[0.06]'}`}>
-                      <Star className={`w-5 h-5 ${avgRating >= 4 ? 'text-[#00C875]/70 fill-[#00C875]/70' : avgRating >= 3 ? 'text-[#FDAB3D]/70 fill-[#FDAB3D]/70' : 'text-[#E2445C]/60 fill-[#E2445C]/60'}`} />
-                    </div>
-                  </div>
-                  <p className="text-black/40 text-caption">Across <span className="text-black/60 font-medium">{totalFeedback}</span> feedbacks from <span className="text-black/60 font-medium">{uniqueClients}</span> clients</p>
-                </div>
-
-                <div className="bg-white border border-black/[0.06] rounded-2xl p-5 flex flex-col gap-4 hover:shadow-sm transition-shadow">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <p className="text-black/50 text-caption font-medium uppercase tracking-wide">Client Sentiment</p>
-                      <p className="text-[#00C875] text-h1 font-bold">{totalFeedback > 0 ? Math.round((positiveCount / totalFeedback) * 100) : 0}% <span className="text-caption font-medium text-black/35">happy</span></p>
-                    </div>
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#00C875]/[0.08]">
-                      <ThumbsUp className="w-5 h-5 text-[#00C875]/70" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex h-2 rounded-full overflow-hidden bg-black/[0.04]">
-                      {positiveCount > 0 && <div className="bg-[#00C875]" style={{ width: `${(positiveCount / Math.max(totalFeedback, 1)) * 100}%` }} />}
-                      {neutralCount > 0 && <div className="bg-[#FDAB3D]" style={{ width: `${(neutralCount / Math.max(totalFeedback, 1)) * 100}%` }} />}
-                      {negativeCount > 0 && <div className="bg-[#E2445C]" style={{ width: `${(negativeCount / Math.max(totalFeedback, 1)) * 100}%` }} />}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-black/45 text-caption"><span className="text-[#00C875] font-medium">{positiveCount}</span> happy</span>
-                      <span className="text-black/45 text-caption"><span className="text-[#FDAB3D] font-medium">{neutralCount}</span> neutral</span>
-                      <span className="text-black/45 text-caption"><span className="text-[#E2445C] font-medium">{negativeCount}</span> unhappy</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white border border-black/[0.06] rounded-2xl p-5 flex flex-col gap-4 hover:shadow-sm transition-shadow">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <p className="text-black/50 text-caption font-medium uppercase tracking-wide">Needs Attention</p>
-                      <p className={`text-h1 font-bold ${needsAttentionCount > 0 ? 'text-[#E2445C]' : 'text-[#00C875]'}`}>{needsAttentionCount > 0 ? needsAttentionCount : 'None'}</p>
-                    </div>
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${needsAttentionCount > 0 ? 'bg-[#E2445C]/[0.06]' : 'bg-[#00C875]/[0.08]'}`}>
-                      {needsAttentionCount > 0 ? <AlertTriangle className="w-5 h-5 text-[#E2445C]/60" /> : <CheckCircle2 className="w-5 h-5 text-[#00C875]/70" />}
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    {unresolvedNegative.length > 0 && <p className="text-caption text-[#E2445C]/80"><span className="font-medium">{unresolvedNegative.length}</span> negative feedback unresolved</p>}
-                    {newCount > 0 && <p className="text-caption text-[#FDAB3D]"><span className="font-medium">{newCount}</span> new feedback to review</p>}
-                    {needsAttentionCount === 0 && <p className="text-black/40 text-caption">All feedback has been addressed</p>}
-                  </div>
-                </div>
-
-                <div className="bg-white border border-black/[0.06] rounded-2xl p-5 flex flex-col gap-4 hover:shadow-sm transition-shadow">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <p className="text-black/50 text-caption font-medium uppercase tracking-wide">Trends</p>
-                      <p className={`text-h1 font-bold ${decliningCount > 0 ? 'text-[#E2445C]' : improvingCount > 0 ? 'text-[#00C875]' : 'text-black/70'}`}>
-                        {decliningCount > 0 ? `${decliningCount} Declining` : improvingCount > 0 ? `${improvingCount} Improving` : 'Stable'}
-                      </p>
-                    </div>
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${decliningCount > 0 ? 'bg-[#E2445C]/[0.06]' : 'bg-[#00C875]/[0.08]'}`}>
-                      {decliningCount > 0 ? <TrendingDown className="w-5 h-5 text-[#E2445C]/60" /> : <TrendingUp className="w-5 h-5 text-[#00C875]/70" />}
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex h-2 rounded-full overflow-hidden bg-black/[0.04]">
-                      {improvingCount > 0 && <div className="bg-[#00C875]" style={{ width: `${(improvingCount / Math.max(totalFeedback, 1)) * 100}%` }} />}
-                      {stableCount > 0 && <div className="bg-[#204CC7]/40" style={{ width: `${(stableCount / Math.max(totalFeedback, 1)) * 100}%` }} />}
-                      {decliningCount > 0 && <div className="bg-[#E2445C]" style={{ width: `${(decliningCount / Math.max(totalFeedback, 1)) * 100}%` }} />}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-black/45 text-caption"><span className="text-[#00C875] font-medium">{improvingCount}</span> improving</span>
-                      <span className="text-black/45 text-caption"><span className="text-[#204CC7]/60 font-medium">{stableCount}</span> stable</span>
-                      <span className="text-black/45 text-caption"><span className="text-[#E2445C] font-medium">{decliningCount}</span> declining</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Smart Insights Banner */}
-          {(decliningClients.length > 0 || unresolvedNegative.length > 0) && (
-            <div className="flex gap-3">
-              {decliningClients.length > 0 && (
-                <div className="flex-1 flex items-center gap-3 px-4 py-3 bg-[#E2445C]/[0.04] border border-[#E2445C]/15 rounded-xl">
-                  <div className="w-8 h-8 bg-[#E2445C]/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <TrendingDown className="w-4 h-4 text-[#E2445C]" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[#E2445C] text-caption font-semibold">{decliningClients.length} client{decliningClients.length > 1 ? 's' : ''} showing declining satisfaction</p>
-                    <p className="text-black/50 text-caption font-normal truncate">{decliningClients.join(', ')}</p>
-                  </div>
-                </div>
-              )}
-              {unresolvedNegative.length > 0 && (
-                <div className="flex-1 flex items-center gap-3 px-4 py-3 bg-[#FDAB3D]/[0.06] border border-[#FDAB3D]/20 rounded-xl">
-                  <div className="w-8 h-8 bg-[#FDAB3D]/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <AlertTriangle className="w-4 h-4 text-[#FDAB3D]" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[#FDAB3D] text-caption font-semibold">{unresolvedNegative.length} negative feedback{unresolvedNegative.length > 1 ? 's' : ''} awaiting action</p>
-                    <p className="text-black/50 text-caption font-normal truncate">{unresolvedNegative.map(f => f.clientName).join(', ')}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Feedback Table */}
-          <div className="bg-white border border-black/[0.06] rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-black/[0.06]">
-                    <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide w-16">Type</th>
-                    <SortHeader field="date">Date</SortHeader>
-                    <SortHeader field="clientName">Client</SortHeader>
-                    <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Service</th>
-                    <SortHeader field="rating">Rating</SortHeader>
-                    <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Trend</th>
-                    <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Sentiment</th>
-                    <SortHeader field="status">Status</SortHeader>
-                    <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide w-10"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredFeedbacks.map(fb => (
-                    <tr key={fb.id} className={`border-b border-black/[0.04] last:border-0 hover:bg-black/[0.015] transition-colors ${fb.trend === 'Declining' && (fb.status === 'New' || fb.status === 'Acknowledged') ? 'bg-rose-50/30' : ''}`}>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-0.5 rounded-md text-caption font-medium border ${fb.type === 'Monthly' ? 'bg-[#7C3AED]/[0.06] text-[#7C3AED] border-[#7C3AED]/20' : 'bg-[#06B6D4]/[0.06] text-[#06B6D4] border-[#06B6D4]/20'}`}>
-                          {fb.type === 'Monthly' ? 'M' : 'W'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-black/70 text-caption font-normal">{formatDate(fb.date)}</p>
-                        <p className="text-black/35 text-caption font-normal">{fb.period}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-black/90 text-body font-medium">{fb.clientName}</p>
-                        <p className="text-black/40 text-caption font-normal">{fb.accountManager}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-0.5 rounded-md text-caption font-medium border ${fb.service === 'Performance Marketing' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-cyan-50 text-cyan-700 border-cyan-200'}`}>
-                          {getServiceLabel(fb.service)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          {renderStars(fb.rating, 'w-3 h-3')}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <TrendBadge trend={fb.trend} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-0.5 rounded-md text-caption font-medium border ${getSentimentColor(fb.sentiment)}`}>
-                          {fb.sentiment}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="relative" ref={openStatusDropdown === fb.id ? statusDropdownRef : undefined}>
-                          <button
-                            onClick={e => { e.stopPropagation(); setOpenStatusDropdown(openStatusDropdown === fb.id ? null : fb.id); }}
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all text-caption font-semibold cursor-pointer ${getStatusColor(fb.status)}`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT_COLORS[fb.status]}`} />
-                            {fb.status}
-                            <ChevronRight className={`w-3 h-3 transition-transform ${openStatusDropdown === fb.id ? 'rotate-90' : ''}`} />
-                          </button>
-                          {openStatusDropdown === fb.id && (
-                            <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl shadow-xl border border-black/[0.06] py-1.5 z-[60] min-w-[155px]">
-                              {STATUS_OPTIONS.map(opt => (
-                                <button key={opt} onClick={e => { e.stopPropagation(); changeStatus(fb.id, opt); }}
-                                  className={`w-full px-3 py-1.5 text-left flex items-center gap-2 transition-colors text-caption font-medium ${
-                                    fb.status === opt ? `${getStatusColor(opt)} font-semibold` : 'text-black/70 hover:bg-black/[0.03]'
-                                  }`}>
-                                  <span className={`w-2 h-2 rounded-full ${STATUS_DOT_COLORS[opt]}`} />
-                                  <span className="flex-1 text-left">{opt}</span>
-                                  {fb.status === opt && <CheckCircle2 className="w-3.5 h-3.5" />}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <button onClick={() => { setSelectedFeedback(fb); setShowDrawer(true); }} className="p-1.5 text-[#204CC7] hover:bg-[#204CC7]/10 rounded-lg transition-all">
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {filteredFeedbacks.length === 0 && (
-              <div className="py-16 text-center">
-                <MessageSquare className="w-10 h-10 text-black/10 mx-auto mb-3" />
-                <p className="text-black/50 text-body font-medium">No feedback matches your filters</p>
-                <p className="text-black/35 text-caption font-normal mt-1">Try adjusting your search or filter criteria</p>
-              </div>
-            )}
-          </div>
-
-          {/* Feedback Details Drawer */}
-          {showDrawer && selectedFeedback && (() => {
-            const daysAgo = daysSince(selectedFeedback.date);
-            const isNew = selectedFeedback.status === 'New';
-            const isAcknowledged = selectedFeedback.status === 'Acknowledged';
-            const isActionTaken = selectedFeedback.status === 'Action Taken';
-            const isClosed = selectedFeedback.status === 'Closed';
-            const isNegative = selectedFeedback.sentiment === 'Negative';
-            const isDeclining = selectedFeedback.trend === 'Declining';
-
-            const nextStatus: Feedback['status'] | null = isNew ? 'Acknowledged' : isAcknowledged ? 'Action Taken' : isActionTaken ? 'Closed' : null;
-            const nextLabel = isNew ? 'Acknowledge Feedback' : isAcknowledged ? 'Mark Action Taken' : isActionTaken ? 'Close Feedback' : null;
-            const nextColors = isNew ? 'bg-[#204CC7] hover:bg-[#1a3d9f] text-white' : isAcknowledged ? 'bg-[#FDAB3D] hover:bg-[#e59a2f] text-white' : isActionTaken ? 'bg-[#00C875] hover:bg-[#00a85f] text-white' : '';
-
-            const sentimentHeaderBg = selectedFeedback.sentiment === 'Negative' ? 'bg-[#E2445C]' : selectedFeedback.sentiment === 'Neutral' ? 'bg-[#FDAB3D]' : 'bg-[#00C875]';
-
-            const clientHistory = feedbacks
-              .filter(f => f.clientName === selectedFeedback.clientName && f.id !== selectedFeedback.id)
-              .sort((a, b) => parseDate(b.date).getTime() - parseDate(a.date).getTime())
-              .slice(0, 4);
-
-            return (
-              <div className="fixed inset-0 z-[60] overflow-hidden">
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowDrawer(false)} />
-                <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-white shadow-2xl overflow-hidden">
-                  <div className="h-full flex flex-col">
-                    {/* Header */}
-                    <div className={`${sentimentHeaderBg} px-6 py-5`}>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            <span className="text-white/70 text-caption font-medium bg-white/15 px-2 py-0.5 rounded-md">{selectedFeedback.id}</span>
-                            <span className="text-white/70 text-caption font-medium bg-white/15 px-2 py-0.5 rounded-md">{selectedFeedback.type}</span>
-                            <span className="text-white/70 text-caption font-medium bg-white/15 px-2 py-0.5 rounded-md">{selectedFeedback.rating}/5 ★</span>
-                          </div>
-                          <h2 className="text-white text-h2 font-bold truncate">{selectedFeedback.clientName}</h2>
-                          <p className="text-white/70 text-caption font-normal mt-1">{selectedFeedback.period} · {selectedFeedback.category} · {getServiceLabel(selectedFeedback.service)}</p>
-                        </div>
-                        <button onClick={() => setShowDrawer(false)} className="ml-3 w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center hover:bg-white/30 transition-all flex-shrink-0">
-                          <X className="w-4 h-4 text-white" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Urgency banner */}
-                    {(isNegative || isDeclining) && (isNew || isAcknowledged) && (
-                      <div className="mx-6 mt-4 flex items-center gap-3 px-4 py-3 bg-[#E2445C]/[0.06] border border-[#E2445C]/20 rounded-xl">
-                        <div className="w-8 h-8 bg-[#E2445C]/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                          {isDeclining ? <TrendingDown className="w-4 h-4 text-[#E2445C]" /> : <AlertTriangle className="w-4 h-4 text-[#E2445C]" />}
-                        </div>
-                        <div>
-                          <p className="text-[#E2445C] text-caption font-semibold">
-                            {isDeclining && isNegative ? 'Declining satisfaction + negative feedback' : isDeclining ? 'Client satisfaction is declining' : 'Negative feedback unresolved'}
-                            {' — '}{daysAgo} day{daysAgo !== 1 ? 's' : ''} old
-                          </p>
-                          <p className="text-black/50 text-caption font-normal">{isDeclining ? 'High churn risk — prioritise this client immediately' : 'Delays in response increase churn risk'}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Content */}
-                    <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-                      {/* Status + Trend row */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-white border border-black/[0.06] rounded-xl p-3.5">
-                          <p className="text-black/45 text-caption font-medium mb-1.5">Status</p>
-                          <span className={`inline-flex px-2.5 py-1 rounded-md text-caption font-medium border ${getStatusColor(selectedFeedback.status)}`}>{selectedFeedback.status}</span>
-                        </div>
-                        <div className="bg-white border border-black/[0.06] rounded-xl p-3.5">
-                          <p className="text-black/45 text-caption font-medium mb-1.5">Trend</p>
-                          <TrendBadge trend={selectedFeedback.trend} />
-                        </div>
-                      </div>
-
-                      {/* Feedback text */}
-                      <div className={`rounded-xl p-4 border ${selectedFeedback.sentiment === 'Positive' ? 'bg-emerald-50/50 border-emerald-200/60' : selectedFeedback.sentiment === 'Negative' ? 'bg-rose-50/50 border-rose-200/60' : 'bg-amber-50/50 border-amber-200/60'}`}>
-                        <div className="flex items-center gap-2 mb-2.5">
-                          <MessageSquare className="w-3.5 h-3.5 text-black/50" />
-                          <h3 className="text-black/90 text-body font-semibold">Client&apos;s Words</h3>
-                        </div>
-                        <p className="text-black/70 text-body leading-relaxed italic">&ldquo;{selectedFeedback.feedback}&rdquo;</p>
-                      </div>
-
-                      {/* Details */}
-                      <div className="bg-white border border-black/[0.06] rounded-xl p-4">
-                        <h3 className="text-black/90 text-body font-semibold mb-3.5">Details</h3>
-                        <div className="space-y-3.5">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Building2 className="w-3.5 h-3.5 text-black/35" />
-                              <span className="text-black/50 text-caption font-medium">Client</span>
-                            </div>
-                            <p className="text-black/80 text-body font-medium">{selectedFeedback.clientName}</p>
-                          </div>
-                          <div className="h-px bg-black/[0.04]" />
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Shield className="w-3.5 h-3.5 text-black/35" />
-                              <span className="text-black/50 text-caption font-medium">Service</span>
-                            </div>
-                            <span className={`inline-flex px-2 py-0.5 rounded-md text-caption font-medium border ${selectedFeedback.service === 'Performance Marketing' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-cyan-50 text-cyan-700 border-cyan-200'}`}>
-                              {getServiceLabel(selectedFeedback.service)}
-                            </span>
-                          </div>
-                          <div className="h-px bg-black/[0.04]" />
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <User className="w-3.5 h-3.5 text-black/35" />
-                              <span className="text-black/50 text-caption font-medium">Account Manager</span>
-                            </div>
-                            <p className="text-black/80 text-body font-medium">{selectedFeedback.accountManager}</p>
-                          </div>
-                          <div className="h-px bg-black/[0.04]" />
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Calendar className="w-3.5 h-3.5 text-black/35" />
-                              <span className="text-black/50 text-caption font-medium">Period</span>
-                            </div>
-                            <p className="text-black/80 text-body font-medium">{selectedFeedback.period}</p>
-                          </div>
-                          {selectedFeedback.responseDays !== undefined && (
-                            <>
-                              <div className="h-px bg-black/[0.04]" />
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <Clock className="w-3.5 h-3.5 text-black/35" />
-                                  <span className="text-black/50 text-caption font-medium">Response Time</span>
-                                </div>
-                                <p className={`text-body font-medium ${selectedFeedback.responseDays === 0 ? 'text-[#00C875]' : selectedFeedback.responseDays <= 1 ? 'text-[#FDAB3D]' : 'text-[#E2445C]'}`}>
-                                  {selectedFeedback.responseDays === 0 ? 'Same day' : `${selectedFeedback.responseDays} day${selectedFeedback.responseDays > 1 ? 's' : ''}`}
-                                </p>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Action Taken */}
-                      {selectedFeedback.actionTaken && (
-                        <div className="bg-blue-50/50 border border-blue-200/60 rounded-xl p-4">
-                          <div className="flex items-center gap-2 mb-2.5">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
-                            <h3 className="text-blue-900 text-body font-semibold">Action Taken</h3>
-                          </div>
-                          <p className="text-blue-700/80 text-body leading-relaxed">{selectedFeedback.actionTaken}</p>
-                        </div>
-                      )}
-
-                      {/* Client History */}
-                      {clientHistory.length > 0 && (
-                        <div className="bg-white border border-black/[0.06] rounded-xl p-4">
-                          <div className="flex items-center gap-2 mb-3">
-                            <BarChart3 className="w-3.5 h-3.5 text-[#204CC7]" />
-                            <h3 className="text-black/90 text-body font-semibold">Feedback History</h3>
-                            <span className="text-black/35 text-caption font-normal">({clientHistory.length} previous)</span>
-                          </div>
-                          <div className="space-y-2.5">
-                            {clientHistory.map(h => (
-                              <div key={h.id} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-black/[0.015]">
-                                <span className={`inline-flex px-1.5 py-0.5 rounded text-caption font-medium ${h.type === 'Monthly' ? 'bg-[#7C3AED]/[0.06] text-[#7C3AED]' : 'bg-[#06B6D4]/[0.06] text-[#06B6D4]'}`}>{h.type === 'Monthly' ? 'M' : 'W'}</span>
-                                <span className="text-black/40 text-caption font-normal min-w-[70px]">{formatDate(h.date)}</span>
-                                <div className="flex gap-0.5">{renderStars(h.rating, 'w-2.5 h-2.5')}</div>
-                                <div className="flex-1" />
-                                <TrendBadge trend={h.trend} />
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Footer CTAs */}
-                    <div className="px-6 py-4 border-t border-black/[0.06] space-y-3">
-                      {nextStatus && nextLabel && (
-                        <button
-                          onClick={() => {
-                            changeStatus(selectedFeedback.id, nextStatus);
-                            setSelectedFeedback({ ...selectedFeedback, status: nextStatus });
-                          }}
-                          className={`w-full px-4 py-3 rounded-xl transition-all text-body font-semibold flex items-center justify-center gap-2 ${nextColors}`}
-                        >
-                          {isNew && <Eye className="w-4 h-4" />}
-                          {isAcknowledged && <CheckCircle2 className="w-4 h-4" />}
-                          {isActionTaken && <Check className="w-4 h-4" />}
-                          {nextLabel}
-                        </button>
-                      )}
-
-                      {isClosed && (
-                        <div className="w-full px-4 py-3 rounded-xl bg-[#00C875]/[0.06] text-center">
-                          <p className="text-[#00C875] text-caption font-medium flex items-center justify-center gap-2"><CheckCircle2 className="w-4 h-4" /> Feedback loop closed</p>
-                        </div>
-                      )}
-
-                      <div className="flex gap-2.5">
-                        {isClosed && (
-                          <button
-                            onClick={() => {
-                              changeStatus(selectedFeedback.id, 'Acknowledged');
-                              setSelectedFeedback({ ...selectedFeedback, status: 'Acknowledged' });
-                            }}
-                            className="flex-1 px-3 py-2.5 border border-[#FDAB3D]/30 text-[#FDAB3D] rounded-xl hover:bg-[#FDAB3D]/[0.04] transition-all text-caption font-medium flex items-center justify-center gap-1.5"
-                          >
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                            Reopen
-                          </button>
-                        )}
-                        <button onClick={() => setShowDrawer(false)} className="flex-1 px-3 py-2.5 border border-black/10 text-black/60 rounded-xl hover:bg-black/[0.03] transition-all text-caption font-medium">
-                          {isClosed ? 'Close' : 'Dismiss'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-        </>
-      )}
-
-      {/* Exit Feedback Tab */}
-      {viewMode === 'exit' && (
-        <>
+      {/* Exit Feedback */}
 
           {/* Exit KPI Widgets */}
           <div className="grid grid-cols-4 gap-4">
@@ -974,7 +537,7 @@ export function FeedbackData() {
                   <Star className={`w-5 h-5 ${avgExitRating >= 4 ? 'text-[#00C875]/70 fill-[#00C875]/70' : avgExitRating >= 3 ? 'text-[#FDAB3D]/70 fill-[#FDAB3D]/70' : 'text-[#E2445C]/60 fill-[#E2445C]/60'}`} />
                 </div>
               </div>
-              <p className="text-black/40 text-caption">Average rating across <span className="text-black/60 font-medium">{totalExits}</span> exits</p>
+              <p className="text-black/55 text-caption">Average rating across <span className="text-black/60 font-medium">{totalExits}</span> exits</p>
             </div>
 
             {/* Recoverable */}
@@ -988,7 +551,7 @@ export function FeedbackData() {
                   <TrendingUp className="w-5 h-5 text-[#204CC7]/70" />
                 </div>
               </div>
-              <p className="text-black/40 text-caption">Potential value: <span className="text-black/60 font-medium">{formatCurrency(recoverableValue)}/mo</span></p>
+              <p className="text-black/55 text-caption">Potential value: <span className="text-black/60 font-medium">{formatCurrency(recoverableValue)}/mo</span></p>
             </div>
 
             {/* Top Exit Reason */}
@@ -1002,7 +565,7 @@ export function FeedbackData() {
                   <AlertTriangle className="w-5 h-5 text-[#E2445C]/60" />
                 </div>
               </div>
-              <p className="text-black/40 text-caption">{topExitReason ? topExitReason[0] : 'No exits'}</p>
+              <p className="text-black/55 text-caption">{topExitReason ? topExitReason[0] : 'No exits'}</p>
             </div>
 
             {/* Would Recommend */}
@@ -1016,7 +579,7 @@ export function FeedbackData() {
                   <ThumbsUp className="w-5 h-5 text-[#00C875]/70" />
                 </div>
               </div>
-              <p className="text-black/40 text-caption"><span className="text-black/60 font-medium">{wouldRecommendCount}</span> of {totalExits} clients would recommend</p>
+              <p className="text-black/55 text-caption"><span className="text-black/60 font-medium">{wouldRecommendCount}</span> of {totalExits} clients would recommend</p>
             </div>
           </div>
 
@@ -1033,7 +596,12 @@ export function FeedbackData() {
                     <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Billing / Mo</th>
                     <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Exit Reason</th>
                     <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Rating</th>
-                    <ExitSortHeader field="status">Status</ExitSortHeader>
+                    <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide">Recovery</th>
+                    {/* Status column intentionally removed — the
+                        review-status workflow (Pending → Reviewed →
+                        Action Plan → Closed) is now handled inside
+                        the detail drawer only, keeping the exit
+                        table as a clean read of who left and why. */}
                     <th className="px-4 py-3 text-left text-black/55 text-caption font-semibold uppercase tracking-wide w-10"></th>
                   </tr>
                 </thead>
@@ -1045,7 +613,7 @@ export function FeedbackData() {
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-black/90 text-body font-medium">{ef.clientName}</p>
-                        <p className="text-black/40 text-caption font-normal">{ef.accountManager}</p>
+                        <p className="text-black/55 text-caption font-normal">{ef.accountManager}</p>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex px-2 py-0.5 rounded-md text-caption font-medium border ${ef.service === 'Performance Marketing' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-cyan-50 text-cyan-700 border-cyan-200'}`}>
@@ -1069,33 +637,33 @@ export function FeedbackData() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="relative" ref={openExitStatusDropdown === ef.id ? exitStatusDropdownRef : undefined}>
-                          <button
-                            onClick={e => { e.stopPropagation(); setOpenExitStatusDropdown(openExitStatusDropdown === ef.id ? null : ef.id); }}
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all text-caption font-semibold cursor-pointer ${getExitStatusColor(ef.status)}`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full ${EXIT_STATUS_DOT_COLORS[ef.status]}`} />
-                            {ef.status === 'Pending Review' ? 'Pending' : ef.status}
-                            <ChevronRight className={`w-3 h-3 transition-transform ${openExitStatusDropdown === ef.id ? 'rotate-90' : ''}`} />
-                          </button>
-                          {openExitStatusDropdown === ef.id && (
-                            <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl shadow-xl border border-black/[0.06] py-1.5 z-[60] min-w-[180px]">
-                              {EXIT_STATUS_OPTIONS.map(opt => (
-                                <button key={opt} onClick={e => { e.stopPropagation(); changeExitStatus(ef.id, opt); }}
-                                  className={`w-full px-3 py-1.5 text-left flex items-center gap-2 transition-colors text-caption font-medium ${
-                                    ef.status === opt ? `${getExitStatusColor(opt)} font-semibold` : 'text-black/70 hover:bg-black/[0.03]'
-                                  }`}>
-                                  <span className={`w-2 h-2 rounded-full ${EXIT_STATUS_DOT_COLORS[opt]}`} />
-                                  <span className="flex-1 text-left">{opt === 'Pending Review' ? 'Pending' : opt}</span>
-                                  {ef.status === opt && <CheckCircle2 className="w-3.5 h-3.5" />}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                        {/* Recovery — admin-editable. Click toggles the
+                            boolean on this row; e.stopPropagation keeps
+                            the click from also opening the row's
+                            detail drawer. The trailing chevron is the
+                            interactive affordance — without it the
+                            pill reads as static text and admins miss
+                            that it can be flipped. The same chevron
+                            pattern is used for the inline status
+                            dropdowns elsewhere in this surface. */}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); toggleRecoverable(ef.id); }}
+                          aria-label={`Recovery opportunity for ${ef.clientName}: currently ${ef.recoverable ? 'Yes' : 'No'} — click to toggle`}
+                          aria-pressed={ef.recoverable}
+                          className={`inline-flex items-center gap-1.5 pl-2 pr-1.5 py-0.5 rounded-md text-caption font-medium border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30 ${
+                            ef.recoverable
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                              : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${ef.recoverable ? 'bg-emerald-500' : 'bg-slate-400'}`} aria-hidden="true" />
+                          {ef.recoverable ? 'Yes' : 'No'}
+                          <ChevronRight className={`w-3 h-3 ${ef.recoverable ? 'text-emerald-500/70' : 'text-slate-400'}`} aria-hidden="true" />
+                        </button>
                       </td>
                       <td className="px-4 py-3">
-                        <button onClick={() => { setSelectedExitFeedback(ef); setShowDrawer(true); }} className="p-1.5 text-[#204CC7] hover:bg-[#204CC7]/10 rounded-lg transition-all">
+                        <button aria-label={`View ${ef.clientName} exit feedback details`} onClick={() => { setSelectedExitFeedback(ef); setShowDrawer(true); }} className="p-1.5 text-[#204CC7] hover:bg-[#204CC7]/10 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-[#204CC7]/30">
                           <Eye className="w-3.5 h-3.5" />
                         </button>
                       </td>
@@ -1136,22 +704,35 @@ export function FeedbackData() {
 
             return (
               <div className="fixed inset-0 z-[60] overflow-hidden">
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowDrawer(false)} />
-                <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-white shadow-2xl overflow-hidden">
+                <div aria-hidden="true" className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowDrawer(false)} />
+                <div
+                  ref={exitFeedbackDetailRef}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="exit-feedback-detail-title"
+                  tabIndex={-1}
+                  // Bumped from max-w-xl (576px) → max-w-3xl (768px)
+                  // for parity with the relationship drawer; the
+                  // dense exit-detail content (Why They Left, What
+                  // Could Be Better, What They Liked Most, Details
+                  // strip) reads better with editorial breathing room
+                  // than at the previous 576px width.
+                  className="fixed right-0 top-0 h-full w-full max-w-3xl bg-white shadow-2xl overflow-hidden focus:outline-none"
+                >
                   <div className="h-full flex flex-col">
                     {/* Header */}
                     <div className={`${reasonColors[selectedExitFeedback.exitReason]} px-6 py-5`}>
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            <span className="text-white/70 text-caption font-medium bg-white/15 px-2 py-0.5 rounded-md">{selectedExitFeedback.id}</span>
-                            <span className="text-white/70 text-caption font-medium bg-white/15 px-2 py-0.5 rounded-md">{selectedExitFeedback.exitReason}</span>
-                            <span className="text-white/70 text-caption font-medium bg-white/15 px-2 py-0.5 rounded-md">{selectedExitFeedback.overallRating}/5 ★</span>
+                            <span className="text-white/85 text-caption font-medium bg-white/15 px-2 py-0.5 rounded-md">{selectedExitFeedback.id}</span>
+                            <span className="text-white/85 text-caption font-medium bg-white/15 px-2 py-0.5 rounded-md">{selectedExitFeedback.exitReason}</span>
+                            <span className="text-white/85 text-caption font-medium bg-white/15 px-2 py-0.5 rounded-md">{selectedExitFeedback.overallRating}/5 ★</span>
                           </div>
-                          <h2 className="text-white text-h2 font-bold truncate">{selectedExitFeedback.clientName}</h2>
-                          <p className="text-white/70 text-caption font-normal mt-1">{formatDate(selectedExitFeedback.date)} · {selectedExitFeedback.tenure} months tenure · {getServiceLabel(selectedExitFeedback.service)}</p>
+                          <h2 id="exit-feedback-detail-title" className="text-white text-h2 font-bold truncate">{selectedExitFeedback.clientName}</h2>
+                          <p className="text-white/85 text-caption font-normal mt-1">{formatDate(selectedExitFeedback.date)} · {selectedExitFeedback.tenure} months tenure · {getServiceLabel(selectedExitFeedback.service)}</p>
                         </div>
-                        <button onClick={() => setShowDrawer(false)} className="ml-3 w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center hover:bg-white/30 transition-all flex-shrink-0">
+                        <button aria-label="Close exit feedback details" onClick={() => setShowDrawer(false)} className="ml-3 w-8 h-8 bg-white/20 rounded-md flex items-center justify-center hover:bg-white/30 transition-all flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-white/60">
                           <X className="w-4 h-4 text-white" />
                         </button>
                       </div>
@@ -1172,12 +753,14 @@ export function FeedbackData() {
 
                     {/* Content */}
                     <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-                      {/* Status + Recommendation row */}
+                      {/* Top-of-drawer summary — restored 2×2 grid.
+                          Status was removed earlier; the four cards in
+                          this grid are now Recommend / Recovery
+                          Opportunity / Overall Rating / Tenure. The
+                          Recovery card mirrors the table's new
+                          Recovery column so the two surfaces speak
+                          the same vocabulary. */}
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-white border border-black/[0.06] rounded-xl p-3.5">
-                          <p className="text-black/45 text-caption font-medium mb-1.5">Status</p>
-                          <span className={`inline-flex px-2.5 py-1 rounded-md text-caption font-medium border ${getExitStatusColor(selectedExitFeedback.status)}`}>{selectedExitFeedback.status}</span>
-                        </div>
                         <div className="bg-white border border-black/[0.06] rounded-xl p-3.5">
                           <p className="text-black/45 text-caption font-medium mb-1.5">Recommend</p>
                           <div className="flex items-center gap-2">
@@ -1194,9 +777,37 @@ export function FeedbackData() {
                             )}
                           </div>
                         </div>
+                        <div className="bg-white border border-black/[0.06] rounded-xl p-3.5">
+                          <div className="flex items-start justify-between gap-2 mb-1.5">
+                            <p className="text-black/45 text-caption font-medium">Recovery Opportunity</p>
+                            <span className="text-black/30 text-caption font-medium">Click to toggle</span>
+                          </div>
+                          {/* Same admin-editable affordance as the table
+                              column. Toggling here flips the row in the
+                              source list and the drawer's local copy
+                              both — the recovery banner above also
+                              re-renders to match. */}
+                          <button
+                            type="button"
+                            onClick={() => toggleRecoverable(selectedExitFeedback.id)}
+                            aria-label={`Recovery opportunity: currently ${selectedExitFeedback.recoverable ? 'Yes' : 'No'} — click to toggle`}
+                            aria-pressed={selectedExitFeedback.recoverable}
+                            className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-md border text-caption font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/30 ${
+                              selectedExitFeedback.recoverable
+                                ? 'bg-emerald-50 text-[#00C875] border-emerald-200 hover:bg-emerald-100'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {selectedExitFeedback.recoverable ? (
+                              <TrendingUp className="w-4 h-4" aria-hidden="true" />
+                            ) : (
+                              <Minus className="w-4 h-4" aria-hidden="true" />
+                            )}
+                            {selectedExitFeedback.recoverable ? 'Yes' : 'No'}
+                          </button>
+                        </div>
                       </div>
 
-                      {/* Rating + Tenure */}
                       <div className="grid grid-cols-2 gap-3">
                         <div className="bg-white border border-black/[0.06] rounded-xl p-3.5">
                           <p className="text-black/45 text-caption font-medium mb-2">Overall Rating</p>
@@ -1285,31 +896,21 @@ export function FeedbackData() {
                       </div>
                     </div>
 
-                    {/* Footer CTAs */}
-                    <div className="px-6 py-4 border-t border-black/[0.06] space-y-3">
-                      {nextStatus && nextLabel && (
-                        <button
-                          onClick={() => {
-                            changeExitStatus(selectedExitFeedback.id, nextStatus);
-                            setSelectedExitFeedback({ ...selectedExitFeedback, status: nextStatus });
-                          }}
-                          className={`w-full px-4 py-3 rounded-xl transition-all text-body font-semibold flex items-center justify-center gap-2 ${nextColors}`}
-                        >
-                          {isPendingReview && <Eye className="w-4 h-4" />}
-                          {isReviewed && <CheckCircle2 className="w-4 h-4" />}
-                          {isActionPlanCreated && <Check className="w-4 h-4" />}
-                          {nextLabel}
-                        </button>
-                      )}
-
-                      {isClosed && (
-                        <div className="w-full px-4 py-3 rounded-xl bg-[#00C875]/[0.06] text-center">
-                          <p className="text-[#00C875] text-caption font-medium flex items-center justify-center gap-2"><CheckCircle2 className="w-4 h-4" /> Exit processed</p>
-                        </div>
-                      )}
-
-                      <button onClick={() => setShowDrawer(false)} className="w-full px-3 py-2.5 border border-black/10 text-black/60 rounded-xl hover:bg-black/[0.03] transition-all text-caption font-medium">
-                        {isClosed ? 'Close' : 'Dismiss'}
+                    {/* Footer — Dismiss only.
+                        The previous status-progression CTA stack
+                        (Mark Reviewed → Create Action Plan → Close
+                        Exit, plus the terminal "Exit processed"
+                        banner) has been retired alongside the
+                        table's Status column and the in-drawer
+                        Status card. The drawer is now a read-only
+                        detail surface; closing it is the only
+                        action it offers. */}
+                    <div className="px-6 py-4 border-t border-black/[0.06]">
+                      <button
+                        onClick={() => setShowDrawer(false)}
+                        className="w-full px-3 py-2.5 border border-black/10 text-black/60 rounded-xl hover:bg-black/[0.03] transition-all text-caption font-medium"
+                      >
+                        Dismiss
                       </button>
                     </div>
                   </div>
@@ -1317,8 +918,6 @@ export function FeedbackData() {
               </div>
             );
           })()}
-        </>
-      )}
     </div>
   );
 }

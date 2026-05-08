@@ -810,7 +810,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               {/* Right side: New Plan button */}
               <button
                 onClick={createNewPlan}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#204CC7] text-white hover:bg-[#1a3fa8] transition-all active:scale-[0.98] text-caption font-semibold shadow-sm"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-[#204CC7] text-white hover:bg-[#1a3fa8] transition-all active:scale-[0.98] text-caption font-semibold shadow-sm"
               >
                 <Plus className="w-3.5 h-3.5" />
                 New Plan
@@ -825,7 +825,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                 <p className="text-caption text-black/45 mb-4">Create a new plan to get started</p>
                 <button
                   onClick={createNewPlan}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#204CC7] text-white hover:bg-[#1a3fa8] transition-all active:scale-[0.98] text-caption font-semibold"
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-md bg-[#204CC7] text-white hover:bg-[#1a3fa8] transition-all active:scale-[0.98] text-caption font-semibold"
                 >
                   <Plus className="w-4 h-4" />
                   Create Plan
@@ -1083,7 +1083,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                           </div>
                           <button
                             onClick={() => addColumn(group.id)}
-                            className="px-4 py-2 bg-[#204CC7] text-white rounded-xl text-caption font-semibold hover:bg-[#1a3fa8] transition-colors active:scale-[0.98]"
+                            className="px-4 py-2 bg-[#204CC7] text-white rounded-md text-caption font-semibold hover:bg-[#1a3fa8] transition-colors active:scale-[0.98]"
                           >
                             Add
                           </button>

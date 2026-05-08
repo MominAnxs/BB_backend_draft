@@ -14,6 +14,10 @@ export default {
         sans: ["'Manrope'", "-apple-system", "BlinkMacSystemFont", "'Segoe UI'", "sans-serif"],
       },
       fontSize: {
+        // Display sizes — used sparingly for hero headlines inside KPI drawers
+        // and report response panels. Above the standard h1/h2/h3 scale.
+        "display":    ["36px", { lineHeight: "1.0", fontWeight: "700", letterSpacing: "-0.4px" }],
+        "display-sm": ["28px", { lineHeight: "1.1", fontWeight: "700", letterSpacing: "-0.3px" }],
         h1:      ["24px", { lineHeight: "1.2", fontWeight: "700", letterSpacing: "-0.3px" }],
         h2:      ["20px", { lineHeight: "1.3", fontWeight: "700", letterSpacing: "-0.2px" }],
         h3:      ["16px", { lineHeight: "1.4", fontWeight: "600", letterSpacing: "-0.1px" }],

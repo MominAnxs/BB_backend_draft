@@ -329,7 +329,7 @@ export function Employees() {
             <Filter className="w-3.5 h-3.5" />
             <span>Filter</span>
           </button>
-          <button className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#204CC7] text-white rounded-lg hover:bg-[#1a3d9f] transition-all text-caption">
+          <button className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#204CC7] text-white rounded-md hover:bg-[#1a3d9f] transition-all text-caption">
             <UserPlus className="w-3.5 h-3.5" />
             <span>Invite Employee</span>
           </button>

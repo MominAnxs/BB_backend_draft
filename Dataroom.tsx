@@ -10,26 +10,13 @@ import {
   Building2, Megaphone, IndianRupee,
 } from 'lucide-react';
 
+import { allItems, owners, type DriveItem, type FileType } from '@/lib/data/dataroom-data';
+
 /* ═══════════════════════════ Types ═══════════════════════════ */
-type FileType = 'folder' | 'document' | 'spreadsheet' | 'image' | 'pdf' | 'presentation' | 'other';
 type QuickAccess = 'drive' | 'shared' | 'starred' | 'recent' | 'trash';
 type OwnerFilter = 'all' | 'me' | 'brego';
 type SortField = 'name' | 'modified' | 'size';
 type SortDir = 'asc' | 'desc';
-
-interface DriveItem {
-  id: string;
-  name: string;
-  type: FileType;
-  owner: { name: string; initials: string; color: string };
-  modified: string;
-  modifiedISO: string;
-  size: string;
-  sizeBytes: number;
-  starred: boolean;
-  shared: boolean;
-  parentId: string | null;
-}
 
 interface ActivityItem {
   user: string;
@@ -41,15 +28,6 @@ interface ActivityItem {
 }
 
 /* ═══════════════════════════ Constants ═══════════════════════════ */
-const owners = {
-  brego: { name: 'Brego Business', initials: 'B', color: '#204CC7' },
-  tejas: { name: 'Tejas Atha', initials: 'TA', color: '#3B82F6' },
-  chinmay: { name: 'Chinmay Pawar', initials: 'CP', color: '#7C3AED' },
-  zubear: { name: 'Zubear Shaikh', initials: 'ZS', color: '#06B6D4' },
-  mihir: { name: 'Mihir L.', initials: 'ML', color: '#F59E0B' },
-  harshal: { name: 'Harshal R.', initials: 'HR', color: '#10B981' },
-  me: { name: 'You', initials: 'JD', color: '#6366F1' },
-};
 
 /* Root folder accent colours (for sidebar icons) */
 const rootFolderMeta: Record<string, { color: string; icon: React.ComponentType<{ className?: string }> }> = {
@@ -59,90 +37,6 @@ const rootFolderMeta: Record<string, { color: string; icon: React.ComponentType<
 };
 
 /* ═══════════════════════════ Mock Data ═══════════════════════════ */
-const allItems: DriveItem[] = [
-  /* ─────────── ROOT FOLDERS ─────────── */
-  { id: 'root-bg', name: 'Brego Group', type: 'folder', owner: owners.brego, modified: 'Mar 18, 2026', modifiedISO: '2026-03-18', size: '—', sizeBytes: 0, starred: true, shared: true, parentId: null },
-  { id: 'root-pm', name: 'Performance Marketing', type: 'folder', owner: owners.brego, modified: 'Mar 18, 2026', modifiedISO: '2026-03-18', size: '—', sizeBytes: 0, starred: true, shared: true, parentId: null },
-  { id: 'root-fin', name: 'Finance', type: 'folder', owner: owners.brego, modified: 'Mar 18, 2026', modifiedISO: '2026-03-18', size: '—', sizeBytes: 0, starred: true, shared: true, parentId: null },
-
-  /* ═══════ BREGO GROUP (internal) ═══════ */
-  // Level-2 folders
-  { id: 'bg-policies', name: 'Company Policies', type: 'folder', owner: owners.brego, modified: 'Jan 10, 2026', modifiedISO: '2026-01-10', size: '—', sizeBytes: 0, starred: false, shared: true, parentId: 'root-bg' },
-  { id: 'bg-hr', name: 'HR & People', type: 'folder', owner: owners.tejas, modified: 'Mar 5, 2026', modifiedISO: '2026-03-05', size: '—', sizeBytes: 0, starred: false, shared: true, parentId: 'root-bg' },
-  { id: 'bg-ops', name: 'Operations', type: 'folder', owner: owners.brego, modified: 'Mar 12, 2026', modifiedISO: '2026-03-12', size: '—', sizeBytes: 0, starred: false, shared: false, parentId: 'root-bg' },
-  { id: 'bg-strategy', name: 'Strategy & Planning', type: 'folder', owner: owners.tejas, modified: 'Mar 18, 2026', modifiedISO: '2026-03-18', size: '—', sizeBytes: 0, starred: true, shared: true, parentId: 'root-bg' },
-  { id: 'bg-training', name: 'Training Library', type: 'folder', owner: owners.brego, modified: 'Feb 15, 2026', modifiedISO: '2026-02-15', size: '—', sizeBytes: 0, starred: false, shared: true, parentId: 'root-bg' },
-  { id: 'bg-legal', name: 'Legal & Contracts', type: 'folder', owner: owners.tejas, modified: 'Feb 28, 2026', modifiedISO: '2026-02-28', size: '—', sizeBytes: 0, starred: false, shared: false, parentId: 'root-bg' },
-  // Files in Brego Group root
-  { id: 'bg-f1', name: 'Brand Guidelines v4.pdf', type: 'pdf', owner: owners.brego, modified: 'Mar 1, 2026', modifiedISO: '2026-03-01', size: '5.2 MB', sizeBytes: 5452595, starred: true, shared: true, parentId: 'root-bg' },
-  { id: 'bg-f2', name: 'Q2 Resource Plan.xlsx', type: 'spreadsheet', owner: owners.tejas, modified: 'Mar 15, 2026', modifiedISO: '2026-03-15', size: '960 KB', sizeBytes: 983040, starred: false, shared: false, parentId: 'root-bg' },
-  // Inside Strategy & Planning
-  { id: 'bg-s-f1', name: 'Q1 OKR Review.pdf', type: 'pdf', owner: owners.tejas, modified: 'Mar 16, 2026', modifiedISO: '2026-03-16', size: '1.8 MB', sizeBytes: 1887436, starred: true, shared: true, parentId: 'bg-strategy' },
-  { id: 'bg-s-f2', name: 'Board Deck — March 2026.pdf', type: 'presentation', owner: owners.tejas, modified: 'Mar 18, 2026', modifiedISO: '2026-03-18', size: '8.4 MB', sizeBytes: 8808038, starred: false, shared: false, parentId: 'bg-strategy' },
-  { id: 'bg-s-f3', name: 'Annual Budget 2026-27.xlsx', type: 'spreadsheet', owner: owners.tejas, modified: 'Mar 10, 2026', modifiedISO: '2026-03-10', size: '1.1 MB', sizeBytes: 1153434, starred: false, shared: true, parentId: 'bg-strategy' },
-  // Inside HR & People
-  { id: 'bg-hr-f1', name: 'Employee Handbook v3.pdf', type: 'pdf', owner: owners.tejas, modified: 'Feb 10, 2026', modifiedISO: '2026-02-10', size: '2.3 MB', sizeBytes: 2411724, starred: false, shared: true, parentId: 'bg-hr' },
-  { id: 'bg-hr-f2', name: 'Org Chart — March 2026.pdf', type: 'pdf', owner: owners.brego, modified: 'Mar 5, 2026', modifiedISO: '2026-03-05', size: '680 KB', sizeBytes: 696320, starred: false, shared: true, parentId: 'bg-hr' },
-  // Inside Company Policies
-  { id: 'bg-pol-f1', name: 'Leave Policy 2026.pdf', type: 'pdf', owner: owners.brego, modified: 'Jan 5, 2026', modifiedISO: '2026-01-05', size: '340 KB', sizeBytes: 348160, starred: false, shared: true, parentId: 'bg-policies' },
-  { id: 'bg-pol-f2', name: 'Remote Work Guidelines.pdf', type: 'pdf', owner: owners.tejas, modified: 'Jan 10, 2026', modifiedISO: '2026-01-10', size: '290 KB', sizeBytes: 296960, starred: false, shared: true, parentId: 'bg-policies' },
-  { id: 'bg-pol-f3', name: 'Code of Conduct.pdf', type: 'pdf', owner: owners.brego, modified: 'Dec 20, 2025', modifiedISO: '2025-12-20', size: '410 KB', sizeBytes: 419840, starred: false, shared: true, parentId: 'bg-policies' },
-
-  /* ═══════ PERFORMANCE MARKETING (client folders) ═══════ */
-  // Client folders
-  { id: 'pm-99p', name: '99 Pancakes', type: 'folder', owner: owners.chinmay, modified: 'Mar 17, 2026', modifiedISO: '2026-03-17', size: '—', sizeBytes: 0, starred: true, shared: true, parentId: 'root-pm' },
-  { id: 'pm-alpine', name: 'Alpine Group', type: 'folder', owner: owners.harshal, modified: 'Mar 16, 2026', modifiedISO: '2026-03-16', size: '—', sizeBytes: 0, starred: false, shared: true, parentId: 'root-pm' },
-  { id: 'pm-anaya', name: 'Anaya College', type: 'folder', owner: owners.chinmay, modified: 'Mar 14, 2026', modifiedISO: '2026-03-14', size: '—', sizeBytes: 0, starred: false, shared: true, parentId: 'root-pm' },
-  { id: 'pm-flavor', name: 'Flavor Nation', type: 'folder', owner: owners.chinmay, modified: 'Mar 12, 2026', modifiedISO: '2026-03-12', size: '—', sizeBytes: 0, starred: false, shared: true, parentId: 'root-pm' },
-  { id: 'pm-zenith', name: 'Zenith Realty', type: 'folder', owner: owners.harshal, modified: 'Mar 10, 2026', modifiedISO: '2026-03-10', size: '—', sizeBytes: 0, starred: false, shared: false, parentId: 'root-pm' },
-  // Internal PM folders
-  { id: 'pm-sops', name: 'SOPs & Processes', type: 'folder', owner: owners.brego, modified: 'Feb 20, 2026', modifiedISO: '2026-02-20', size: '—', sizeBytes: 0, starred: false, shared: false, parentId: 'root-pm' },
-  { id: 'pm-creatives', name: 'Ad Creatives Library', type: 'folder', owner: owners.chinmay, modified: 'Mar 14, 2026', modifiedISO: '2026-03-14', size: '—', sizeBytes: 0, starred: false, shared: true, parentId: 'root-pm' },
-  // Root-level PM files
-  { id: 'pm-f1', name: 'Q1 ROAS Summary.pdf', type: 'pdf', owner: owners.chinmay, modified: 'Mar 17, 2026', modifiedISO: '2026-03-17', size: '2.4 MB', sizeBytes: 2516582, starred: false, shared: true, parentId: 'root-pm' },
-  { id: 'pm-f2', name: 'Budget Allocation — Q2.xlsx', type: 'spreadsheet', owner: owners.harshal, modified: 'Mar 18, 2026', modifiedISO: '2026-03-18', size: '780 KB', sizeBytes: 798720, starred: true, shared: false, parentId: 'root-pm' },
-  // Inside 99 Pancakes
-  { id: 'pm-99p-f1', name: 'Monthly Report — March.pdf', type: 'pdf', owner: owners.chinmay, modified: 'Mar 15, 2026', modifiedISO: '2026-03-15', size: '3.2 MB', sizeBytes: 3355443, starred: false, shared: true, parentId: 'pm-99p' },
-  { id: 'pm-99p-f2', name: 'Ad Spend Breakdown.xlsx', type: 'spreadsheet', owner: owners.chinmay, modified: 'Mar 16, 2026', modifiedISO: '2026-03-16', size: '920 KB', sizeBytes: 942080, starred: false, shared: false, parentId: 'pm-99p' },
-  { id: 'pm-99p-f3', name: 'Banner_v3_Final.png', type: 'image', owner: owners.me, modified: 'Mar 13, 2026', modifiedISO: '2026-03-13', size: '2.8 MB', sizeBytes: 2936012, starred: false, shared: true, parentId: 'pm-99p' },
-  // Inside Alpine Group
-  { id: 'pm-alp-f1', name: 'Performance Deck — Q1.pdf', type: 'presentation', owner: owners.harshal, modified: 'Mar 12, 2026', modifiedISO: '2026-03-12', size: '5.1 MB', sizeBytes: 5347737, starred: true, shared: true, parentId: 'pm-alpine' },
-  { id: 'pm-alp-f2', name: 'LinkedIn_Creative_A.png', type: 'image', owner: owners.me, modified: 'Mar 11, 2026', modifiedISO: '2026-03-11', size: '1.9 MB', sizeBytes: 1992294, starred: false, shared: false, parentId: 'pm-alpine' },
-  { id: 'pm-alp-f3', name: 'Campaign Budget.xlsx', type: 'spreadsheet', owner: owners.harshal, modified: 'Mar 15, 2026', modifiedISO: '2026-03-15', size: '640 KB', sizeBytes: 655360, starred: false, shared: true, parentId: 'pm-alpine' },
-  // Inside Anaya College
-  { id: 'pm-ana-f1', name: 'Ad Spend Analysis.xlsx', type: 'spreadsheet', owner: owners.chinmay, modified: 'Mar 10, 2026', modifiedISO: '2026-03-10', size: '1.1 MB', sizeBytes: 1153434, starred: false, shared: false, parentId: 'pm-anaya' },
-  { id: 'pm-ana-f2', name: 'Lead Gen Report — Feb.pdf', type: 'pdf', owner: owners.chinmay, modified: 'Mar 8, 2026', modifiedISO: '2026-03-08', size: '1.6 MB', sizeBytes: 1677722, starred: false, shared: true, parentId: 'pm-anaya' },
-
-  /* ═══════ FINANCE (A&T client folders) ═══════ */
-  // Fiscal year folders
-  { id: 'fin-fy26', name: 'FY 2025-26', type: 'folder', owner: owners.brego, modified: 'Dec 15, 2025', modifiedISO: '2025-12-15', size: '—', sizeBytes: 0, starred: true, shared: true, parentId: 'root-fin' },
-  { id: 'fin-fy25', name: 'FY 2024-25', type: 'folder', owner: owners.brego, modified: 'Apr 1, 2025', modifiedISO: '2025-04-01', size: '—', sizeBytes: 0, starred: false, shared: true, parentId: 'root-fin' },
-  // Client folders
-  { id: 'fin-techcorp', name: 'TechCorp India', type: 'folder', owner: owners.zubear, modified: 'Mar 10, 2026', modifiedISO: '2026-03-10', size: '—', sizeBytes: 0, starred: true, shared: true, parentId: 'root-fin' },
-  { id: 'fin-retailmax', name: 'RetailMax', type: 'folder', owner: owners.mihir, modified: 'Mar 8, 2026', modifiedISO: '2026-03-08', size: '—', sizeBytes: 0, starred: false, shared: true, parentId: 'root-fin' },
-  { id: 'fin-green', name: 'Green Energy Solutions', type: 'folder', owner: owners.zubear, modified: 'Feb 25, 2026', modifiedISO: '2026-02-25', size: '—', sizeBytes: 0, starred: false, shared: true, parentId: 'root-fin' },
-  { id: 'fin-nova', name: 'Nova Pharma', type: 'folder', owner: owners.zubear, modified: 'Mar 5, 2026', modifiedISO: '2026-03-05', size: '—', sizeBytes: 0, starred: false, shared: false, parentId: 'root-fin' },
-  // Compliance & statutory folders
-  { id: 'fin-compliance', name: 'Compliance & Audits', type: 'folder', owner: owners.brego, modified: 'Feb 28, 2026', modifiedISO: '2026-02-28', size: '—', sizeBytes: 0, starred: false, shared: false, parentId: 'root-fin' },
-  { id: 'fin-gst', name: 'GST Returns', type: 'folder', owner: owners.zubear, modified: 'Mar 15, 2026', modifiedISO: '2026-03-15', size: '—', sizeBytes: 0, starred: false, shared: true, parentId: 'root-fin' },
-  { id: 'fin-tds', name: 'TDS Computations', type: 'folder', owner: owners.brego, modified: 'Mar 1, 2026', modifiedISO: '2026-03-01', size: '—', sizeBytes: 0, starred: false, shared: false, parentId: 'root-fin' },
-  // Root-level Finance files
-  { id: 'fin-f1', name: 'Q4 Bank Reconciliation.xlsx', type: 'spreadsheet', owner: owners.mihir, modified: 'Mar 18, 2026', modifiedISO: '2026-03-18', size: '1.8 MB', sizeBytes: 1887436, starred: false, shared: true, parentId: 'root-fin' },
-  { id: 'fin-f2', name: 'Tax Compliance Checklist.pdf', type: 'pdf', owner: owners.zubear, modified: 'Mar 12, 2026', modifiedISO: '2026-03-12', size: '420 KB', sizeBytes: 430080, starred: true, shared: false, parentId: 'root-fin' },
-  // Inside FY 2025-26
-  { id: 'fin-fy26-f1', name: 'P&L Statement — Q3.xlsx', type: 'spreadsheet', owner: owners.mihir, modified: 'Jan 15, 2026', modifiedISO: '2026-01-15', size: '2.1 MB', sizeBytes: 2202009, starred: false, shared: true, parentId: 'fin-fy26' },
-  { id: 'fin-fy26-f2', name: 'Balance Sheet — Q3.xlsx', type: 'spreadsheet', owner: owners.mihir, modified: 'Jan 15, 2026', modifiedISO: '2026-01-15', size: '1.4 MB', sizeBytes: 1468006, starred: false, shared: true, parentId: 'fin-fy26' },
-  { id: 'fin-fy26-f3', name: 'Audit Report Draft.pdf', type: 'pdf', owner: owners.zubear, modified: 'Feb 20, 2026', modifiedISO: '2026-02-20', size: '3.6 MB', sizeBytes: 3774873, starred: true, shared: false, parentId: 'fin-fy26' },
-  { id: 'fin-fy26-d1', name: 'Monthly Returns', type: 'folder', owner: owners.brego, modified: 'Mar 1, 2026', modifiedISO: '2026-03-01', size: '—', sizeBytes: 0, starred: false, shared: true, parentId: 'fin-fy26' },
-  // Inside TechCorp India
-  { id: 'fin-tc-f1', name: 'Financials — Q4.xlsx', type: 'spreadsheet', owner: owners.zubear, modified: 'Mar 5, 2026', modifiedISO: '2026-03-05', size: '890 KB', sizeBytes: 911360, starred: false, shared: true, parentId: 'fin-techcorp' },
-  { id: 'fin-tc-f2', name: 'IT Return FY25-26.pdf', type: 'pdf', owner: owners.zubear, modified: 'Mar 10, 2026', modifiedISO: '2026-03-10', size: '1.4 MB', sizeBytes: 1468006, starred: false, shared: false, parentId: 'fin-techcorp' },
-  // Inside RetailMax
-  { id: 'fin-rm-f1', name: 'Tax Filing — AY 2026-27.pdf', type: 'pdf', owner: owners.mihir, modified: 'Mar 8, 2026', modifiedISO: '2026-03-08', size: '1.2 MB', sizeBytes: 1258291, starred: false, shared: false, parentId: 'fin-retailmax' },
-  // Inside Green Energy
-  { id: 'fin-ge-f1', name: 'P&L — FY 2025-26.xlsx', type: 'spreadsheet', owner: owners.zubear, modified: 'Feb 25, 2026', modifiedISO: '2026-02-25', size: '1.5 MB', sizeBytes: 1572864, starred: true, shared: true, parentId: 'fin-green' },
-  { id: 'fin-ge-f2', name: 'GST Computation.xlsx', type: 'spreadsheet', owner: owners.mihir, modified: 'Mar 1, 2026', modifiedISO: '2026-03-01', size: '780 KB', sizeBytes: 798720, starred: false, shared: false, parentId: 'fin-green' },
-];
 
 const activityLog: ActivityItem[] = [
   { user: 'Tejas Atha', initials: 'TA', color: '#3B82F6', action: 'uploaded', target: 'Board Deck — March 2026.pdf', time: '30 min ago' },
@@ -532,7 +426,7 @@ export function Dataroom() {
             <div className="relative" ref={newDropdownRef}>
               <button
                 onClick={() => setShowNewDropdown(!showNewDropdown)}
-                className="h-[36px] px-4 flex items-center gap-2 bg-[#204CC7] text-white rounded-lg text-[14px] font-semibold hover:bg-[#1a3fa3] shadow-sm transition-all"
+                className="h-[36px] px-4 flex items-center gap-2 bg-[#204CC7] text-white rounded-md text-[14px] font-semibold hover:bg-[#1a3fa3] shadow-sm transition-all"
               >
                 <Plus className="w-4 h-4" />
                 New
@@ -717,7 +611,7 @@ export function Dataroom() {
             </div>
             <button
               onClick={() => setShowActivityDrawer(false)}
-              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-black/[0.04] transition-colors"
+              className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/[0.04] transition-colors"
               aria-label="Close activity panel"
             >
               <X className="w-4 h-4 text-black/45" />
@@ -848,8 +742,8 @@ export function Dataroom() {
               />
             </div>
             <div className="px-5 py-3 border-t border-black/[0.06] flex items-center justify-end gap-2">
-              <button onClick={() => setShowNewFolderModal(false)} className="h-[34px] px-4 text-[13px] font-medium text-black/60 rounded-lg hover:bg-black/[0.04] transition-colors">Cancel</button>
-              <button onClick={handleCreateFolder} disabled={!newFolderName.trim()} className={`h-[34px] px-4 text-[13px] font-semibold rounded-lg transition-all ${newFolderName.trim() ? 'bg-[#204CC7] text-white hover:bg-[#1a3fa3]' : 'bg-black/[0.05] text-black/30 cursor-not-allowed'}`}>Create</button>
+              <button onClick={() => setShowNewFolderModal(false)} className="h-[34px] px-4 text-[13px] font-medium text-black/60 rounded-md hover:bg-black/[0.04] transition-colors">Cancel</button>
+              <button onClick={handleCreateFolder} disabled={!newFolderName.trim()} className={`h-[34px] px-4 text-[13px] font-semibold rounded-md transition-all ${newFolderName.trim() ? 'bg-[#204CC7] text-white hover:bg-[#1a3fa3]' : 'bg-black/[0.05] text-black/30 cursor-not-allowed'}`}>Create</button>
             </div>
           </div>
         </div>
@@ -868,7 +762,7 @@ export function Dataroom() {
                 <UploadCloud className="w-10 h-10 text-black/20 mb-3" />
                 <p className="text-[14px] font-semibold text-black/70 mb-1">Drag and drop files here</p>
                 <p className="text-[12px] text-black/35 mb-3">or click to browse from your computer</p>
-                <button className="h-[32px] px-4 bg-[#204CC7] text-white rounded-lg text-[13px] font-semibold hover:bg-[#1a3fa3] transition-colors">
+                <button className="h-[32px] px-4 bg-[#204CC7] text-white rounded-md text-[13px] font-semibold hover:bg-[#1a3fa3] transition-colors">
                   Browse Files
                 </button>
               </div>

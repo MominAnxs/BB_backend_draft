@@ -1,6 +1,5 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { Users, Search, Plus, X, AlertTriangle, CheckCircle, Clock, Award, TrendingUp, Filter, UserPlus, Building2, User, Briefcase, DollarSign, Home, ChevronDown, Check, Mail, RotateCcw, Trash2, Send, Shield, Eye, MessageSquare, FolderOpen, ListTodo, BarChart3, Settings } from 'lucide-react';
 
 interface Employee {
@@ -38,19 +37,6 @@ interface Employee {
   claType: 'CLA' | 'NTF' | '';
   claReason: string;
   assignedClients: string[];
-}
-
-type IncomingStatus = 'Incoming' | 'Backed Out' | 'Active';
-
-interface IncomingEmployee {
-  id: number;
-  code: string;
-  name: string;
-  department: string;
-  role: string;
-  joiningDate: string;
-  incomingStatus: IncomingStatus;
-  note?: string;
 }
 
 // Available options for dropdowns
@@ -263,7 +249,7 @@ function FilterOption<T extends string>({ label, options, value, onChange }: { l
   return (
     <div ref={ref} className="relative">
       <button onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-caption font-medium transition-all border ${isActive ? 'bg-[#204CC7]/[0.07] border-[#204CC7]/20 text-[#204CC7]' : 'bg-white border-black/10 text-black/60 hover:bg-black/[0.02]'}`}>
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-caption font-medium transition-all border ${isActive ? 'bg-[#204CC7]/[0.07] border-[#204CC7]/20 text-[#204CC7]' : 'bg-white border-black/10 text-black/60 hover:bg-black/[0.02]'}`}>
         <span>{label}{isActive ? `: ${value}` : ''}</span>
         <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -284,17 +270,9 @@ function FilterOption<T extends string>({ label, options, value, onChange }: { l
 }
 
 export function EmployeesNew() {
-  const searchParams = useSearchParams();
-  const tabParam = searchParams.get('tab');
-  const initialView = (tabParam === 'cla' || tabParam === 'incoming') ? tabParam : 'all';
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
-  const [activeView, setActiveView] = useState<'all' | 'cla' | 'incoming'>(initialView);
-  const [showAddIncomingModal, setShowAddIncomingModal] = useState(false);
-  const [incomingForm, setIncomingForm] = useState({ name: '', department: 'Finance', role: 'Executive', joiningDate: '', note: '' });
-  const [incomingFormErrors, setIncomingFormErrors] = useState({ name: false });
   const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
-  const [isAddingCLA, setIsAddingCLA] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<EmployeeFilters>(DEFAULT_FILTERS);
   const [showPendingInvites, setShowPendingInvites] = useState(false);
@@ -627,26 +605,6 @@ export function EmployeesNew() {
     },
   ]);
 
-  const [incomingEmployees, setIncomingEmployees] = useState<IncomingEmployee[]>([
-    { id: 101, code: 'BRG020', name: 'Nisha Patil', department: 'Finance', role: 'Executive', joiningDate: '6th Apr, 2026', incomingStatus: 'Active', note: 'Offered ₹33.2K, DOJ: 6th April, DOCS: Done' },
-    { id: 102, code: 'BRG021', name: 'Jyoti Rane', department: 'Finance', role: 'Executive', joiningDate: '4th May, 2026', incomingStatus: 'Incoming', note: 'Offered ₹41.5K, DOJ: 4th May, DOCS: Pending' },
-    { id: 103, code: 'BRG022', name: 'Amisha Desai', department: 'Finance', role: 'Executive', joiningDate: 'TBD', incomingStatus: 'Incoming', note: 'Shortlisted for final round — scheduled Friday evening with Irshad' },
-    { id: 104, code: 'BRG023', name: 'Rahul Kapoor', department: 'Sales', role: 'Sr. Executive', joiningDate: '14th Apr, 2026', incomingStatus: 'Incoming', note: 'Referred by Chinmay, 4 yrs exp in B2B sales' },
-    { id: 105, code: 'BRG024', name: 'Sneha Kulkarni', department: 'Performance Marketing', role: 'Executive', joiningDate: '21st Apr, 2026', incomingStatus: 'Incoming', note: 'Google Ads certified, previously at iProspect' },
-    { id: 106, code: 'BRG025', name: 'Vishal Thakur', department: 'Technology', role: 'Executive', joiningDate: '28th Apr, 2026', incomingStatus: 'Incoming', note: 'Full-stack developer, React + Node background' },
-    { id: 107, code: 'BRG026', name: 'Ankita Sharma', department: 'Finance', role: 'Executive', joiningDate: '15th Mar, 2026', incomingStatus: 'Backed Out', note: 'Accepted counter-offer from current employer' },
-    { id: 108, code: 'BRG027', name: 'Ravi Menon', department: 'Sales', role: 'Executive', joiningDate: '20th Mar, 2026', incomingStatus: 'Backed Out', note: 'Relocated to Bangalore, no longer available' },
-  ]);
-
-  const getIncomingStatusColor = (status: IncomingStatus) => {
-    switch (status) {
-      case 'Incoming': return 'bg-blue-50 text-blue-700 border-blue-200';
-      case 'Backed Out': return 'bg-rose-50 text-rose-700 border-rose-200';
-      case 'Active': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      default: return 'bg-black/5 text-black/50 border-black/10';
-    }
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Confirmed':
@@ -719,16 +677,6 @@ export function EmployeesNew() {
     workstation: 'Mumbai HQ',
     reportingManager: 'Tejas (COO)',
   });
-
-  // State for CLA Assignment Form
-  const [claForm, setClaForm] = useState({
-    selectedEmployeeId: 0,
-    claType: 'CLA' as 'CLA' | 'NTF',
-    reason: '',
-  });
-
-  // Get non-CLA employees for selection
-  const nonCLAEmployees = employees.filter(emp => !emp.isCLA);
 
   // Update employee field (syncs both employees list and selectedEmployee)
   const updateEmployee = (id: number, field: keyof Employee | string, value: any) => {
@@ -856,69 +804,14 @@ export function EmployeesNew() {
     });
   };
 
-  // Handle CLA Assignment
-  const handleAddCLA = () => {
-    if (!claForm.selectedEmployeeId || !claForm.reason) {
-      alert('Please select an employee and provide a reason');
-      return;
-    }
-
-    setEmployees(prev => prev.map(emp =>
-      emp.id === claForm.selectedEmployeeId
-        ? { ...emp, isCLA: true, claType: claForm.claType, claReason: claForm.reason }
-        : emp
-    ));
-
-    setShowAddEmployeeModal(false);
-
-    // Reset form
-    setClaForm({
-      selectedEmployeeId: 0,
-      claType: 'CLA',
-      reason: '',
-    });
-  };
-
-  const displayedEmployees = activeView === 'cla' 
-    ? filteredEmployees.filter(emp => emp.isCLA)
-    : filteredEmployees;
-
   return (
     <div>
       {/* Sticky Top Bar */}
       <div className="sticky top-0 z-20 -mx-6 -mt-6 px-6 py-4 bg-white border-b border-black/[0.06]">
         <div className="flex items-center justify-between">
-          <div className="inline-flex items-center bg-black/5 rounded-xl p-0.5">
-            <button
-              onClick={() => setActiveView('all')}
-              className={`px-4 py-1.5 text-caption font-medium rounded-lg transition-all ${
-                activeView === 'all'
-                  ? 'bg-white text-black shadow-sm'
-                  : 'text-black/50 hover:text-black/70'
-              }`}
-            >
-              All Employees
-            </button>
-            <button
-              onClick={() => setActiveView('cla')}
-              className={`px-4 py-1.5 text-caption font-medium rounded-lg transition-all ${
-                activeView === 'cla'
-                  ? 'bg-white text-black shadow-sm'
-                  : 'text-black/50 hover:text-black/70'
-              }`}
-            >
-              CLA/NTF
-            </button>
-            <button
-              onClick={() => setActiveView('incoming')}
-              className={`px-4 py-1.5 text-caption font-medium rounded-lg transition-all ${
-                activeView === 'incoming'
-                  ? 'bg-white text-black shadow-sm'
-                  : 'text-black/50 hover:text-black/70'
-              }`}
-            >
-              Incoming
-            </button>
+          <div>
+            <h1 className="text-h2 font-semibold text-black">Active Employees</h1>
+            <p className="text-caption text-black/50 mt-0.5">Manage your team members and their roles</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -933,43 +826,32 @@ export function EmployeesNew() {
               />
             </div>
             <button onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-1.5 px-3 py-2 border rounded-lg transition-all text-caption font-medium ${showFilters || activeFilterCount > 0 ? 'bg-[#204CC7]/[0.07] border-[#204CC7]/20 text-[#204CC7]' : 'border-black/10 bg-white text-black/70 hover:bg-black/5'}`}>
+              className={`flex items-center gap-1.5 px-3 py-2 border rounded-md transition-all text-caption font-medium ${showFilters || activeFilterCount > 0 ? 'bg-[#204CC7]/[0.07] border-[#204CC7]/20 text-[#204CC7]' : 'border-black/10 bg-white text-black/70 hover:bg-black/5'}`}>
               <Filter className="w-3.5 h-3.5" />
               <span>Filter</span>
               {activeFilterCount > 0 && (
                 <span className="w-4.5 h-4.5 rounded-full bg-[#204CC7] text-white text-[11px] font-bold flex items-center justify-center leading-none min-w-[18px] px-1">{activeFilterCount}</span>
               )}
             </button>
-            {activeView === 'all' && (
-              <>
-                <button onClick={() => setShowPendingInvites(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 border border-black/10 rounded-lg bg-white text-black/70 hover:bg-black/5 transition-all text-caption font-medium">
-                  <Mail className="w-3.5 h-3.5" />
-                  <span>Pending Invites</span>
-                  {pendingInvites.length > 0 && (
-                    <span className="min-w-[18px] h-[18px] rounded-full bg-[#FDAB3D] text-white text-[11px] font-bold flex items-center justify-center leading-none px-1">{pendingInvites.length}</span>
-                  )}
-                </button>
-                <button onClick={() => setShowPermissions(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 border border-black/10 rounded-lg bg-white text-black/70 hover:bg-black/5 transition-all text-caption font-medium">
-                  <Shield className="w-3.5 h-3.5" />
-                  <span>Permissions</span>
-                </button>
-              </>
-            )}
+            <button onClick={() => setShowPendingInvites(true)}
+              className="flex items-center gap-1.5 px-3 py-2 border border-black/10 rounded-lg bg-white text-black/70 hover:bg-black/5 transition-all text-caption font-medium">
+              <Mail className="w-3.5 h-3.5" />
+              <span>Pending Invites</span>
+              {pendingInvites.length > 0 && (
+                <span className="min-w-[18px] h-[18px] rounded-full bg-[#FDAB3D] text-white text-[11px] font-bold flex items-center justify-center leading-none px-1">{pendingInvites.length}</span>
+              )}
+            </button>
+            <button onClick={() => setShowPermissions(true)}
+              className="flex items-center gap-1.5 px-3 py-2 border border-black/10 rounded-lg bg-white text-black/70 hover:bg-black/5 transition-all text-caption font-medium">
+              <Shield className="w-3.5 h-3.5" />
+              <span>Permissions</span>
+            </button>
             <button
-              onClick={() => {
-                if (activeView === 'incoming') {
-                  setShowAddIncomingModal(true);
-                } else {
-                  setIsAddingCLA(activeView === 'cla');
-                  setShowAddEmployeeModal(true);
-                }
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 bg-[#204CC7] text-white rounded-lg hover:bg-[#1a3d9f] transition-all text-caption font-medium"
+              onClick={() => setShowAddEmployeeModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-[#204CC7] text-white rounded-md hover:bg-[#1a3d9f] transition-all text-caption font-medium"
             >
               <UserPlus className="w-3.5 h-3.5" />
-              <span>{activeView === 'incoming' ? 'Incoming Employee' : activeView === 'cla' ? 'Add to CLA/NTF' : 'Add Employee'}</span>
+              <span>Add Employee</span>
             </button>
           </div>
         </div>
@@ -1064,108 +946,7 @@ export function EmployeesNew() {
         </div>
       </div>
 
-      {/* Incoming Employees Table */}
-      {activeView === 'incoming' && (
-        <div className="bg-white border border-black/5 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-black/5 bg-black/[0.01]">
-                  <th className="pl-5 pr-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Code</th>
-                  <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Name</th>
-                  <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Department</th>
-                  <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Role</th>
-                  <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Joining Date</th>
-                  <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Status</th>
-                  <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Note</th>
-                </tr>
-              </thead>
-              <tbody>
-                {incomingEmployees.map((emp, index) => (
-                  <tr key={emp.id} className={`border-b border-black/[0.04] last:border-0 transition-colors hover:bg-black/[0.015] ${index % 2 === 1 ? 'bg-black/[0.01]' : ''}`}>
-                    <td className="pl-5 pr-3 py-3">
-                      <span className="text-[#204CC7]/70 text-caption font-mono">{emp.code}</span>
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 bg-black/[0.04] rounded-full flex items-center justify-center flex-shrink-0">
-                          <span className="text-black/50 text-caption font-semibold">{emp.name.charAt(0)}</span>
-                        </div>
-                        <span className="text-black/85 text-caption font-medium">{emp.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className={`inline-flex px-2.5 py-1 rounded-full text-caption font-medium whitespace-nowrap ${getDepartmentColor(emp.department)}`}>{emp.department}</span>
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className="inline-flex px-2.5 py-1 rounded-full text-caption font-medium bg-black/[0.03] text-black/70 whitespace-nowrap">{emp.role}</span>
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className="text-black/50 text-caption whitespace-nowrap">{emp.joiningDate}</span>
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="relative">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setOpenDropdown(
-                              openDropdown?.id === emp.id && openDropdown?.field === 'incomingStatus'
-                                ? null
-                                : { id: emp.id, field: 'incomingStatus' }
-                            );
-                          }}
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-caption font-medium border whitespace-nowrap transition-all cursor-pointer ${getIncomingStatusColor(emp.incomingStatus)}`}
-                        >
-                          <span>{emp.incomingStatus}</span>
-                          <ChevronDown className="w-3 h-3 flex-shrink-0" />
-                        </button>
-                        {openDropdown?.id === emp.id && openDropdown?.field === 'incomingStatus' && (
-                          <div className="absolute top-full left-0 mt-1 z-50 min-w-[150px]">
-                            <div className="bg-white rounded-xl border border-black/10 shadow-xl overflow-hidden">
-                              {(['Incoming', 'Backed Out', 'Active'] as IncomingStatus[]).map(s => (
-                                <button
-                                  key={s}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setIncomingEmployees(prev => prev.map(ie => ie.id === emp.id ? { ...ie, incomingStatus: s } : ie));
-                                    setOpenDropdown(null);
-                                  }}
-                                  className={`w-full text-left px-3 py-2 text-caption hover:bg-black/[0.02] transition-all flex items-center gap-2 ${
-                                    emp.incomingStatus === s ? 'font-medium' : 'text-black/70'
-                                  }`}
-                                >
-                                  <span className={`inline-flex px-2 py-0.5 rounded-full text-caption font-medium border ${getIncomingStatusColor(s)}`}>{s}</span>
-                                  {emp.incomingStatus === s && <Check className="w-3.5 h-3.5 text-[#204CC7] ml-auto" />}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 max-w-[280px]">
-                      {emp.note ? (
-                        <p className="text-caption text-black/55 leading-relaxed line-clamp-2">{emp.note}</p>
-                      ) : (
-                        <span className="text-caption text-black/25">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {incomingEmployees.length === 0 && (
-            <div className="py-16 text-center">
-              <Users className="w-12 h-12 text-black/10 mx-auto mb-3" />
-              <p className="text-black/55 text-body">No incoming employees</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* World-Class Table */}
-      {activeView !== 'incoming' && (
+      {/* Employees Table */}
       <div className="bg-white border border-black/5 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -1177,14 +958,11 @@ export function EmployeesNew() {
                 <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Role</th>
                 <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Joined</th>
                 <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Onboarding</th>
-                <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">{activeView === 'cla' ? 'Status' : 'Clients'}</th>
-                {activeView === 'cla' && (
-                  <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Reason/Brief</th>
-                )}
+                <th className="px-3 py-3 text-left text-black/45 text-caption font-semibold uppercase tracking-wider">Clients</th>
               </tr>
             </thead>
             <tbody>
-              {displayedEmployees.map((employee, index) => {
+              {filteredEmployees.map((employee, index) => {
                 const isFounder = employee.id === 1;
                 return (
                 <tr
@@ -1209,7 +987,7 @@ export function EmployeesNew() {
 
                   {/* Department */}
                   <td className="px-3 py-3">
-                    {activeView === 'cla' || isFounder ? (
+                    {isFounder ? (
                       <span className={`inline-flex px-2.5 py-1 rounded-full text-caption font-medium whitespace-nowrap ${getDepartmentColor(employee.department)}`}>{employee.department}</span>
                     ) : (
                       <div className="relative">
@@ -1245,8 +1023,8 @@ export function EmployeesNew() {
 
                   {/* Role */}
                   <td className="px-3 py-3">
-                    {activeView === 'cla' || isFounder ? (
-                      <span className="inline-flex px-2.5 py-1 rounded-full text-caption font-medium bg-[#204CC7]/8 text-[#204CC7] whitespace-nowrap">{isFounder ? 'Founder & CEO' : employee.role}</span>
+                    {isFounder ? (
+                      <span className="inline-flex px-2.5 py-1 rounded-full text-caption font-medium bg-[#204CC7]/8 text-[#204CC7] whitespace-nowrap">Founder & CEO</span>
                     ) : (
                       <div className="relative">
                         <button
@@ -1344,50 +1122,25 @@ export function EmployeesNew() {
                     )}
                   </td>
 
-                  {/* Clients / Status */}
+                  {/* Clients */}
                   <td className="px-3 py-3">
-                    {activeView === 'cla' ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const next = employee.claType === 'CLA' ? 'NTF' : 'CLA';
-                          updateEmployee(employee.id, 'claType', next);
-                        }}
-                        className={`inline-flex px-2.5 py-1 rounded-md text-caption font-medium border cursor-pointer transition-all ${
-                          employee.claType === 'CLA' ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' :
-                          employee.claType === 'NTF' ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100' :
-                          'bg-black/[0.03] text-black/50 border-black/10 hover:bg-black/[0.05]'
-                        }`}>{employee.claType || '—'}</button>
-                    ) : (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setAssignModalEmployee(employee); setAssignSearch(''); }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-caption font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 whitespace-nowrap transition-all"
-                      >
-                        <span>
-                          {employee.role === 'Admin'
-                            ? 'All'
-                            : employee.assignedClients.length > 0
-                              ? employee.assignedClients[0]
-                              : 'Assign'}
-                        </span>
-                        {employee.assignedClients.length > 1 && (
-                          <span className="text-blue-500 text-caption font-semibold">+{employee.assignedClients.length - 1}</span>
-                        )}
-                        <ChevronDown className="w-3 h-3 flex-shrink-0" />
-                      </button>
-                    )}
-                  </td>
-
-                  {/* Reason/Brief - Only for CLA view (read-only) */}
-                  {activeView === 'cla' && (
-                    <td className="px-3 py-3 max-w-[320px]">
-                      {employee.claReason ? (
-                        <p className="text-caption text-red-700 leading-relaxed line-clamp-2 bg-red-50 rounded-lg px-3 py-1.5">{employee.claReason}</p>
-                      ) : (
-                        <p className="text-caption text-black/30">—</p>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setAssignModalEmployee(employee); setAssignSearch(''); }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-caption font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 whitespace-nowrap transition-all"
+                    >
+                      <span>
+                        {employee.role === 'Admin'
+                          ? 'All'
+                          : employee.assignedClients.length > 0
+                            ? employee.assignedClients[0]
+                            : 'Assign'}
+                      </span>
+                      {employee.assignedClients.length > 1 && (
+                        <span className="text-blue-500 text-caption font-semibold">+{employee.assignedClients.length - 1}</span>
                       )}
-                    </td>
-                  )}
+                      <ChevronDown className="w-3 h-3 flex-shrink-0" />
+                    </button>
+                  </td>
                 </tr>
               ); })}
             </tbody>
@@ -1395,14 +1148,13 @@ export function EmployeesNew() {
         </div>
 
         {/* Empty State */}
-        {displayedEmployees.length === 0 && (
+        {filteredEmployees.length === 0 && (
           <div className="py-16 text-center">
             <Users className="w-12 h-12 text-black/10 mx-auto mb-3" />
             <p className="text-black/55 text-body">No employees found</p>
           </div>
         )}
       </div>
-      )}
 
       </div>
 
@@ -1417,9 +1169,9 @@ export function EmployeesNew() {
                   <UserPlus className="w-5 h-5 text-[#204CC7]" />
                 </div>
                 <div>
-                  <h3 className="text-black font-semibold">{isAddingCLA ? 'Add to CLA/NTF' : 'Add New Employee'}</h3>
+                  <h3 className="text-black font-semibold">Add New Employee</h3>
                   <p className="text-black/50 text-caption mt-0.5">
-                    {isAddingCLA ? 'Select an employee and provide a reason for CLA/NTF status' : 'Fill in the details to add a new employee'}
+                    Fill in the details to add a new employee
                   </p>
                 </div>
               </div>
@@ -1433,44 +1185,6 @@ export function EmployeesNew() {
 
             {/* Modal Body */}
             <div className="p-6 space-y-6">
-              {/* CLA Type + Reason Section - Only show when adding CLA */}
-              {isAddingCLA && (
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <AlertTriangle className="w-4 h-4 text-red-600" />
-                      <h4 className="text-caption font-semibold text-black/70 uppercase tracking-wide">Status Type</h4>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {(['CLA', 'NTF'] as const).map(t => (
-                        <button key={t} type="button" onClick={() => setClaForm({ ...claForm, claType: t })}
-                          className={`flex-1 py-2.5 rounded-xl border text-caption font-medium transition-all ${
-                            claForm.claType === t
-                              ? t === 'CLA' ? 'bg-amber-50 text-amber-700 border-amber-300' : 'bg-rose-50 text-rose-600 border-rose-300'
-                              : 'border-black/10 text-black/50 hover:bg-black/[0.02]'
-                          }`}>{t}</button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <AlertTriangle className="w-4 h-4 text-red-600" />
-                      <h4 className="text-caption font-semibold text-black/70 uppercase tracking-wide">Reason/Brief</h4>
-                    </div>
-                    <label className="block text-caption font-medium text-black/70 mb-2">
-                      Why is this employee being added to CLA/NTF? <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      value={claForm.reason}
-                      onChange={(e) => setClaForm({ ...claForm, reason: e.target.value })}
-                      placeholder="e.g., Performance issues - Not meeting monthly targets for 3 consecutive months"
-                      className="w-full h-28 px-3 py-2.5 text-body border border-black/10 rounded-xl bg-white text-black placeholder:text-black/55 focus:outline-none focus:ring-2 focus:ring-[#204CC7] focus:border-transparent transition-all resize-none"
-                    />
-                    <p className="text-caption text-black/55 mt-1.5">Provide detailed context for documentation and review purposes</p>
-                  </div>
-                </div>
-              )}
-
               {/* Auto-Populated Section */}
               <div className="bg-gradient-to-br from-[#204CC7]/5 to-blue-50 border border-[#204CC7]/20 rounded-xl p-4">
                 <div className="grid grid-cols-2 gap-3">
@@ -1671,138 +1385,8 @@ export function EmployeesNew() {
               </button>
               <button
                 onClick={handleAddEmployee}
-                className="px-4 py-2.5 text-body bg-[#204CC7] text-white rounded-xl hover:bg-[#1a3d9f] transition-all font-medium"
+                className="px-4 py-2.5 text-body bg-[#204CC7] text-white rounded-md hover:bg-[#1a3d9f] transition-all font-medium"
               >
-                Add Employee
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Incoming Employee Modal */}
-      {showAddIncomingModal && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowAddIncomingModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-black/[0.06]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#204CC7]/10 flex items-center justify-center">
-                  <UserPlus className="w-5 h-5 text-[#204CC7]" />
-                </div>
-                <div>
-                  <h3 className="text-black font-semibold">Add Incoming Employee</h3>
-                  <p className="text-black/50 text-caption mt-0.5">Track a new hire expected to join</p>
-                </div>
-              </div>
-              <button onClick={() => setShowAddIncomingModal(false)} className="w-8 h-8 rounded-lg hover:bg-black/5 flex items-center justify-center transition-all">
-                <X className="w-4 h-4 text-black/50" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="px-6 py-5 space-y-5">
-              {/* Name */}
-              <div>
-                <label className="block text-caption font-semibold text-black/60 mb-1.5">Full Name <span className="text-[#E2445C]">*</span></label>
-                <input
-                  type="text"
-                  value={incomingForm.name}
-                  onChange={e => { setIncomingForm(f => ({ ...f, name: e.target.value })); setIncomingFormErrors(fe => ({ ...fe, name: false })); }}
-                  placeholder="e.g., Jyoti Rane"
-                  className={`w-full px-3.5 py-2.5 rounded-xl border text-body text-black/90 placeholder:text-black/30 focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all ${
-                    incomingFormErrors.name ? 'border-[#E2445C] bg-rose-50/30' : 'border-black/10'
-                  }`}
-                />
-                {incomingFormErrors.name && <p className="text-caption font-medium text-[#E2445C] mt-1">Name is required</p>}
-              </div>
-
-              {/* Department + Role */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-caption font-semibold text-black/60 mb-1.5">Department</label>
-                  <select
-                    value={incomingForm.department}
-                    onChange={e => setIncomingForm(f => ({ ...f, department: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 text-body text-black/80 bg-white focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all appearance-none cursor-pointer"
-                  >
-                    {DEPARTMENTS.filter(d => d !== 'All').map(d => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-caption font-semibold text-black/60 mb-1.5">Role</label>
-                  <select
-                    value={incomingForm.role}
-                    onChange={e => setIncomingForm(f => ({ ...f, role: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 text-body text-black/80 bg-white focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all appearance-none cursor-pointer"
-                  >
-                    {ROLES.filter(r => r !== 'Admin').map(r => (
-                      <option key={r} value={r}>{r}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Joining Date */}
-              <div>
-                <label className="block text-caption font-semibold text-black/60 mb-1.5">Expected Joining Date</label>
-                <input
-                  type="text"
-                  value={incomingForm.joiningDate}
-                  onChange={e => setIncomingForm(f => ({ ...f, joiningDate: e.target.value }))}
-                  placeholder="e.g., 15th May, 2026 or TBD"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 text-body text-black/90 placeholder:text-black/30 focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all"
-                />
-              </div>
-
-              {/* Note / Description */}
-              <div>
-                <label className="block text-caption font-semibold text-black/60 mb-1.5">Note</label>
-                <textarea
-                  value={incomingForm.note}
-                  onChange={e => setIncomingForm(f => ({ ...f, note: e.target.value }))}
-                  placeholder="e.g., Offered ₹33.2K, documents pending, referred by Pooja..."
-                  rows={3}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 text-body text-black/90 placeholder:text-black/30 focus:outline-none focus:ring-1 focus:ring-[#204CC7] focus:border-transparent transition-all resize-none"
-                />
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-black/[0.06] flex items-center justify-between">
-              <button onClick={() => setShowAddIncomingModal(false)} className="px-4 py-2.5 rounded-lg border border-black/10 text-black/60 hover:bg-black/[0.03] transition-all text-caption font-medium">
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (!incomingForm.name.trim()) {
-                    setIncomingFormErrors({ name: true });
-                    return;
-                  }
-                  const nextId = Math.max(...incomingEmployees.map(e => e.id), 200) + 1;
-                  const nextCode = `BRG${String(Math.max(...incomingEmployees.map(e => parseInt(e.code.replace('BRG', ''), 10)), 27) + 1).padStart(3, '0')}`;
-                  setIncomingEmployees(prev => [
-                    ...prev,
-                    {
-                      id: nextId,
-                      code: nextCode,
-                      name: incomingForm.name.trim(),
-                      department: incomingForm.department,
-                      role: incomingForm.role,
-                      joiningDate: incomingForm.joiningDate.trim() || 'TBD',
-                      incomingStatus: 'Incoming',
-                      note: incomingForm.note.trim() || undefined,
-                    },
-                  ]);
-                  setIncomingForm({ name: '', department: 'Finance', role: 'Executive', joiningDate: '', note: '' });
-                  setIncomingFormErrors({ name: false });
-                  setShowAddIncomingModal(false);
-                }}
-                className="px-5 py-2.5 rounded-lg bg-[#204CC7] text-white hover:bg-[#1a3d9f] transition-all text-caption font-semibold flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
                 Add Employee
               </button>
             </div>
@@ -1830,7 +1414,7 @@ export function EmployeesNew() {
                 </div>
               </div>
               <button onClick={() => setShowPendingInvites(false)} aria-label="Close pending invites"
-                className="w-8 h-8 rounded-lg hover:bg-black/5 flex items-center justify-center transition-all">
+                className="w-8 h-8 rounded-md hover:bg-black/5 flex items-center justify-center transition-all">
                 <X className="w-4 h-4 text-black/60" />
               </button>
             </div>
@@ -1928,7 +1512,7 @@ export function EmployeesNew() {
                   <p className="text-caption text-black/50 mt-0.5">Control what each role can do across the platform</p>
                 </div>
                 <button onClick={() => setShowPermissions(false)} aria-label="Close permissions"
-                  className="p-1.5 rounded-lg hover:bg-black/5 transition-colors text-black/40 hover:text-black/70">
+                  className="p-1.5 rounded-md hover:bg-black/5 transition-colors text-black/40 hover:text-black/70">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -2379,7 +1963,7 @@ export function EmployeesNew() {
                               </button>
                             ) : <div />}
                             <button onClick={() => setAssignModalEmployee(null)}
-                              className="px-4 py-1.5 bg-[#204CC7] text-white rounded-lg text-caption font-medium hover:bg-[#1a3d9f] transition-all">
+                              className="px-4 py-1.5 bg-[#204CC7] text-white rounded-md text-caption font-medium hover:bg-[#1a3d9f] transition-all">
                               Done
                             </button>
                           </div>

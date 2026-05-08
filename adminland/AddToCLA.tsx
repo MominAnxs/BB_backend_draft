@@ -1,210 +1,259 @@
 'use client';
-import { useState } from 'react';
-import { X, AlertTriangle, Save, CheckCircle } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { X, ChevronDown } from 'lucide-react';
 
-interface AddToCLAProps {
-  clientName: string;
-  onClose: () => void;
-  onSave: (claData: { reason: string; status: 'Saved' | 'Sureshot'; dateAdded: string }) => void;
+/* ═══════════════════════════════════════════════════════════════════
+   TYPES
+   ═══════════════════════════════════════════════════════════════════ */
+
+export interface CLAData {
+  dateTime: string;
+  client: string;
+  reason: string;
+  service: string;
+  status: string;
+  billingPerMonth: number;
+  hod: string;
+  category: string;
+  employeeResponsible: string;
 }
 
-export function AddToCLA({ clientName, onClose, onSave }: AddToCLAProps) {
+interface AddToCLAProps {
+  clientName?: string;
+  onClose: () => void;
+  onSave: (data: CLAData) => void;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   OPTIONS
+   ═══════════════════════════════════════════════════════════════════ */
+
+const SERVICES = ['Performance Marketing', 'Accounts & Taxation', 'Both'];
+const STATUSES = ['Can be Saved', 'Sureshot', 'At Risk', 'Critical'];
+const HODS = ['Chinmay Pawar', 'Zubear Shaikh', 'Tejas Atha'];
+const CATEGORIES = ["Brego's Fault", "Client's Fault", 'External / Market'];
+
+/* ═══════════════════════════════════════════════════════════════════
+   MAIN MODAL
+   ═══════════════════════════════════════════════════════════════════ */
+
+export function AddToCLA({ clientName = '', onClose, onSave }: AddToCLAProps) {
+  // Default to current datetime in yyyy-MM-ddTHH:mm format for datetime-local
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const defaultDateTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+  const [dateTime, setDateTime] = useState(defaultDateTime);
+  const [client, setClient] = useState(clientName);
   const [reason, setReason] = useState('');
-  const [status, setStatus] = useState<'Saved' | 'Sureshot'>('Saved');
-  const [errors, setErrors] = useState({ reason: '' });
+  const [service, setService] = useState('Performance Marketing');
+  const [status, setStatus] = useState('Can be Saved');
+  const [billing, setBilling] = useState('');
+  const [hod, setHod] = useState('');
+  const [category, setCategory] = useState("Brego's Fault");
+  const [employeeResponsible, setEmployeeResponsible] = useState('');
+
+  const isValid = !!(
+    dateTime &&
+    client.trim() &&
+    reason.trim() &&
+    service &&
+    status &&
+    hod &&
+    category &&
+    employeeResponsible.trim()
+  );
 
   const handleSubmit = () => {
-    // Validation
-    if (!reason.trim()) {
-      setErrors({ reason: 'Please provide a reason for adding to CLA list' });
-      return;
-    }
-
-    // Save CLA data
+    if (!isValid) return;
     onSave({
+      dateTime,
+      client: client.trim(),
       reason: reason.trim(),
+      service,
       status,
-      dateAdded: new Date().toISOString(),
+      billingPerMonth: Number(billing) || 0,
+      hod,
+      category,
+      employeeResponsible: employeeResponsible.trim(),
     });
-
-    onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-[60] overflow-hidden flex items-center justify-center">
-      <div className="absolute inset-0 bg-[#272727]/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 transform transition-all">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-[#F59E0B] to-[#FBBF24] p-6 rounded-t-2xl">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h2 className="text-white">Add to CLA List</h2>
-                <p className="text-white/80 text-caption">Client Can Leave Anytime</p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center hover:bg-white/30 transition-all"
-            >
-              <X className="w-5 h-5 text-white" />
-            </button>
-          </div>
-          <div className="bg-white/10 backdrop-blur-sm rounded-lg px-3 py-2">
-            <p className="text-white text-body truncate">Client: <strong>{clientName}</strong></p>
-          </div>
-        </div>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
-        {/* Content */}
-        <div className="p-6 space-y-5">
-          {/* Info Banner */}
-          <div className="bg-[#FEF3C7] border border-[#F59E0B]/20 rounded-lg p-4">
-            <div className="flex gap-3">
-              <AlertTriangle className="w-5 h-5 text-[#F59E0B] flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-[#272727] text-body mb-1">
-                  <strong>CLA (Can Leave Anytime) List</strong>
-                </p>
-                <p className="text-[#5A5A6F] text-caption">
-                  Track clients who may churn or are at risk. This helps in proactive account management and retention strategies.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Status Selection */}
+      {/* Modal */}
+      <div
+        className="relative bg-white rounded-[24px] shadow-2xl w-full max-w-[720px] max-h-[90vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* ── Header ── */}
+        <div className="px-6 pt-6 pb-5 border-b border-black/[0.06] flex items-start justify-between shrink-0">
           <div>
-            <label className="text-[#272727] mb-3 block">
-              CLA Status <span className="text-[#E85D4D]">*</span>
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setStatus('Saved')}
-                className={`p-4 rounded-xl border-2 transition-all text-left ${
-                  status === 'Saved'
-                    ? 'border-[#204CC7] bg-[#F6F7FF] shadow-md shadow-[#204CC7]/10'
-                    : 'border-[#204CC7]/20 bg-white hover:border-[#204CC7]/40'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <Save className={`w-5 h-5 ${status === 'Saved' ? 'text-[#204CC7]' : 'text-[#5A5A6F]'}`} />
-                  {status === 'Saved' && (
-                    <div className="w-5 h-5 bg-[#204CC7] rounded-full flex items-center justify-center">
-                      <CheckCircle className="w-3 h-3 text-white" />
-                    </div>
-                  )}
-                </div>
-                <p className={`text-body mb-1 ${status === 'Saved' ? 'text-[#204CC7]' : 'text-[#272727]'}`}>
-                  Saved
-                </p>
-                <p className="text-[#5A5A6F] text-caption">
-                  Client is at risk but situation is manageable
-                </p>
-              </button>
-
-              <button
-                onClick={() => setStatus('Sureshot')}
-                className={`p-4 rounded-xl border-2 transition-all text-left ${
-                  status === 'Sureshot'
-                    ? 'border-[#E85D4D] bg-[#FDD7D0] shadow-md shadow-[#E85D4D]/10'
-                    : 'border-[#204CC7]/20 bg-white hover:border-[#E85D4D]/40'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <AlertTriangle className={`w-5 h-5 ${status === 'Sureshot' ? 'text-[#E85D4D]' : 'text-[#5A5A6F]'}`} />
-                  {status === 'Sureshot' && (
-                    <div className="w-5 h-5 bg-[#E85D4D] rounded-full flex items-center justify-center">
-                      <CheckCircle className="w-3 h-3 text-white" />
-                    </div>
-                  )}
-                </div>
-                <p className={`text-body mb-1 ${status === 'Sureshot' ? 'text-[#E85D4D]' : 'text-[#272727]'}`}>
-                  Sureshot
-                </p>
-                <p className="text-[#5A5A6F] text-caption">
-                  Client is highly likely to leave soon
-                </p>
-              </button>
-            </div>
-          </div>
-
-          {/* Reason Input */}
-          <div>
-            <label className="text-[#272727] mb-2 block">
-              Reason for CLA <span className="text-[#E85D4D]">*</span>
-            </label>
-            <textarea
-              value={reason}
-              onChange={(e) => {
-                setReason(e.target.value);
-                setErrors({ reason: '' });
-              }}
-              placeholder="E.g., Budget constraints, dissatisfied with results, internal team changes, competitor offer..."
-              className={`w-full px-4 py-3 border rounded-lg bg-[#F6F7FF] text-[#272727] placeholder:text-[#5A5A6F] focus:outline-none focus:ring-2 focus:ring-[#204CC7] focus:border-transparent transition-all resize-none ${
-                errors.reason ? 'border-[#E85D4D] ring-2 ring-[#E85D4D]/20' : 'border-[#204CC7]/20'
-              }`}
-              rows={4}
-            />
-            {errors.reason && (
-              <p className="text-[#E85D4D] text-caption mt-2 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" />
-                {errors.reason}
-              </p>
-            )}
-            <p className="text-[#5A5A6F] text-caption mt-2">
-              Be specific to help the team understand the situation and take appropriate action.
+            <h2 className="text-h1 text-black">Add New CLA</h2>
+            <p className="text-body text-black/50 mt-1 font-normal">
+              Client Loss Alert — Track at-risk clients
             </p>
           </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-md hover:bg-black/[0.04] flex items-center justify-center transition-all shrink-0"
+            aria-label="Close"
+          >
+            <X className="w-5 h-5 text-black/50" />
+          </button>
+        </div>
 
-          {/* Preview */}
-          <div className="bg-gradient-to-br from-[#F6F7FF] to-[#E8EBFF] rounded-lg p-4 border border-[#204CC7]/10">
-            <p className="text-[#5A5A6F] text-caption mb-2">Preview</p>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[#5A5A6F] text-body">Status:</span>
-                <span className={`px-3 py-1 rounded-full text-caption ${
-                  status === 'Saved' 
-                    ? 'bg-[#DBEAFE] text-[#204CC7]' 
-                    : 'bg-[#FDD7D0] text-[#E85D4D]'
-                }`}>
-                  {status}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[#5A5A6F] text-body">Date Added:</span>
-                <span className="text-[#272727] text-body">
-                  {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                </span>
-              </div>
+        {/* ── Body ── */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="grid grid-cols-2 gap-x-5 gap-y-4">
+            {/* Date & Time */}
+            <Field label="DATE & TIME" required>
+              <input
+                type="datetime-local"
+                value={dateTime}
+                onChange={(e) => setDateTime(e.target.value)}
+                className="w-full h-11 px-3.5 border border-black/10 rounded-xl text-body text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7] transition-all"
+              />
+            </Field>
+
+            {/* Client */}
+            <Field label="CLIENT" required>
+              <input
+                type="text"
+                value={client}
+                onChange={(e) => setClient(e.target.value)}
+                placeholder="Select a client"
+                readOnly={!!clientName}
+                className={`w-full h-11 px-3.5 border border-black/10 rounded-xl text-body text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7] transition-all ${clientName ? 'bg-black/[0.02] cursor-default' : ''}`}
+              />
+            </Field>
+
+            {/* Brief or Reason — full width */}
+            <div className="col-span-2">
+              <Field label="BRIEF OR REASON" required>
+                <textarea
+                  rows={3}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Describe the situation or reason for the CLA..."
+                  className="w-full px-3.5 py-3 border border-black/10 rounded-xl text-body text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7] transition-all resize-none leading-relaxed"
+                />
+              </Field>
             </div>
+
+            {/* Service */}
+            <Field label="SERVICE" required>
+              <SelectInput value={service} onChange={setService} options={SERVICES} />
+            </Field>
+
+            {/* Status */}
+            <Field label="STATUS" required>
+              <SelectInput value={status} onChange={setStatus} options={STATUSES} />
+            </Field>
+
+            {/* Billing / Month */}
+            <Field label="BILLING / MO (₹)">
+              <input
+                type="number"
+                min={0}
+                value={billing}
+                onChange={(e) => setBilling(e.target.value)}
+                placeholder="0"
+                className="w-full h-11 px-3.5 border border-black/10 rounded-xl text-body text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7] transition-all tabular-nums"
+              />
+            </Field>
+
+            {/* HOD */}
+            <Field label="HOD" required>
+              <SelectInput value={hod} onChange={setHod} options={HODS} placeholder="Select HOD" />
+            </Field>
+
+            {/* Category */}
+            <Field label="CATEGORY" required>
+              <SelectInput value={category} onChange={setCategory} options={CATEGORIES} />
+            </Field>
+
+            {/* Employee Responsible */}
+            <Field label="EMPLOYEE RESPONSIBLE" required>
+              <input
+                type="text"
+                value={employeeResponsible}
+                onChange={(e) => setEmployeeResponsible(e.target.value)}
+                placeholder="Enter employee name"
+                className="w-full h-11 px-3.5 border border-black/10 rounded-xl text-body text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7] transition-all"
+              />
+            </Field>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="p-6 pt-0 flex gap-3">
+        {/* ── Footer ── */}
+        <div className="px-6 py-4 border-t border-black/[0.06] flex items-center justify-end gap-3 shrink-0">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-3 border border-[#204CC7]/20 text-[#272727] rounded-lg hover:bg-[#F6F7FF] transition-all"
+            className="h-10 px-4 text-body text-black/60 font-medium hover:text-black transition-all"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!reason.trim()}
-            className={`flex-1 px-4 py-3 rounded-lg transition-all flex items-center justify-center gap-2 ${
-              !reason.trim()
-                ? 'bg-[#5A5A6F] text-white cursor-not-allowed opacity-50'
-                : 'bg-gradient-to-r from-[#F59E0B] to-[#FBBF24] text-white hover:shadow-lg hover:shadow-[#F59E0B]/25'
-            }`}
+            disabled={!isValid}
+            className="h-10 px-6 rounded-full bg-[#204CC7] text-white text-body font-semibold hover:bg-[#1a3d9f] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           >
-            <AlertTriangle className="w-4 h-4" />
-            <span>Add to CLA List</span>
+            Add CLA
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FIELD WRAPPER
+   ═══════════════════════════════════════════════════════════════════ */
+
+function Field({ label, required, children }: { label: string; required?: boolean; children: ReactNode }) {
+  return (
+    <div>
+      <label className="text-caption font-semibold text-black/55 uppercase tracking-wider mb-1.5 block">
+        {label}
+        {required && <span className="text-[#E2445C] ml-0.5">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CUSTOM SELECT (styled consistently with inputs)
+   ═══════════════════════════════════════════════════════════════════ */
+
+function SelectInput({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder?: string;
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full h-11 pl-3.5 pr-10 border border-black/10 rounded-xl text-body text-black focus:outline-none focus:ring-2 focus:ring-[#204CC7]/20 focus:border-[#204CC7] transition-all appearance-none bg-white cursor-pointer"
+      >
+        {placeholder && <option value="" disabled>{placeholder}</option>}
+        {options.map((opt) => (
+          <option key={opt} value={opt}>{opt}</option>
+        ))}
+      </select>
+      <ChevronDown className="w-4 h-4 text-black/40 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
     </div>
   );
 }

@@ -479,7 +479,7 @@ function AccountsTaxationDetail({
                 }`}>
                   {item.priority === 'high' ? 'High Impact' : item.priority === 'medium' ? 'Medium Impact' : 'Low Impact'}
                 </span>
-                <button className="px-3 py-1.5 bg-[#204CC7] text-white text-caption font-medium rounded-lg hover:bg-[#204CC7]/90 transition-colors">
+                <button className="px-3 py-1.5 bg-[#204CC7] text-white text-caption font-medium rounded-md hover:bg-[#204CC7]/90 transition-colors">
                   Create Task
                 </button>
               </div>

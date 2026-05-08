@@ -39,7 +39,7 @@ interface ClientDetailsDrawerProps {
   client: Client | null;
   isOpen: boolean;
   onClose: () => void;
-  onAddToCLA: () => void;
+  onAddToCLA?: () => void;
 }
 
 // Mock employee data
@@ -174,13 +174,15 @@ export function ClientDetailsDrawer({ client, isOpen, onClose, onAddToCLA }: Cli
                 <p className="text-caption text-black/55 mt-0.5">Complete client information and team management</p>
               </div>
               <div className="flex items-center gap-2">
+                {onAddToCLA && (
                 <button
                   onClick={onAddToCLA}
-                  className="flex items-center gap-2 px-4 py-2 text-body font-medium text-[#204CC7] bg-[#204CC7]/5 rounded-xl hover:bg-[#204CC7]/10 transition-all"
+                  className="flex items-center gap-2 px-4 py-2 text-body font-medium text-[#204CC7] bg-[#204CC7]/5 rounded-md hover:bg-[#204CC7]/10 transition-all"
                 >
                   <ExternalLink className="w-4 h-4" />
                   <span>Add to CLA</span>
                 </button>
+                )}
                 <button
                   onClick={onClose}
                   className="w-9 h-9 rounded-xl hover:bg-black/5 flex items-center justify-center transition-all"

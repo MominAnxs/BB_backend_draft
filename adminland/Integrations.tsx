@@ -468,7 +468,7 @@ export function Integrations() {
                     e.stopPropagation();
                     // Handle connect logic
                   }}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#204CC7] text-white rounded-lg hover:bg-[#1a3da0] transition-all text-caption font-medium"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#204CC7] text-white rounded-md hover:bg-[#1a3da0] transition-all text-caption font-medium"
                 >
                   <Power className="w-3.5 h-3.5" />
                   Connect
@@ -690,13 +690,13 @@ function IntegrationDetailModal({ isOpen, onClose, integration }: IntegrationDet
               </button>
             )}
             {integration.status === 'disconnected' && (
-              <button className="px-4 py-2.5 bg-[#204CC7] text-white rounded-xl hover:bg-[#1a3da0] transition-all flex items-center gap-2">
+              <button className="px-4 py-2.5 bg-[#204CC7] text-white rounded-md hover:bg-[#1a3da0] transition-all flex items-center gap-2">
                 <Power className="w-4 h-4" />
                 Connect Now
               </button>
             )}
             {integration.status === 'error' && (
-              <button className="px-4 py-2.5 bg-[#204CC7] text-white rounded-xl hover:bg-[#1a3da0] transition-all flex items-center gap-2">
+              <button className="px-4 py-2.5 bg-[#204CC7] text-white rounded-md hover:bg-[#1a3da0] transition-all flex items-center gap-2">
                 <RefreshCw className="w-4 h-4" />
                 Reconnect
               </button>

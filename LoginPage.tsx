@@ -189,7 +189,7 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#204CC7] text-white text-body font-semibold rounded-xl hover:bg-[#1a3da6] active:scale-[0.99] transition-all shadow-sm disabled:opacity-60 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/50 focus-visible:ring-offset-2"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#204CC7] text-white text-body font-semibold rounded-md hover:bg-[#1a3da6] active:scale-[0.99] transition-all shadow-sm disabled:opacity-60 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/50 focus-visible:ring-offset-2"
             >
               {isLoading ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

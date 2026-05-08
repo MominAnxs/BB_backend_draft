@@ -1043,7 +1043,7 @@ export function AttritionData() {
                     </>
                   ) : (
                     <>
-                      <button className="flex-1 px-4 py-2 bg-[#204CC7] text-white rounded-lg hover:bg-[#1a3d9f] transition-colors text-body">
+                      <button className="flex-1 px-4 py-2 bg-[#204CC7] text-white rounded-md hover:bg-[#1a3d9f] transition-colors text-body">
                         Attempt Win-back
                       </button>
                       <button className="flex-1 px-4 py-2 border border-[#204CC7]/20 text-[#204CC7] rounded-lg hover:bg-[#F6F7FF] transition-colors text-body">

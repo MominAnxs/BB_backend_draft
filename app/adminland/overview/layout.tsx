@@ -8,7 +8,6 @@ const reportTabs = [
   { id: 'overview', label: 'Overview', href: '/adminland/overview' },
   { id: 'growth-pl', label: 'Growth P&L', href: '/adminland/overview/growth-pl' },
   { id: 'attrition', label: 'Attrition', href: '/adminland/overview/attrition' },
-  { id: 'cla', label: 'CLAs', href: '/adminland/overview/cla' },
   { id: 'sales', label: 'Sales Reports', href: '/adminland/overview/sales' },
   { id: 'hr-reports', label: 'HR Reports', href: '/adminland/overview/hr-reports' },
 ];
@@ -27,7 +26,6 @@ function getActiveTab(pathname: string): string {
   if (pathname === '/adminland/overview') return 'overview';
   if (pathname.startsWith('/adminland/overview/growth-pl')) return 'growth-pl';
   if (pathname.startsWith('/adminland/overview/attrition')) return 'attrition';
-  if (pathname.startsWith('/adminland/overview/cla')) return 'cla';
   if (pathname.startsWith('/adminland/overview/sales')) return 'sales';
   if (pathname.startsWith('/adminland/overview/hr-reports')) return 'hr-reports';
   return 'overview';
@@ -195,7 +193,7 @@ const getInsightResponse = (promptId: string): InsightResponse => {
       sections: [
         { heading: 'Top Performer', content: 'Pooja leads with the highest hiring volume and best screening-to-hire conversion. Her pipeline management is the benchmark for the team.', sentiment: 'positive' },
         { heading: 'Consistent Contributors', content: 'Ravina maintains steady output with good quality hires. Priyanka is newer but ramping well — her April numbers show month-over-month improvement.', sentiment: 'positive' },
-        { heading: 'Area for Growth', content: 'Ujjwal\'s conversion rates need attention. High screening volume but lower interview-to-offer conversion suggests candidate quality filtering can improve.', sentiment: 'neutral' },
+        { heading: 'Area for Growth', content: 'Siddharth\'s conversion rates need attention. High screening volume but lower interview-to-offer conversion suggests candidate quality filtering can improve.', sentiment: 'neutral' },
       ],
       keyMetric: { label: 'Team Hire Rate', value: '59', change: '10 months', good: true },
     },
@@ -487,7 +485,7 @@ function AIInsightDrawer({ isOpen, onClose, activeTab, hrSection }: {
             </div>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg hover:bg-black/[0.04] flex items-center justify-center transition-colors"
+              className="w-8 h-8 rounded-md hover:bg-black/[0.04] flex items-center justify-center transition-colors"
               aria-label="Close insights panel"
             >
               <X className="w-4 h-4 text-black/40" />
@@ -682,7 +680,7 @@ function AIInsightDrawer({ isOpen, onClose, activeTab, hrSection }: {
               <button
                 onClick={handleCustomSubmit}
                 disabled={!customQuery.trim() || isGenerating}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg bg-[#204CC7] hover:bg-[#1a3fa3] disabled:opacity-30 disabled:hover:bg-[#204CC7] flex items-center justify-center transition-all"
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-md bg-[#204CC7] hover:bg-[#1a3fa3] disabled:opacity-30 disabled:hover:bg-[#204CC7] flex items-center justify-center transition-all"
                 aria-label="Submit question"
               >
                 <Send className="w-3.5 h-3.5 text-white" />

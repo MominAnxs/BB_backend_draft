@@ -1,12 +1,7 @@
-'use client';
-
-import { Suspense } from 'react';
-import ClientsPage from './ClientsPage';
-
-export default function Page() {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <ClientsPage />
-    </Suspense>
-  );
+"use client";
+import { AllClients } from '@/adminland/AllClients';
+import { useRouter } from 'next/navigation';
+export default function ClientsPage() {
+  const router = useRouter();
+  return <AllClients onNavigateToIncidents={() => router.push('/adminland/incidents')} />;
 }

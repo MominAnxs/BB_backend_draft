@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, Filter, Share, ChevronLeft, ChevronRight, MoreVertical, ChevronDown, LayoutGrid, FileText, BarChart3, Globe, Camera, Link2, Play, ArrowUpDown, Calendar, Users, Target, X, Check, Trash2, Tag, Plus, GripVertical, Pencil, Trash, Copy, UserPlus, ArrowRight, CircleCheck, User, Megaphone, MessageSquareText, Send, Eye, Hash, CalendarCheck2, CheckCircle2, Building2, ExternalLink, Package, Star, Crosshair, MapPin, Briefcase, Phone, Zap, MessageCircle, AlertCircle, Sparkles, Clock as ClockIcon } from 'lucide-react';
 import { MonthNavigator, MONTHS } from './shared/MonthNavigator';
 import { PeriodLabel } from './shared/PeriodLabel';
@@ -105,7 +106,18 @@ interface Client {
   id: string;
   name: string;
   team: { initials: string; color: string }[];
-  clientType: ClientType;
+  /**
+   * Business types this client runs with us.
+   * A client may engage Brego for multiple business motions
+   * (e.g. an Ayurveda hospital chain that runs both a D2C ecom store
+   * and a lead-gen funnel for hospital appointments).
+   * The first entry is treated as the *primary* type — used for
+   * single-type surfaces (KSM drawer headline, kickoff metric set,
+   * business-info template). Use `primaryType(c)` and `hasType(c, t)`
+   * helpers instead of touching the array directly.
+   * Invariant: at least one entry; no duplicates.
+   */
+  clientTypes: ClientType[];
   onboardingStatus: OnboardingStatus;  // Client-side business info submission
   kickoffStatus: KickoffStatus;
   kickoffData?: KickoffData;
@@ -114,6 +126,969 @@ interface Client {
   growthPlanStatus: GrowthPlanStatus;
   planStartDate?: string;     // ISO date — set when kickoff completes (triggers growth plan)
   comments: string;
+}
+
+// ── Client business-type helpers ──────────────────────────────────────
+// A client may have multiple clientTypes. Until per-type drawers exist,
+// surfaces that need a single type should use `primaryType` (the first
+// entry — the type the client was *first* onboarded with). Filtering
+// should use `hasType` so a multi-type client appears in BOTH segments.
+const primaryType = (c: Pick<Client, 'clientTypes'>): ClientType => c.clientTypes[0];
+const hasType     = (c: Pick<Client, 'clientTypes'>, t: ClientType): boolean => c.clientTypes.includes(t);
+
+// ── Brego SEM team roster (single source of truth) ─────────────────
+// Used by:
+//   • FilterPanel — search/select team members for filtering
+//   • Active filter chips — render avatar + name when a member is selected
+//   • Table avatar stack — show name + role on hover
+// Order is intentional: HOD → Manager → Sr. Exec → Executive → Jr. Exec.
+// Adding/removing a team member is a one-line change here.
+type TeamMember = { initials: string; name: string; color: string; role: string };
+const SEM_TEAM: TeamMember[] = [
+  { initials: 'CP', name: 'Chinmay Pawar',  color: '#7c3aed', role: 'HOD' },
+  { initials: 'JD', name: 'Jay Desai',      color: '#1e293b', role: 'Manager' },
+  { initials: 'AS', name: 'Aarti Shah',     color: '#475569', role: 'Manager' },
+  { initials: 'PM', name: 'Priya Mehta',    color: '#7c3aed', role: 'Sr. Executive' },
+  { initials: 'RK', name: 'Rahul Kumar',    color: '#0891b2', role: 'Sr. Executive' },
+  { initials: 'PS', name: 'Pooja Sharma',   color: '#f59e0b', role: 'Executive' },
+  { initials: 'NV', name: 'Nikhil Verma',   color: '#10b981', role: 'Executive' },
+  { initials: 'SR', name: 'Sneha Reddy',    color: '#ec4899', role: 'Executive' },
+  { initials: 'AK', name: 'Arjun Kapoor',   color: '#3b82f6', role: 'Jr. Executive' },
+  { initials: 'DM', name: 'Diya Malhotra',  color: '#8b5cf6', role: 'Jr. Executive' },
+  { initials: 'KI', name: 'Kabir Iyer',     color: '#06b6d4', role: 'Jr. Executive' },
+  { initials: 'TG', name: 'Tanvi Gupta',    color: '#f97316', role: 'Jr. Executive' },
+];
+// Lookup by initials — used by hover popover and active filter chips.
+const semMemberByInitials = (initials: string): TeamMember | undefined =>
+  SEM_TEAM.find(t => t.initials === initials);
+
+// ── TeamAvatarStack ────────────────────────────────────────────────
+// Avatar stack with a hover/focus popover that lists every member's
+// name + role. Two design constraints drove this implementation:
+//   1. The table lives inside an `overflow-x-auto` container, which
+//      clips absolutely-positioned children. So the popover renders
+//      via React Portal to <body> with `position: fixed` — it can
+//      escape any ancestor scroll boundary and never gets clipped.
+//   2. Hover triggers must not fire row-click. onClick stops
+//      propagation; pointer events on the popover let the user move
+//      the cursor onto it without dismissing.
+// Flip logic: if the trigger sits in the bottom 240px of the viewport,
+// the popover renders above the stack instead of below. Keeps it on
+// screen for last-row clients without needing a layout effect.
+function TeamAvatarStack({ team }: { team: Array<{ initials: string; color: string }> }) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number; flip: boolean } | null>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+
+  const recompute = () => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const flip = r.bottom + 220 > window.innerHeight;
+    setCoords({
+      top: flip ? r.top - 6 : r.bottom + 6,
+      left: r.left,
+      flip,
+    });
+  };
+
+  const show = () => { recompute(); setOpen(true); };
+  const hide = () => setOpen(false);
+
+  // Reposition on scroll/resize while open — keeps the popover glued
+  // to the trigger if the user scrolls the table or window.
+  useEffect(() => {
+    if (!open) return;
+    const onScroll = () => recompute();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [open]);
+
+  const accessibleLabel = `Team: ${team.map(m => semMemberByInitials(m.initials)?.name ?? m.initials).join(', ')}`;
+  const visible = team.slice(0, 4);
+  const overflow = team.length - visible.length;
+
+  return (
+    <>
+      <div
+        ref={triggerRef}
+        className="relative inline-flex items-center"
+        role="group"
+        aria-label={accessibleLabel}
+        tabIndex={0}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center -space-x-1.5">
+          {visible.map((member, mIdx) => (
+            <div
+              key={mIdx}
+              className="w-7 h-7 rounded-full flex items-center justify-center ring-2 ring-white text-caption font-semibold text-white flex-shrink-0"
+              style={{ backgroundColor: member.color, zIndex: 4 - mIdx }}
+            >
+              {member.initials}
+            </div>
+          ))}
+          {overflow > 0 && (
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center ring-2 ring-white text-caption font-semibold text-black/65 bg-black/[0.06] flex-shrink-0"
+              aria-label={`${overflow} more team members`}
+            >
+              +{overflow}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {open && coords && createPortal(
+        <div
+          role="tooltip"
+          style={{
+            position: 'fixed',
+            top: coords.top,
+            left: coords.left,
+            transform: coords.flip ? 'translateY(-100%)' : undefined,
+            zIndex: 9999,
+          }}
+          className="w-[240px] bg-white rounded-xl shadow-xl shadow-black/[0.14] border border-black/[0.08] py-1.5 animate-in fade-in slide-in-from-top-1 duration-150"
+        >
+          <div className="px-3 py-1.5 border-b border-black/[0.05] flex items-center justify-between">
+            <span className="text-caption text-black/45 uppercase tracking-[0.06em] font-semibold">Team</span>
+            <span className="text-caption text-black/55 font-medium tabular-nums">{team.length} {team.length === 1 ? 'member' : 'members'}</span>
+          </div>
+          <ul className="py-1">
+            {team.map((member, i) => {
+              const meta = semMemberByInitials(member.initials);
+              return (
+                <li key={i} className="flex items-center gap-2.5 px-3 py-1.5">
+                  <span
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-white text-caption font-semibold flex-shrink-0"
+                    style={{ backgroundColor: member.color }}
+                    aria-hidden="true"
+                  >
+                    {member.initials}
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-caption font-semibold text-black/85 truncate leading-snug">
+                      {meta?.name ?? member.initials}
+                    </span>
+                    <span className="block text-caption text-black/45 truncate leading-snug">
+                      {meta?.role ?? 'Team member'}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+// ── Platform performance metrics for expandable rows ──
+// ── Platform breakdown metric types (matching ReportingModule pattern) ──
+type MetricCell = { value: number; change: number; target: number };
+interface EcomPlatformMetrics {
+  adSpend: MetricCell;
+  roas: MetricCell;
+  revenue: MetricCell;
+  orders: MetricCell;
+  aov: MetricCell;
+}
+interface LeadGenPlatformMetrics {
+  adSpend: MetricCell;
+  leads: MetricCell;
+  cpl: MetricCell;
+  ctr: MetricCell;
+}
+type PlatformRow = { platform: string; metrics: EcomPlatformMetrics | LeadGenPlatformMetrics };
+type PlatformBreakdownData = { overall: PlatformRow; meta: PlatformRow; google: PlatformRow };
+
+function generatePlatformBreakdown(clientId: string, clientType: ClientType): PlatformBreakdownData {
+  const seed = parseInt(clientId) || 1;
+  const metaRatio = 0.55 + (seed % 5) * 0.04;
+  const googleRatio = 1 - metaRatio;
+
+  if (clientType === 'Ecommerce') {
+    const tSpend = 600000 + seed * 140000;
+    const spend = Math.round(tSpend * (0.78 + (seed % 4) * 0.06));
+    const tRoas = +(4.5 + (seed % 5) * 0.5).toFixed(2);
+    const roas = +(tRoas * (0.85 + (seed % 3) * 0.08)).toFixed(2);
+    const tRevenue = Math.round(tSpend * tRoas);
+    const revenue = Math.round(spend * roas);
+    const tOrders = Math.round(tRevenue / (2800 + seed * 80));
+    const orders = Math.round(revenue / (2800 + seed * 80));
+    const tAov = Math.round(tRevenue / tOrders);
+    const aov = Math.round(revenue / orders);
+
+    const mkEcom = (s: number, ts: number, ro: number, tro: number, rev: number, trev: number, ord: number, tord: number, av: number, tav: number, chSeed: number): EcomPlatformMetrics => ({
+      adSpend: { value: Math.round(s), target: Math.round(ts), change: Math.round(-12 + chSeed * 3) },
+      roas: { value: +ro.toFixed(2), target: +tro.toFixed(2), change: Math.round(5 + chSeed * 2.5) },
+      revenue: { value: Math.round(rev), target: Math.round(trev), change: Math.round(8 + chSeed * 3) },
+      orders: { value: Math.round(ord), target: Math.round(tord), change: Math.round(10 + chSeed * 4) },
+      aov: { value: Math.round(av), target: Math.round(tav), change: Math.round(-5 + chSeed * 1.5) },
+    });
+
+    return {
+      overall: { platform: 'Overall', metrics: mkEcom(spend, tSpend, roas, tRoas, revenue, tRevenue, orders, tOrders, aov, tAov, seed % 4) },
+      meta: { platform: 'Meta Ads', metrics: mkEcom(spend * metaRatio, tSpend * metaRatio, roas * (1 + (seed % 3) * 0.04), tRoas * 1.05, revenue * metaRatio, tRevenue * metaRatio, orders * metaRatio, tOrders * metaRatio, Math.round((revenue * metaRatio) / (orders * metaRatio)), Math.round((tRevenue * metaRatio) / (tOrders * metaRatio)), (seed + 1) % 5) },
+      google: { platform: 'Google Ads', metrics: mkEcom(spend * googleRatio, tSpend * googleRatio, roas * (1 - (seed % 3) * 0.03), tRoas * 0.95, revenue * googleRatio, tRevenue * googleRatio, orders * googleRatio, tOrders * googleRatio, Math.round((revenue * googleRatio) / (orders * googleRatio)), Math.round((tRevenue * googleRatio) / (tOrders * googleRatio)), (seed + 2) % 5) },
+    };
+  } else {
+    const tSpend = 300000 + seed * 70000;
+    const spend = Math.round(tSpend * (0.80 + (seed % 4) * 0.05));
+    const tLeads = Math.round(tSpend / (500 + seed * 20));
+    const leads = Math.round(spend / (550 + seed * 25));
+    const tCpl = Math.round(tSpend / tLeads);
+    const cpl = Math.round(spend / leads);
+    const tCtr = +(2.2 + (seed % 5) * 0.3).toFixed(1);
+    const ctr = +(1.6 + (seed % 5) * 0.35).toFixed(1);
+
+    const mkLead = (s: number, ts: number, ld: number, tld: number, cp: number, tcp: number, ct: number, tct: number, chSeed: number): LeadGenPlatformMetrics => ({
+      adSpend: { value: Math.round(s), target: Math.round(ts), change: Math.round(-4 + chSeed * 2.5) },
+      leads: { value: Math.round(ld), target: Math.round(tld), change: Math.round(6 + chSeed * 3) },
+      cpl: { value: Math.round(cp), target: Math.round(tcp), change: Math.round(-8 + chSeed * 2) },
+      ctr: { value: +ct.toFixed(1), target: +tct.toFixed(1), change: Math.round(2 + chSeed * 2) },
+    });
+
+    return {
+      overall: { platform: 'Overall', metrics: mkLead(spend, tSpend, leads, tLeads, cpl, tCpl, ctr, tCtr, seed % 4) },
+      meta: { platform: 'Meta Ads', metrics: mkLead(spend * metaRatio, tSpend * metaRatio, leads * metaRatio, tLeads * metaRatio, Math.round(cpl * 0.9), Math.round(tCpl * 0.92), +(ctr * 1.1).toFixed(1), +(tCtr * 1.08).toFixed(1), (seed + 1) % 5) },
+      google: { platform: 'Google Ads', metrics: mkLead(spend * googleRatio, tSpend * googleRatio, leads * googleRatio, tLeads * googleRatio, Math.round(cpl * 1.12), Math.round(tCpl * 1.08), +(ctr * 0.88).toFixed(1), +(tCtr * 0.9).toFixed(1), (seed + 2) % 5) },
+    };
+  }
+}
+
+// ── Change indicator (same as ReportingModule) ──
+function PmChangeIndicator({ value }: { value: number }) {
+  const isGood = value >= 0;
+  return (
+    <span className={`text-caption font-medium tabular-nums ${isGood ? 'text-[#0A8F5E]' : 'text-[#D03050]'}`}>
+      {value >= 0 ? '+' : ''}{value}%
+    </span>
+  );
+}
+
+function formatPmCurrency(v: number): string {
+  if (v >= 10000000) return `₹${(v / 10000000).toFixed(2)}Cr`;
+  if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
+  return `₹${v.toLocaleString('en-IN')}`;
+}
+
+// ── Editable platform targets ──
+// Drivers users can edit per platform; Overall row auto-derives via simple,
+// consistent formulas (sum for absolutes, weighted recompute for ratios).
+type EcomTargets    = { adSpend: number; roas: number; revenue: number; orders: number; aov: number };
+type LeadGenTargets = { adSpend: number; leads: number; cpl: number; ctr: number };
+type EditableTargets =
+  | { type: 'Ecommerce';      meta: EcomTargets;    google: EcomTargets    }
+  | { type: 'Lead generation'; meta: LeadGenTargets; google: LeadGenTargets };
+
+type MetricKey = keyof EcomTargets | keyof LeadGenTargets;
+type MetricUnit = 'currency-large' | 'currency-small' | 'count' | 'multiplier' | 'percent';
+
+const metricUnit: Record<MetricKey, MetricUnit> = {
+  adSpend: 'currency-large',
+  revenue: 'currency-large',
+  orders:  'count',
+  aov:     'currency-small',
+  roas:    'multiplier',
+  leads:   'count',
+  cpl:     'currency-small',
+  ctr:     'percent',
+};
+
+// Display formatter for a target value
+function formatTarget(v: number, unit: MetricUnit): string {
+  if (!isFinite(v) || v === 0) return '—';
+  switch (unit) {
+    case 'currency-large': return formatPmCurrency(Math.round(v));
+    case 'currency-small': return `₹${Math.round(v).toLocaleString('en-IN')}`;
+    case 'count':          return Math.round(v).toLocaleString('en-IN');
+    case 'multiplier':     return `${(Math.round(v * 10) / 10)}x`;
+    case 'percent':        return `${(Math.round(v * 10) / 10)}%`;
+  }
+}
+
+// Convert raw stored value -> string the user types in input
+function rawToInput(v: number, unit: MetricUnit): string {
+  if (!isFinite(v) || v === 0) return '';
+  switch (unit) {
+    case 'currency-large': return (v / 100000).toFixed(v >= 1000000 ? 2 : 1).replace(/\.?0+$/, '');
+    case 'currency-small': return Math.round(v).toString();
+    case 'count':          return Math.round(v).toString();
+    case 'multiplier':     return (Math.round(v * 100) / 100).toString();
+    case 'percent':        return (Math.round(v * 10) / 10).toString();
+  }
+}
+
+// Parse user-typed string -> raw stored value
+function inputToRaw(s: string, unit: MetricUnit): number {
+  const n = parseFloat(s);
+  if (isNaN(n) || n < 0) return 0;
+  return unit === 'currency-large' ? Math.round(n * 100000) : n;
+}
+
+// Per-unit input affordances
+const inputSuffix: Record<MetricUnit, string> = {
+  'currency-large': 'L',
+  'currency-small': '₹',
+  'count':          '',
+  'multiplier':     'x',
+  'percent':        '%',
+};
+const inputPrefix: Record<MetricUnit, string> = {
+  'currency-large': '₹',
+  'currency-small': '₹',
+  'count':          '',
+  'multiplier':     '',
+  'percent':        '',
+};
+
+// Build seed targets (full set of editable + derived) from generated breakdown.
+function seedEditableTargets(clientType: ClientType, brk: PlatformBreakdownData): EditableTargets {
+  if (clientType === 'Ecommerce') {
+    const m = brk.meta.metrics   as EcomPlatformMetrics;
+    const g = brk.google.metrics as EcomPlatformMetrics;
+    return {
+      type: 'Ecommerce',
+      meta:   { adSpend: m.adSpend.target, roas: m.roas.target, revenue: m.revenue.target, orders: m.orders.target, aov: m.aov.target },
+      google: { adSpend: g.adSpend.target, roas: g.roas.target, revenue: g.revenue.target, orders: g.orders.target, aov: g.aov.target },
+    };
+  }
+  const m = brk.meta.metrics   as LeadGenPlatformMetrics;
+  const g = brk.google.metrics as LeadGenPlatformMetrics;
+  return {
+    type: 'Lead generation',
+    meta:   { adSpend: m.adSpend.target, leads: m.leads.target, cpl: m.cpl.target, ctr: m.ctr.target },
+    google: { adSpend: g.adSpend.target, leads: g.leads.target, cpl: g.cpl.target, ctr: g.ctr.target },
+  };
+}
+
+// ── 6-month history snapshot for a client ──
+// Each historical month carries the *full* metric set for the business type so
+// the drawer can surface every relevant KPI (ecom: 5, lead-gen: 4) — not just
+// a single headline.
+type MonthMetric = {
+  key: MetricKey;
+  label: string;
+  value: string;     // pre-formatted for display
+  hit: boolean;      // met / missed target this month
+};
+
+type MonthSnapshot = {
+  monthLabel: string;     // e.g. "Apr 2026"
+  monthShort: string;     // e.g. "Apr"
+  year: number;
+  status: KSMStatus;      // overall Hit / Miss for the month
+  hitMetrics: number;     // count of metrics on target
+  totalMetrics: number;
+  spend: number;          // convenience headline (matches metrics[0])
+  primaryKpi: { label: string; value: string };  // ROAS for ecom, CPL for leadgen
+  metrics: MonthMetric[]; // every metric for the business type
+};
+
+function generateClientHistory(clientId: string, clientType: ClientType): MonthSnapshot[] {
+  const seed = parseInt(clientId) || 1;
+  const months = [
+    { label: 'Apr 2026', short: 'Apr', year: 2026 },
+    { label: 'Mar 2026', short: 'Mar', year: 2026 },
+    { label: 'Feb 2026', short: 'Feb', year: 2026 },
+    { label: 'Jan 2026', short: 'Jan', year: 2026 },
+    { label: 'Dec 2025', short: 'Dec', year: 2025 },
+    { label: 'Nov 2025', short: 'Nov', year: 2025 },
+  ];
+
+  return months.map((m, i) => {
+    const driftSeed = (seed + i * 7) % 11;
+    // Bias toward Hit on recent months (current month follows live ksmTarget for most clients)
+    const recentBias = i === 0 ? (seed % 5 !== 0 ? 4 : -2) : 0;
+    // Per-metric hit flag — deterministic, varies by metric+month
+    const flag = (idx: number) =>
+      (((driftSeed + idx * 3 + (seed % 5)) % 7) + recentBias) > 2;
+
+    if (clientType === 'Ecommerce') {
+      const spend   = Math.max(200000, 1500000 + (driftSeed - 5) * 80000 + (seed % 3) * 50000);
+      const roas    = +(4.2 + (driftSeed * 0.13) + (recentBias > 0 ? 0.4 : 0)).toFixed(2);
+      const revenue = Math.round(spend * roas);
+      const aov     = 2800 + (seed % 5) * 200 + (driftSeed - 5) * 80;
+      const orders  = Math.max(1, Math.round(revenue / Math.max(aov, 800)));
+      const aovDisp = Math.max(800, aov);
+
+      const metrics: MonthMetric[] = [
+        { key: 'adSpend', label: 'Spend',   value: formatPmCurrency(spend),                       hit: flag(0) },
+        { key: 'roas',    label: 'ROAS',    value: `${roas.toFixed(1)}x`,                         hit: flag(1) },
+        { key: 'revenue', label: 'Revenue', value: formatPmCurrency(revenue),                     hit: flag(2) },
+        { key: 'orders',  label: 'Orders',  value: orders.toLocaleString('en-IN'),                hit: flag(3) },
+        { key: 'aov',     label: 'AOV',     value: `₹${aovDisp.toLocaleString('en-IN')}`,         hit: flag(4) },
+      ];
+      const hitMetrics = metrics.filter(x => x.hit).length;
+      return {
+        monthLabel: m.label,
+        monthShort: m.short,
+        year: m.year,
+        status: hitMetrics >= 4 ? 'Hit' : 'Miss',
+        hitMetrics,
+        totalMetrics: metrics.length,
+        spend,
+        primaryKpi: { label: 'ROAS', value: `${roas.toFixed(1)}x` },
+        metrics,
+      };
+    }
+
+    // Lead generation
+    const spend = Math.max(150000, 800000 + (driftSeed - 5) * 50000 + (seed % 3) * 30000);
+    const cpl   = Math.max(120, Math.round(450 + driftSeed * 18 - (recentBias > 0 ? 60 : 0)));
+    const leads = Math.max(1, Math.round(spend / cpl));
+    const ctr   = +(1.6 + (driftSeed * 0.18) + (recentBias > 0 ? 0.4 : 0)).toFixed(1);
+
+    const metrics: MonthMetric[] = [
+      { key: 'adSpend', label: 'Spend', value: formatPmCurrency(spend),                hit: flag(0) },
+      { key: 'leads',   label: 'Leads', value: leads.toLocaleString('en-IN'),          hit: flag(1) },
+      { key: 'cpl',     label: 'CPL',   value: `₹${cpl.toLocaleString('en-IN')}`,      hit: flag(2) },
+      { key: 'ctr',     label: 'CTR',   value: `${ctr.toFixed(1)}%`,                   hit: flag(3) },
+    ];
+    const hitMetrics = metrics.filter(x => x.hit).length;
+    return {
+      monthLabel: m.label,
+      monthShort: m.short,
+      year: m.year,
+      status: hitMetrics >= 3 ? 'Hit' : 'Miss',
+      hitMetrics,
+      totalMetrics: metrics.length,
+      spend,
+      primaryKpi: { label: 'CPL', value: `₹${cpl.toLocaleString('en-IN')}` },
+      metrics,
+    };
+  });
+}
+
+// Compute the Overall target row as a roll-up of Meta + Google targets.
+// Sum-aggregables literally add; ratios recompute from sums.
+function rollupOverall(t: EditableTargets): EcomTargets | LeadGenTargets {
+  if (t.type === 'Ecommerce') {
+    const adSpend = t.meta.adSpend + t.google.adSpend;
+    const revenue = t.meta.revenue + t.google.revenue;
+    const orders  = t.meta.orders  + t.google.orders;
+    return {
+      adSpend,
+      revenue,
+      orders,
+      roas: adSpend > 0 ? +(revenue / adSpend).toFixed(2) : 0,
+      aov:  orders  > 0 ? Math.round(revenue / orders)    : 0,
+    };
+  }
+  const adSpend = t.meta.adSpend + t.google.adSpend;
+  const leads   = t.meta.leads   + t.google.leads;
+  // CTR weighted by spend (best proxy without impressions data)
+  const ctr = adSpend > 0 ? +((t.meta.ctr * t.meta.adSpend + t.google.ctr * t.google.adSpend) / adSpend).toFixed(1) : 0;
+  return {
+    adSpend,
+    leads,
+    cpl: leads > 0 ? Math.round(adSpend / leads) : 0,
+    ctr,
+  };
+}
+
+// ── Inline editable target chip ──
+// Renders as a quiet inline value with a hover affordance that swaps to an
+// input on click. Commit on Enter or blur; revert on Escape.
+function TargetEditor({
+  value,
+  unit,
+  onChange,
+  ariaLabel,
+}: {
+  value: number;
+  unit: MetricUnit;
+  onChange: (raw: number) => void;
+  ariaLabel: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      setDraft(rawToInput(value, unit));
+      // Focus + select on next tick
+      setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 0);
+    }
+  }, [editing, value, unit]);
+
+  const commit = () => {
+    const next = inputToRaw(draft, unit);
+    if (next !== value) onChange(next);
+    setEditing(false);
+  };
+  const cancel = () => setEditing(false);
+
+  if (editing) {
+    const prefix = inputPrefix[unit];
+    const suffix = inputSuffix[unit];
+    return (
+      <span className="inline-flex items-center gap-0.5 rounded-md bg-white ring-1 ring-[#204CC7]/40 shadow-sm shadow-[#204CC7]/[0.08] px-1.5 py-0.5">
+        {prefix && <span className="text-caption text-black/40">{prefix}</span>}
+        <input
+          ref={inputRef}
+          type="text"
+          inputMode="decimal"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value.replace(/[^\d.]/g, ''))}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+          }}
+          aria-label={ariaLabel}
+          className="bg-transparent text-caption font-semibold text-black/80 tabular-nums outline-none w-12"
+        />
+        {suffix && unit !== 'currency-small' && <span className="text-caption text-black/40">{suffix}</span>}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      aria-label={`${ariaLabel}: ${formatTarget(value, unit)}, click to edit`}
+      title="Click to edit target"
+      className="inline-flex items-center gap-1 -mx-1 px-1 py-0.5 rounded-md text-caption font-medium tabular-nums text-black/55 hover:text-[#204CC7] hover:bg-[#EEF1FB] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#204CC7]/40 transition-colors"
+    >
+      <span className="text-black/35">→</span>
+      <span>{formatTarget(value, unit)}</span>
+    </button>
+  );
+}
+
+// ── Read-only computed target chip (Overall row) ──
+function TargetReadout({ value, unit, ariaLabel }: { value: number; unit: MetricUnit; ariaLabel: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 -mx-1 px-1 py-0.5 text-caption font-medium tabular-nums text-black/65"
+      aria-label={`${ariaLabel}: ${formatTarget(value, unit)} (auto-computed)`}
+      title="Auto-computed from Meta + Google"
+    >
+      <span className="text-black/35">Σ</span>
+      <span>{formatTarget(value, unit)}</span>
+    </span>
+  );
+}
+
+// ── Brand-coloured platform glyph ──
+function PlatformGlyph({ platform }: { platform: 'meta' | 'google' | 'overall' }) {
+  if (platform === 'meta') {
+    // Meta blue M
+    return (
+      <span className="w-5 h-5 rounded-md flex items-center justify-center bg-[#1877F2]/[0.12] shrink-0">
+        <span className="text-[10px] font-bold text-[#1877F2]" aria-hidden="true">f</span>
+      </span>
+    );
+  }
+  if (platform === 'google') {
+    // Google G
+    return (
+      <span className="w-5 h-5 rounded-md flex items-center justify-center bg-white ring-1 ring-black/[0.08] shrink-0" aria-hidden="true">
+        <svg viewBox="0 0 24 24" className="w-3 h-3" xmlns="http://www.w3.org/2000/svg">
+          <path fill="#4285F4" d="M22.5 12.27c0-.78-.07-1.54-.2-2.27H12v4.51h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.32z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.99.66-2.25 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.16v2.84C3.97 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.07H2.16C1.42 8.55 1 10.22 1 12s.42 3.45 1.16 4.93l3.68-2.83z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.97 3.47 2.16 7.07l3.68 2.83C6.71 7.31 9.14 5.38 12 5.38z"/>
+        </svg>
+      </span>
+    );
+  }
+  // Overall — neutral
+  return (
+    <span className="w-5 h-5 rounded-md flex items-center justify-center bg-[#204CC7]/[0.10] shrink-0">
+      <span className="text-[9px] font-bold text-[#204CC7]" aria-hidden="true">Σ</span>
+    </span>
+  );
+}
+
+// ── KSM Drawer ──
+// Right-side drawer that opens when the user clicks the Hit/Miss chip.
+// Two zones: (1) per-platform target editor (Meta + Google → Overall auto-rolled up)
+// and (2) 6-month performance history with Hit/Miss verdict per month.
+// Metrics where lower-actual-than-target = good (CPL only).
+const lowerIsBetterMetric: Set<MetricKey> = new Set(['cpl']);
+
+function isHittingTarget(actual: number, target: number, key: MetricKey): boolean {
+  if (target <= 0) return true;
+  return lowerIsBetterMetric.has(key) ? actual <= target : actual >= target;
+}
+// Returns 0–100 fill for the progress bar. For lower-is-better, fill represents
+// "how much of the target budget you've used" (less = better → bar mostly empty).
+function pctOfTargetForBar(actual: number, target: number, key: MetricKey): number {
+  if (target <= 0) return 0;
+  const raw = (actual / target) * 100;
+  if (lowerIsBetterMetric.has(key)) {
+    return Math.min(100, raw);
+  }
+  return Math.min(100, raw);
+}
+// Format actuals — same formatter family as targets, just resilient to NaN.
+function formatActualValue(v: number, unit: MetricUnit): string {
+  if (!isFinite(v)) return '—';
+  switch (unit) {
+    case 'currency-large': return formatPmCurrency(Math.round(v));
+    case 'currency-small': return `₹${Math.round(v).toLocaleString('en-IN')}`;
+    case 'count':          return Math.round(v).toLocaleString('en-IN');
+    case 'multiplier':     return `${(Math.round(v * 100) / 100)}x`;
+    case 'percent':        return `${(Math.round(v * 10) / 10)}%`;
+  }
+}
+
+function KsmDrawer({
+  client,
+  businessType,
+  targets,
+  history,
+  current,
+  onUpdateTarget,
+  onClose,
+}: {
+  client: Client;
+  businessType: ClientType;
+  targets: EditableTargets;
+  history: MonthSnapshot[];
+  current: PlatformBreakdownData;
+  onUpdateTarget: (platform: 'meta' | 'google', key: MetricKey, raw: number) => void;
+  onClose: () => void;
+}) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+  // Drawer is scoped to a single (client, businessType) row. Lead Gen and
+  // E-commerce are entirely separate KPI families (CPL/leads vs. ROAS/spend),
+  // so each row owns its own drawer instance — no "+1" affordance needed.
+  const isEcom = businessType === 'Ecommerce';
+
+  // Selected month for the streak strip (0 = most recent).
+  const [selectedMonthIdx, setSelectedMonthIdx] = useState(0);
+  // Per-metric expanded state (revealing platform editors).
+  const [expandedMetric, setExpandedMetric] = useState<MetricKey | null>(null);
+
+  // Escape closes the drawer
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  // Lock body scroll while open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  const overallTargets = rollupOverall(targets);
+  const metricKeys: MetricKey[] = isEcom
+    ? ['adSpend', 'roas', 'revenue', 'orders', 'aov']
+    : ['adSpend', 'leads', 'cpl', 'ctr'];
+  const metricLabels: Record<MetricKey, string> = {
+    adSpend: 'Ad Spend', roas: 'ROAS', revenue: 'Revenue', orders: 'Orders', aov: 'AOV',
+    leads: 'Leads', cpl: 'CPL', ctr: 'CTR',
+  };
+
+  const currentMonth   = history[0];
+  const previousMonth  = history[1];
+  const selectedMonth  = history[selectedMonthIdx];
+  const trendDelta     = currentMonth && previousMonth
+    ? currentMonth.hitMetrics - previousMonth.hitMetrics
+    : 0;
+
+  // Pull actuals from PlatformBreakdownData.overall for current month
+  const overallActuals = current.overall.metrics as unknown as Record<string, MetricCell | undefined>;
+  const metaActuals    = current.meta.metrics    as unknown as Record<string, MetricCell | undefined>;
+  const googleActuals  = current.google.metrics  as unknown as Record<string, MetricCell | undefined>;
+
+  return (
+    <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label={`${client.name} performance drawer`}>
+      {/* Backdrop */}
+      <div
+        ref={overlayRef}
+        onClick={onClose}
+        className="absolute inset-0 bg-black/30 backdrop-blur-[1px]"
+        style={{ animation: 'fadeIn 150ms ease-out' }}
+      />
+      {/* Panel */}
+      <div
+        className="absolute right-0 top-0 bottom-0 w-[720px] max-w-full bg-white shadow-2xl shadow-black/20 flex flex-col"
+        style={{ animation: 'slideIn 220ms ease-out' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <style>{`
+          @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+          @keyframes slideIn { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        `}</style>
+
+        {/* ── Header ── */}
+        <div className="px-7 pt-5 pb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-h3 font-bold text-black/85 truncate">{client.name}</h2>
+            {/* The drawer is scoped to one business motion. Type chip is the
+                first signal so admins instantly know which KPI family they're
+                looking at (Lead Gen → CPL/Leads, E-com → ROAS/Spend). */}
+            <p className="text-caption text-black/50 mt-1 flex items-center gap-2 flex-wrap">
+              <span
+                className={`inline-flex items-center px-2 py-0.5 rounded-md text-caption font-semibold ${
+                  businessType === 'Ecommerce'
+                    ? 'bg-[#EEF1FB] text-[#3D5EC7]'
+                    : 'bg-violet-50 text-violet-700'
+                }`}
+              >
+                {businessType}
+              </span>
+              <span aria-hidden="true" className="text-black/25">·</span>
+              <span>{currentMonth.monthLabel}</span>
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="w-9 h-9 -mr-1 rounded-md flex items-center justify-center text-black/50 hover:bg-black/[0.05] hover:text-black/80 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* ── Hero: status + trend ── */}
+        <div className="px-7 pb-5 border-b border-black/[0.05]">
+          <div className="flex items-center gap-3.5">
+            <span className={`w-2.5 h-2.5 rounded-full ${currentMonth.status === 'Hit' ? 'bg-emerald-500 ring-4 ring-emerald-500/15' : 'bg-rose-500 ring-4 ring-rose-500/15'}`} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-baseline gap-2">
+                <span className={`text-h3 font-bold ${currentMonth.status === 'Hit' ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  {currentMonth.status === 'Hit' ? 'On track' : 'Behind target'}
+                </span>
+                <span className="text-body font-medium text-black/55 tabular-nums">
+                  {currentMonth.hitMetrics}/{currentMonth.totalMetrics} metrics
+                </span>
+              </div>
+              {previousMonth && (
+                <p className="text-caption text-black/50 mt-0.5">
+                  {trendDelta > 0 && (
+                    <span className="text-emerald-600 font-medium">↑ +{trendDelta} </span>
+                  )}
+                  {trendDelta < 0 && (
+                    <span className="text-rose-500 font-medium">↓ {trendDelta} </span>
+                  )}
+                  {trendDelta === 0 && (
+                    <span className="text-black/55 font-medium">— no change </span>
+                  )}
+                  vs {previousMonth.monthShort} {previousMonth.year} ({previousMonth.hitMetrics}/{previousMonth.totalMetrics})
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Scrollable content ── */}
+        <div className="flex-1 overflow-y-auto">
+          {/* PERFORMANCE — actuals + targets */}
+          <section className="px-7 pt-6 pb-7">
+            <header className="flex items-baseline justify-between mb-3.5">
+              <h3 className="text-caption font-semibold text-black/75 uppercase tracking-wider">This month's performance</h3>
+              <span className="text-caption text-black/45">Click a metric to set platform targets</span>
+            </header>
+
+            <div className="rounded-xl border border-black/[0.06] overflow-hidden bg-white">
+              {metricKeys.map((k, idx) => {
+                const unit       = metricUnit[k];
+                const label      = metricLabels[k];
+                const overallCell = overallActuals[k];
+                const actualVal  = overallCell?.value ?? 0;
+                const targetVal  = (overallTargets as unknown as Record<string, number>)[k] ?? 0;
+                const hit        = isHittingTarget(actualVal, targetVal, k);
+                const pct        = pctOfTargetForBar(actualVal, targetVal, k);
+                const pctRounded = Math.round(pct);
+                const isOpen     = expandedMetric === k;
+                const metaVal    = (targets.meta   as unknown as Record<string, number>)[k] ?? 0;
+                const googleVal  = (targets.google as unknown as Record<string, number>)[k] ?? 0;
+                const metaActual   = metaActuals[k]?.value ?? 0;
+                const googleActual = googleActuals[k]?.value ?? 0;
+
+                return (
+                  <div key={k} className={idx > 0 ? 'border-t border-black/[0.04]' : ''}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedMetric(isOpen ? null : k)}
+                      aria-expanded={isOpen}
+                      aria-label={`${label} — ${formatActualValue(actualVal, unit)} of ${formatTarget(targetVal, unit)} target`}
+                      className="w-full text-left px-4 py-3.5 hover:bg-[#FAFBFC] transition-colors focus:outline-none focus:bg-[#FAFBFC]"
+                    >
+                      {/* Top line: label · big actual · status icon */}
+                      <div className="flex items-baseline justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-caption font-semibold text-black/70 uppercase tracking-wide">{label}</span>
+                          <ChevronDown className={`w-3.5 h-3.5 text-black/30 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                        </div>
+                        <div className="flex items-baseline gap-2.5">
+                          <span className="text-h2 font-bold text-black/85 tabular-nums leading-none">
+                            {formatActualValue(actualVal, unit)}
+                          </span>
+                          <span className="text-caption text-black/45 tabular-nums">/ {formatTarget(targetVal, unit)}</span>
+                        </div>
+                      </div>
+
+                      {/* Progress bar + pct + tone chip */}
+                      <div className="mt-2.5 flex items-center gap-3">
+                        <div className="flex-1 h-1.5 rounded-full bg-black/[0.05] overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${hit ? 'bg-emerald-500' : 'bg-rose-400'}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className={`text-caption font-semibold tabular-nums ${hit ? 'text-emerald-700' : 'text-rose-600'}`}>
+                          {pctRounded}%
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* Expanded: per-platform targets editor + actuals */}
+                    {isOpen && (
+                      <div className="px-4 pt-1 pb-4 bg-[#FAFBFC] border-t border-black/[0.04]">
+                        <div className="rounded-lg bg-white border border-black/[0.06] divide-y divide-black/[0.04]">
+                          <div className="px-3.5 py-2.5 grid grid-cols-[28px_1fr_auto_auto] items-center gap-3">
+                            <PlatformGlyph platform="meta" />
+                            <span className="text-caption font-medium text-black/70">Meta</span>
+                            <span className="text-caption text-black/55 tabular-nums">
+                              {formatActualValue(metaActual, unit)}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-micro text-black/40 uppercase tracking-wide">Target</span>
+                              <TargetEditor
+                                value={metaVal}
+                                unit={unit}
+                                onChange={(v) => onUpdateTarget('meta', k, v)}
+                                ariaLabel={`Meta ${label} target`}
+                              />
+                            </div>
+                          </div>
+                          <div className="px-3.5 py-2.5 grid grid-cols-[28px_1fr_auto_auto] items-center gap-3">
+                            <PlatformGlyph platform="google" />
+                            <span className="text-caption font-medium text-black/70">Google</span>
+                            <span className="text-caption text-black/55 tabular-nums">
+                              {formatActualValue(googleActual, unit)}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-micro text-black/40 uppercase tracking-wide">Target</span>
+                              <TargetEditor
+                                value={googleVal}
+                                unit={unit}
+                                onChange={(v) => onUpdateTarget('google', k, v)}
+                                ariaLabel={`Google ${label} target`}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-micro text-black/40 px-1">
+                          Overall <span className="font-medium text-[#204CC7]">auto-rolls up</span> from Meta + Google.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* HISTORY — visual streak strip + selected detail */}
+          <section className="px-7 pt-1 pb-8 border-t border-black/[0.05]">
+            <header className="flex items-baseline justify-between mb-3.5 mt-5">
+              <h3 className="text-caption font-semibold text-black/75 uppercase tracking-wider">6-Month trend</h3>
+              <span className="text-caption text-black/45">Tap a month for details</span>
+            </header>
+
+            {/* Streak strip — oldest → newest, left-to-right */}
+            <div className="grid grid-cols-6 gap-2">
+              {[...history].reverse().map((m, i) => {
+                const realIdx = history.length - 1 - i; // map back to history[] index (0 = newest)
+                const isSelected = realIdx === selectedMonthIdx;
+                const isHit = m.status === 'Hit';
+                return (
+                  <button
+                    key={m.monthLabel}
+                    type="button"
+                    onClick={() => setSelectedMonthIdx(realIdx)}
+                    aria-pressed={isSelected}
+                    aria-label={`${m.monthLabel}: ${m.status}, ${m.hitMetrics} of ${m.totalMetrics} metrics on target`}
+                    className={`group relative rounded-xl border px-2.5 py-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-[#204CC7]/25
+                      ${isSelected
+                        ? 'border-[#204CC7]/40 bg-[#EEF1FB]/60 shadow-sm shadow-[#204CC7]/10'
+                        : 'border-black/[0.06] bg-white hover:border-black/[0.12] hover:bg-black/[0.015]'}
+                    `}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={`text-micro font-semibold uppercase tracking-wider ${isSelected ? 'text-[#204CC7]' : 'text-black/55'}`}>
+                        {m.monthShort}
+                      </span>
+                      <span className={`w-1.5 h-1.5 rounded-full ${isHit ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                    </div>
+                    {/* Mini score bar */}
+                    <div className="mt-2.5 h-1 rounded-full bg-black/[0.05] overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${isHit ? 'bg-emerald-500' : 'bg-rose-400'}`}
+                        style={{ width: `${(m.hitMetrics / m.totalMetrics) * 100}%` }}
+                      />
+                    </div>
+                    <div className="mt-1.5 text-caption font-semibold text-black/80 tabular-nums">
+                      {m.hitMetrics}/{m.totalMetrics}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Selected month detail card — every metric for the business type */}
+            <div className="mt-4 rounded-xl bg-[#FAFBFC] border border-black/[0.05] px-4 pt-3.5 pb-4">
+              <div className="flex items-center justify-between gap-3 mb-3.5">
+                <div className="flex items-center gap-2.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${selectedMonth.status === 'Hit' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                  <span className="text-body font-semibold text-black/80">{selectedMonth.monthLabel}</span>
+                  <span className={`text-caption font-semibold px-2 py-0.5 rounded-full ${selectedMonth.status === 'Hit' ? 'text-emerald-700 bg-emerald-50' : 'text-rose-600 bg-rose-50'}`}>
+                    {selectedMonth.status}
+                  </span>
+                </div>
+                <span className="text-caption font-medium text-black/55 tabular-nums">
+                  {selectedMonth.hitMetrics} of {selectedMonth.totalMetrics} on target
+                </span>
+              </div>
+              <div
+                className="grid gap-x-3 gap-y-3"
+                style={{ gridTemplateColumns: `repeat(${selectedMonth.metrics.length}, minmax(0, 1fr))` }}
+              >
+                {selectedMonth.metrics.map((metric) => (
+                  <div key={metric.key} className="flex flex-col min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-micro text-black/45 uppercase tracking-wider">{metric.label}</span>
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${metric.hit ? 'bg-emerald-500' : 'bg-rose-400'}`}
+                        title={metric.hit ? 'On target' : 'Below target'}
+                        aria-label={metric.hit ? 'On target' : 'Below target'}
+                      />
+                    </div>
+                    <span className={`text-body font-semibold tabular-nums mt-0.5 truncate ${metric.hit ? 'text-black/85' : 'text-rose-600'}`}>
+                      {metric.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Business Info Types (collected from client-facing onboarding app) ──
@@ -773,50 +1748,112 @@ function addDays(iso: string, days: number): string {
   return d.toISOString().split('T')[0];
 }
 
+// Today as ISO (yyyy-mm-dd) — local-time, midnight-aligned
+function todayISO(): string {
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  return t.toISOString().split('T')[0];
+}
+
+// Signed days between today and target ISO (positive = future, negative = past)
+function daysFromToday(iso: string): number | null {
+  if (!iso) return null;
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d.getTime())) return null;
+  return Math.round((d.getTime() - t.getTime()) / 86400000);
+}
+
+// Plain-English relative label + tone for Next QC.
+// Always uses "days" — no abbreviations, no unit-switching to months. A QC that
+// is more than ~30 days overdue would never happen in practice (someone would
+// have escalated long before), but we still degrade gracefully by capping the
+// label at "30+ days overdue" instead of showing nonsensical month counts.
+type QCTone = 'overdue' | 'today' | 'tomorrow' | 'soon' | 'normal';
+function getQCStatus(nextISO: string): { label: string; tone: QCTone } {
+  const diff = daysFromToday(nextISO);
+  if (diff === null) return { label: '', tone: 'normal' };
+  if (diff < 0) {
+    const past = Math.abs(diff);
+    if (past > 30) return { label: '30+ days overdue', tone: 'overdue' };
+    return { label: past === 1 ? '1 day overdue' : `${past} days overdue`, tone: 'overdue' };
+  }
+  if (diff === 0) return { label: 'Today', tone: 'today' };
+  if (diff === 1) return { label: 'Tomorrow', tone: 'tomorrow' };
+  if (diff <= 7) return { label: `in ${diff} days`, tone: 'soon' };
+  if (diff <= 30) return { label: `in ${diff} days`, tone: 'normal' };
+  return { label: '', tone: 'normal' };
+}
+
+// Long-form date for the popover preview ("3 Mar 2025")
+function formatLongDate(iso: string): string {
+  if (!iso) return '—';
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d.getTime())) return '—';
+  return `${d.getDate()} ${d.toLocaleString('en-US', { month: 'short' })} ${d.getFullYear()}`;
+}
+
 const mockClients: Client[] = [
   // Clients with businessInfo data → Complete | Pending kickoff → Pending | Some mid-way → In Progress
-  { id: '1', name: 'Elan by Aanchal', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-03', comments: '' },
-  { id: '2', name: 'July Issue', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-05', ksmTarget: 'Miss', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '3', name: 'Mahesh Interior', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }], clientType: 'Lead generation', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '4', name: 'Nor Black Nor White', team: [], clientType: 'Ecommerce', onboardingStatus: 'Pending', kickoffStatus: 'Pending', lastQC: '', ksmTarget: 'Miss', growthPlanStatus: 'Not Started', comments: '' },
-  { id: '5', name: 'Skin Essentials', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-01', ksmTarget: 'Hit', growthPlanStatus: 'In Progress', planStartDate: '2026-03-18', comments: '' },
-  { id: '6', name: 'True Diamond', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '7', name: 'Una Homes LLP', team: [], clientType: 'Lead generation', onboardingStatus: 'In Progress', kickoffStatus: 'Pending', lastQC: '', ksmTarget: 'Miss', growthPlanStatus: 'Not Started', comments: '' },
-  { id: '8', name: 'Crystallicious', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'AS', color: '#475569' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '9', name: 'Bio Basket', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-02', ksmTarget: 'Miss', growthPlanStatus: 'In Progress', planStartDate: '2026-03-24', comments: '' },
-  { id: '10', name: 'Third Eye Brands & Concepts', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }], clientType: 'Lead generation', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '11', name: 'Bybit Technologies', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }], clientType: 'Lead generation', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-05', ksmTarget: 'Miss', growthPlanStatus: 'Not Started', planStartDate: '2026-03-01', comments: '' },
-  { id: '12', name: 'JM Group', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '13', name: 'Enagenbio', team: [], clientType: 'Lead generation', onboardingStatus: 'Pending', kickoffStatus: 'Pending', lastQC: '', ksmTarget: 'Miss', growthPlanStatus: 'Not Started', comments: '' },
-  { id: '14', name: 'House of Saloni', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '15', name: 'Inkling & Co.', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'AS', color: '#475569' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-01', ksmTarget: 'Miss', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
-  { id: '16', name: 'Ivaana Ventures (Aerome)', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'RK', color: '#0891b2' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-06', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '17', name: 'Ivaana Ventures (Scentitude)', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'AS', color: '#475569' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Miss', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
-  { id: '18', name: 'ISPAN Services', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }], clientType: 'Lead generation', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-05', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '19', name: 'Knickgasm', team: [{ initials: 'RK', color: '#7c3aed' }, { initials: 'PS', color: '#0891b2' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Onboarding', lastQC: '', ksmTarget: 'Miss', growthPlanStatus: 'Not Started', comments: '', kickoffData: { assignments: { 'HOD/Sr. Manager': 'e1', 'Manager': 'e3', 'Sr. Executive': 'e6', 'Jr. Executive': 'e9' }, proposedMetrics: { adSpend: '400000', roas: '4.5', revenue: '1800000', orders: '800', aov: '2250', leads: '', cpl: '', ctr: '' }, clientMetrics: { adSpend: '350000', roas: '5.0', revenue: '1750000', orders: '700', aov: '2500', leads: '', cpl: '', ctr: '' }, clientNotes: { adSpend: 'We\'d prefer starting conservative on spend and scaling once we see consistent results.', roas: 'We expect a higher return ratio to justify the investment to our board.', revenue: 'Slightly lower is fine if we maintain better margins.', orders: 'Fewer orders is acceptable if AOV is higher.' }, hasClientResponse: true } },
-  { id: '20', name: 'Maharishi Ayurveda Hospitals', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }], clientType: 'Lead generation', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-04', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '21', name: 'Meeami Fashion', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Miss', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
-  { id: '22', name: 'Littlewoods Kidswear', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'RK', color: '#0891b2' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-02', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '23', name: 'Mercury Air Conditioners', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'AS', color: '#475569' }], clientType: 'Lead generation', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Miss', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '24', name: 'Mood Lift', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-05', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '25', name: 'MyScaai Bharat Construction', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }], clientType: 'Lead generation', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Miss', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
-  { id: '26', name: 'Nuvida Lifescience', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-04', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '27', name: 'Pytheos Health Systems', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }], clientType: 'Lead generation', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Miss', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '28', name: 'J Pearls', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'RK', color: '#0891b2' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-01', ksmTarget: 'Hit', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
-  { id: '29', name: 'Runwave Creations', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'AS', color: '#475569' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-06', ksmTarget: 'Miss', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '30', name: 'SVVAYAM', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Hit', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
-  { id: '31', name: 'The Anaya Collections', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-05', ksmTarget: 'Miss', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '32', name: 'Thai naam', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }], clientType: 'Lead generation', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Hit', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
-  { id: '33', name: 'The Derm Clinic', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }], clientType: 'Lead generation', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-04', ksmTarget: 'Miss', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '34', name: 'Unigo', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'RK', color: '#0891b2' }], clientType: 'Lead generation', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Hit', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
-  { id: '35', name: 'Valiente Caps', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'AS', color: '#475569' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-02', ksmTarget: 'Miss', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '36', name: 'Veya Wellness', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }], clientType: 'Ecommerce', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-05', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
-  { id: '37', name: 'TREC', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }], clientType: 'Lead generation', onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2025-03-03', ksmTarget: 'Miss', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
+  { id: '1', name: 'Elan by Aanchal', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }, { initials: 'AK', color: '#3b82f6' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-09', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-03', comments: '' },
+  { id: '2', name: 'July Issue', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }, { initials: 'AK', color: '#3b82f6' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-15', ksmTarget: 'Miss', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '3', name: 'Mahesh Interior', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }, { initials: 'DM', color: '#8b5cf6' }], clientTypes: ['Lead generation'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-10', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '4', name: 'Nor Black Nor White', team: [], clientTypes: ['Ecommerce'], onboardingStatus: 'Pending', kickoffStatus: 'Pending', lastQC: '', ksmTarget: 'Miss', growthPlanStatus: 'Not Started', comments: '' },
+  { id: '5', name: 'Skin Essentials', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }, { initials: 'TG', color: '#f97316' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-20', ksmTarget: 'Hit', growthPlanStatus: 'In Progress', planStartDate: '2026-03-18', comments: '' },
+  { id: '6', name: 'True Diamond', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }, { initials: 'DM', color: '#8b5cf6' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-05', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '7', name: 'Una Homes LLP', team: [], clientTypes: ['Lead generation'], onboardingStatus: 'In Progress', kickoffStatus: 'Pending', lastQC: '', ksmTarget: 'Miss', growthPlanStatus: 'Not Started', comments: '' },
+  { id: '8', name: 'Crystallicious', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'AS', color: '#475569' }, { initials: 'DM', color: '#8b5cf6' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-12', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '9', name: 'Bio Basket', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }, { initials: 'KI', color: '#06b6d4' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-22', ksmTarget: 'Miss', growthPlanStatus: 'In Progress', planStartDate: '2026-03-24', comments: '' },
+  { id: '10', name: 'Third Eye Brands & Concepts', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }, { initials: 'KI', color: '#06b6d4' }], clientTypes: ['Lead generation'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-04', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '11', name: 'Bybit Technologies', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }, { initials: 'TG', color: '#f97316' }], clientTypes: ['Lead generation'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-09', ksmTarget: 'Miss', growthPlanStatus: 'Not Started', planStartDate: '2026-03-01', comments: '' },
+  { id: '12', name: 'JM Group', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }, { initials: 'TG', color: '#f97316' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-18', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '13', name: 'Enagenbio', team: [], clientTypes: ['Lead generation'], onboardingStatus: 'Pending', kickoffStatus: 'Pending', lastQC: '', ksmTarget: 'Miss', growthPlanStatus: 'Not Started', comments: '' },
+  { id: '14', name: 'House of Saloni', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }, { initials: 'DM', color: '#8b5cf6' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-11', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '15', name: 'Inkling & Co.', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'AS', color: '#475569' }, { initials: 'KI', color: '#06b6d4' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-01', ksmTarget: 'Miss', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
+  { id: '16', name: 'Ivaana Ventures (Aerome)', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'RK', color: '#0891b2' }, { initials: 'AK', color: '#3b82f6' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-14', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '17', name: 'Ivaana Ventures (Scentitude)', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'AS', color: '#475569' }, { initials: 'TG', color: '#f97316' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-21', ksmTarget: 'Miss', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
+  { id: '18', name: 'ISPAN Services', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }, { initials: 'AK', color: '#3b82f6' }], clientTypes: ['Lead generation'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-07', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '19', name: 'Knickgasm', team: [{ initials: 'RK', color: '#0891b2' }, { initials: 'PS', color: '#f59e0b' }, { initials: 'SR', color: '#ec4899' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Onboarding', lastQC: '', ksmTarget: 'Miss', growthPlanStatus: 'Not Started', comments: '', kickoffData: { assignments: { 'HOD/Sr. Manager': 'e1', 'Manager': 'e3', 'Sr. Executive': 'e6', 'Jr. Executive': 'e9' }, proposedMetrics: { adSpend: '400000', roas: '4.5', revenue: '1800000', orders: '800', aov: '2250', leads: '', cpl: '', ctr: '' }, clientMetrics: { adSpend: '350000', roas: '5.0', revenue: '1750000', orders: '700', aov: '2500', leads: '', cpl: '', ctr: '' }, clientNotes: { adSpend: 'We\'d prefer starting conservative on spend and scaling once we see consistent results.', roas: 'We expect a higher return ratio to justify the investment to our board.', revenue: 'Slightly lower is fine if we maintain better margins.', orders: 'Fewer orders is acceptable if AOV is higher.' }, hasClientResponse: true } },
+  // Multi-type: Lead-gen for hospital appointments (primary) + D2C ecom for Ayurveda products
+  { id: '20', name: 'Maharishi Ayurveda Hospitals', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }, { initials: 'KI', color: '#06b6d4' }], clientTypes: ['Lead generation', 'Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-16', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '21', name: 'Meeami Fashion', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }, { initials: 'AK', color: '#3b82f6' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-13', ksmTarget: 'Miss', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
+  { id: '22', name: 'Littlewoods Kidswear', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'RK', color: '#0891b2' }, { initials: 'DM', color: '#8b5cf6' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-09', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '23', name: 'Mercury Air Conditioners', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'AS', color: '#475569' }, { initials: 'TG', color: '#f97316' }], clientTypes: ['Lead generation'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-06', ksmTarget: 'Miss', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '24', name: 'Mood Lift', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }, { initials: 'AK', color: '#3b82f6' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-19', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '25', name: 'MyScaai Bharat Construction', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }, { initials: 'DM', color: '#8b5cf6' }], clientTypes: ['Lead generation'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-03-30', ksmTarget: 'Miss', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
+  // Multi-type: D2C supplement ecom (primary) + lead-gen for clinic/distributor enquiries
+  { id: '26', name: 'Nuvida Lifescience', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }, { initials: 'DM', color: '#8b5cf6' }], clientTypes: ['Ecommerce', 'Lead generation'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-17', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '27', name: 'Pytheos Health Systems', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }, { initials: 'KI', color: '#06b6d4' }], clientTypes: ['Lead generation'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-22', ksmTarget: 'Miss', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '28', name: 'J Pearls', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'RK', color: '#0891b2' }, { initials: 'KI', color: '#06b6d4' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-08', ksmTarget: 'Hit', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
+  { id: '29', name: 'Runwave Creations', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'AS', color: '#475569' }, { initials: 'KI', color: '#06b6d4' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-10', ksmTarget: 'Miss', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '30', name: 'SVVAYAM', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }, { initials: 'TG', color: '#f97316' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-12', ksmTarget: 'Hit', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
+  { id: '31', name: 'The Anaya Collections', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }, { initials: 'TG', color: '#f97316' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-21', ksmTarget: 'Miss', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '32', name: 'Thai naam', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }, { initials: 'AK', color: '#3b82f6' }], clientTypes: ['Lead generation'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-03', ksmTarget: 'Hit', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
+  // Multi-type: Consultation lead-gen (primary) + skincare product ecom
+  { id: '33', name: 'The Derm Clinic', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }, { initials: 'AK', color: '#3b82f6' }], clientTypes: ['Lead generation', 'Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-15', ksmTarget: 'Miss', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '34', name: 'Unigo', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'RK', color: '#0891b2' }, { initials: 'TG', color: '#f97316' }], clientTypes: ['Lead generation'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-20', ksmTarget: 'Hit', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
+  { id: '35', name: 'Valiente Caps', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'AS', color: '#475569' }, { initials: 'DM', color: '#8b5cf6' }], clientTypes: ['Ecommerce'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-10', ksmTarget: 'Miss', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  // Multi-type: Wellness product ecom (primary) + lead-gen for retreats/programs
+  { id: '36', name: 'Veya Wellness', team: [{ initials: 'JD', color: '#1e293b' }, { initials: 'AS', color: '#475569' }, { initials: 'KI', color: '#06b6d4' }], clientTypes: ['Ecommerce', 'Lead generation'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-18', ksmTarget: 'Hit', growthPlanStatus: 'Sent', planStartDate: '2026-03-01', comments: '' },
+  { id: '37', name: 'TREC', team: [{ initials: 'PM', color: '#7c3aed' }, { initials: 'RK', color: '#0891b2' }, { initials: 'DM', color: '#8b5cf6' }], clientTypes: ['Lead generation'], onboardingStatus: 'Complete', kickoffStatus: 'Done', lastQC: '2026-04-02', ksmTarget: 'Miss', growthPlanStatus: 'In Progress', planStartDate: '2026-03-01', comments: '' },
 ];
 
 // MonthPicker and MonthNavigator are now shared from ./shared/
 
-// ── Filter Panel Component ──
+// ── Filter Panel Component ───────────────────────────────────────────
+// Design notes (post-critique rewrite):
+//   • State applies live on every click — there is NO Apply/Cancel because
+//     the previous footer was misleading (both buttons just closed the panel).
+//     Outside-click and Escape close the panel.
+//   • Each section has its own "Clear" affordance, surfaced only when the
+//     section is narrowing the table. Reset all sits in the sticky header.
+//   • Team Member is multi-select (state is string[]). A HOD can scope to
+//     "Aarti OR Priya" in one go. Each row is an avatar list item with a
+//     checkbox-style indicator — same visual language as the table cell.
+//   • Body is `max-h` + `overflow-y-auto` so adding more sections (workstation,
+//     vertical, HOD…) doesn't break the panel. Header stays sticky.
+//   • Typography uses `text-caption` (13px) per design system — no `text-micro`.
+//   • a11y: every toggle exposes `aria-pressed`, every Clear has `aria-label`,
+//     focus rings are visible, dialog has `role="dialog"` + `aria-label`.
 function FilterPanel({
   filters,
   onChange,
@@ -824,7 +1861,7 @@ function FilterPanel({
   onReset,
   activeCount,
 }: {
-  filters: { clientType: ClientType | 'All'; ksmTarget: KSMStatus | 'All'; team: string; kickoffStatus: KickoffStatus | 'All'; growthPlan: GrowthPlanStatus | 'All'; onboarding: OnboardingStatus | 'All' };
+  filters: { clientType: ClientType | 'All'; ksmTarget: KSMStatus | 'All'; team: string[]; kickoffStatus: KickoffStatus | 'All'; onboarding: OnboardingStatus | 'All' };
   onChange: (f: typeof filters) => void;
   onClose: () => void;
   onReset: () => void;
@@ -832,6 +1869,7 @@ function FilterPanel({
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
+  // Outside-click closes the panel (state already applied live).
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
@@ -840,199 +1878,355 @@ function FilterPanel({
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose]);
 
-  const teamMembers = [
-    { initials: 'JD', name: 'Jay Desai' },
-    { initials: 'AS', name: 'Aarti Shah' },
-    { initials: 'PM', name: 'Priya Mehta' },
-    { initials: 'RK', name: 'Rahul Kumar' },
-  ];
+  // Escape also closes — pairs with outside-click for keyboard users.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  // Roster comes from the module-level SEM_TEAM constant — one source of
+  // truth shared with the table's hover popover and active filter chips.
+  const teamMembers = SEM_TEAM;
+
+  // Local search query for the team list. Type-ahead is the single biggest
+  // scalability lever: at 12+ members linear scan stops being viable.
+  const [teamSearch, setTeamSearch] = useState('');
+
+  // Multi-select team: toggle one initial in/out of the selection array.
+  const toggleTeam = (initials: string) => {
+    const next = filters.team.includes(initials)
+      ? filters.team.filter(i => i !== initials)
+      : [...filters.team, initials];
+    onChange({ ...filters, team: next });
+  };
+
+  // Build the visible list. Search matches against name OR initials (case-
+  // insensitive). When the query is empty we render selected-first so the
+  // user's picks never scroll out of view; with a query we sort by relevance
+  // (initials prefix > name prefix > substring) so the obvious match leads.
+  const roleOrder = ['HOD', 'Manager', 'Sr. Executive', 'Executive', 'Jr. Executive'];
+  const q = teamSearch.trim().toLowerCase();
+  const matches = q
+    ? teamMembers.filter(tm => tm.name.toLowerCase().includes(q) || tm.initials.toLowerCase().includes(q))
+    : teamMembers;
+  const teamSelected = matches.filter(tm => filters.team.includes(tm.initials));
+  const teamRest = matches.filter(tm => !filters.team.includes(tm.initials));
+  const byRoleThenName = (a: typeof teamMembers[number], b: typeof teamMembers[number]) => {
+    const ar = roleOrder.indexOf(a.role); const br = roleOrder.indexOf(b.role);
+    if (ar !== br) return ar - br;
+    return a.name.localeCompare(b.name);
+  };
+  teamSelected.sort(byRoleThenName);
+  teamRest.sort(byRoleThenName);
+
+  // Section header with optional inline "Clear" — appears only when the
+  // section is currently narrowing results. Keeps the panel calm by default
+  // and gives a faster reset path than the global "Reset all".
+  const SectionHeader = ({
+    label,
+    count,
+    onClear,
+  }: { label: string; count?: number; onClear?: () => void }) => (
+    <div className="flex items-center justify-between mb-2.5 min-h-[18px]">
+      <div className="flex items-center gap-1.5">
+        <span className="text-black/45 text-caption font-semibold uppercase tracking-[0.06em]">{label}</span>
+        {typeof count === 'number' && count > 0 && (
+          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#204CC7] text-white text-caption font-bold tabular-nums">
+            {count}
+          </span>
+        )}
+      </div>
+      {onClear && (
+        <button
+          onClick={onClear}
+          aria-label={`Clear ${label} filter`}
+          className="text-[#204CC7] hover:bg-[#EEF1FB] rounded-md px-1.5 py-0.5 text-caption font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[#204CC7]/30"
+        >
+          Clear
+        </button>
+      )}
+    </div>
+  );
+
+  // Pill button shared shape — keeps every section visually consistent and
+  // makes adding new filter dimensions a one-call affair.
+  const Pill = ({
+    active, onClick, ariaLabel, activeClass, children,
+  }: {
+    active: boolean;
+    onClick: () => void;
+    ariaLabel?: string;
+    activeClass: string;
+    children: React.ReactNode;
+  }) => (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={ariaLabel}
+      className={`h-8 px-3 rounded-lg flex items-center gap-1.5 text-caption font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#204CC7]/30 ${
+        active ? activeClass : 'bg-black/[0.03] text-black/65 hover:bg-black/[0.06]'
+      }`}
+    >
+      {children}
+    </button>
+  );
+
+  // Team list row — extracted because we render it in two passes
+  // (pinned-selected, then the rest) and inlining the markup twice would
+  // make the section impossible to reason about. Same row shape works at
+  // any roster size because role label + truncation prevent overflow.
+  const TeamRow = ({
+    tm, active, onToggle,
+  }: {
+    tm: { initials: string; name: string; color: string; role: string };
+    active: boolean;
+    onToggle: () => void;
+  }) => (
+    <button
+      onClick={onToggle}
+      aria-pressed={active}
+      aria-label={`${active ? 'Deselect' : 'Select'} ${tm.name}, ${tm.role}`}
+      className={`flex items-center gap-2.5 pl-1.5 pr-2 py-1.5 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-[#204CC7]/30 ${
+        active ? 'bg-[#EEF1FB]' : 'hover:bg-black/[0.03]'
+      }`}
+    >
+      <span
+        className="w-7 h-7 rounded-full flex items-center justify-center text-white text-caption font-semibold flex-shrink-0"
+        style={{ backgroundColor: tm.color }}
+        aria-hidden="true"
+      >
+        {tm.initials}
+      </span>
+      <span className="flex-1 min-w-0 text-left">
+        <span className={`block text-caption font-semibold truncate leading-snug ${active ? 'text-[#204CC7]' : 'text-black/85'}`}>
+          {tm.name}
+        </span>
+        <span className="block text-caption text-black/45 truncate leading-snug">
+          {tm.role}
+        </span>
+      </span>
+      <span
+        className={`w-[18px] h-[18px] rounded-md border flex items-center justify-center flex-shrink-0 transition-all ${
+          active ? 'bg-[#204CC7] border-[#204CC7]' : 'border-black/15 bg-white'
+        }`}
+        aria-hidden="true"
+      >
+        {active && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+      </span>
+    </button>
+  );
+
+  // "All" reset class — used for every section's "All" pill so the default
+  // state has a single, recognizable look across the panel.
+  const ALL_ACTIVE = 'bg-[#EEF1FB] text-[#204CC7]';
 
   return (
-    <div ref={ref} className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-xl border border-black/[0.06] p-0 z-50 w-[320px]">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-black/[0.05]">
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label="Filter clients"
+      className="absolute top-full right-0 mt-2 bg-white rounded-2xl shadow-2xl shadow-black/[0.10] border border-black/[0.06] z-50 w-[360px] flex flex-col max-h-[min(560px,calc(100vh-140px))] overflow-hidden"
+    >
+      {/* ── Sticky header ────────────────────────────────────────────── */}
+      <div className="flex-shrink-0 flex items-center justify-between px-5 py-3.5 border-b border-black/[0.06]">
         <div className="flex items-center gap-2">
-          <Filter className="w-3.5 h-3.5 text-black/60" />
-          <span className="text-black/80 text-body font-semibold">Filters</span>
+          <Filter className="w-4 h-4 text-black/65" aria-hidden="true" />
+          <span className="text-black/85 text-body font-semibold">Filters</span>
           {activeCount > 0 && (
-            <span className="w-5 h-5 rounded-full bg-[#204CC7] text-white flex items-center justify-center text-micro font-bold">{activeCount}</span>
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[#204CC7] text-white text-caption font-bold tabular-nums">
+              {activeCount}
+            </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
-          {activeCount > 0 && (
-            <button onClick={onReset} className="px-2 py-1 text-[#204CC7] hover:bg-[#EEF1FB] rounded-lg transition-colors text-micro font-medium">
-              Reset all
-            </button>
-          )}
-          <button onClick={onClose} className="p-1 hover:bg-black/[0.04] rounded-lg transition-colors">
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={onReset}
+            disabled={activeCount === 0}
+            className="px-2.5 h-7 text-[#204CC7] hover:bg-[#EEF1FB] rounded-lg transition-colors text-caption font-medium disabled:text-black/25 disabled:hover:bg-transparent disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#204CC7]/30"
+          >
+            Reset all
+          </button>
+          <button
+            onClick={onClose}
+            aria-label="Close filters"
+            className="w-7 h-7 flex items-center justify-center hover:bg-black/[0.04] rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-[#204CC7]/30"
+          >
             <X className="w-4 h-4 text-black/55" />
           </button>
         </div>
       </div>
 
-      <div className="p-4 space-y-4">
-        {/* Client Type */}
-        <div>
-          <label className="text-black/60 mb-2 block text-micro font-semibold">CLIENT TYPE</label>
+      {/* ── Scrollable body ──────────────────────────────────────────── */}
+      <div className="overflow-y-auto px-5 py-4 space-y-5">
+
+        {/* CLIENT TYPE — single-select. Multi-type clients (e.g. Maharishi
+            Ayurveda) appear in BOTH Ecommerce and Lead generation segments. */}
+        <section>
+          <SectionHeader
+            label="Client type"
+            onClear={filters.clientType !== 'All' ? () => onChange({ ...filters, clientType: 'All' }) : undefined}
+          />
           <div className="flex flex-wrap gap-1.5">
             {(['All', 'Ecommerce', 'Lead generation'] as const).map(opt => (
-              <button
+              <Pill
                 key={opt}
+                active={filters.clientType === opt}
                 onClick={() => onChange({ ...filters, clientType: opt })}
-                className={`px-3 py-1.5 rounded-lg border transition-all text-caption font-medium ${
-                  filters.clientType === opt
-                    ? 'bg-[#EEF1FB] text-[#204CC7] border-[#204CC7]/20'
-                    : 'bg-white text-black/60 border-black/10 hover:border-black/20'
-                }`}
+                activeClass={ALL_ACTIVE}
               >
                 {opt}
-              </button>
+              </Pill>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* Onboarding */}
-        <div>
-          <label className="text-black/60 mb-2 block text-micro font-semibold">ONBOARDING</label>
+        {/* ONBOARDING — drives the row's left-side status pill. */}
+        <section>
+          <SectionHeader
+            label="Onboarding"
+            onClear={filters.onboarding !== 'All' ? () => onChange({ ...filters, onboarding: 'All' }) : undefined}
+          />
           <div className="flex flex-wrap gap-1.5">
-            {(['All', 'Pending', 'In Progress', 'Complete'] as const).map(opt => (
+            {(['All', 'In Progress', 'Complete'] as const).map(opt => {
+              const active = filters.onboarding === opt;
+              const dot = opt === 'Complete' ? 'bg-emerald-500' : opt === 'In Progress' ? 'bg-amber-500' : '';
+              const activeClass =
+                opt === 'Complete' ? 'bg-emerald-50 text-emerald-700'
+                : opt === 'In Progress' ? 'bg-amber-50 text-amber-700'
+                : ALL_ACTIVE;
+              return (
+                <Pill key={opt} active={active} onClick={() => onChange({ ...filters, onboarding: opt })} activeClass={activeClass}>
+                  {opt !== 'All' && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} aria-hidden="true" />}
+                  {opt}
+                </Pill>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* KSM TARGET — Hit/Miss matches the table's pill colors. */}
+        <section>
+          <SectionHeader
+            label="KSM target"
+            onClear={filters.ksmTarget !== 'All' ? () => onChange({ ...filters, ksmTarget: 'All' }) : undefined}
+          />
+          <div className="flex flex-wrap gap-1.5">
+            {(['All', 'Hit', 'Miss'] as const).map(opt => {
+              const active = filters.ksmTarget === opt;
+              const dot = opt === 'Hit' ? 'bg-emerald-500' : opt === 'Miss' ? 'bg-rose-500' : '';
+              const activeClass =
+                opt === 'Hit' ? 'bg-emerald-50 text-emerald-700'
+                : opt === 'Miss' ? 'bg-rose-50 text-rose-700'
+                : ALL_ACTIVE;
+              return (
+                <Pill key={opt} active={active} onClick={() => onChange({ ...filters, ksmTarget: opt })} activeClass={activeClass}>
+                  {opt !== 'All' && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} aria-hidden="true" />}
+                  {opt}
+                </Pill>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* TEAM — multi-select, scales to 30+ members.
+            Layered scalability stack:
+              1. Search input (initials OR name, case-insensitive).
+              2. Selected members pinned to the top — they never scroll out
+                 of view, so you can always read what you've narrowed by.
+              3. Inner scroll container (max-h ≈ 6 rows) keeps the panel
+                 compact regardless of roster size.
+              4. Role label next to name disambiguates duplicate first names
+                 ("Priya M (Sr. Exec)" vs "Pooja S (Exec)") at a glance.
+              5. Empty state for failed searches with a one-click reset. */}
+        <section>
+          <SectionHeader
+            label="Team"
+            count={filters.team.length}
+            onClear={filters.team.length > 0 ? () => { onChange({ ...filters, team: [] }); setTeamSearch(''); } : undefined}
+          />
+
+          {/* Search input — visible always; below 5 members it's harmless,
+              above 10 it's essential. Clear button surfaces only with input. */}
+          <div className="relative mb-2">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-black/35 pointer-events-none" aria-hidden="true" />
+            <input
+              type="text"
+              value={teamSearch}
+              onChange={(e) => setTeamSearch(e.target.value)}
+              placeholder="Search by name or initials"
+              aria-label="Search team members"
+              className="w-full h-9 pl-8 pr-8 rounded-lg bg-black/[0.03] border border-transparent text-caption text-black/85 placeholder:text-black/40 focus:outline-none focus:bg-white focus:border-[#204CC7]/40 focus:ring-2 focus:ring-[#204CC7]/15 transition-all"
+            />
+            {teamSearch && (
               <button
-                key={opt}
-                onClick={() => onChange({ ...filters, onboarding: opt })}
-                className={`px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 text-caption font-medium ${
-                  filters.onboarding === opt
-                    ? opt === 'Complete' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : opt === 'In Progress' ? 'bg-amber-50 text-amber-700 border-amber-200'
-                    : opt === 'Pending' ? 'bg-black/[0.04] text-black/60 border-black/10'
-                    : 'bg-[#EEF1FB] text-[#204CC7] border-[#204CC7]/20'
-                    : 'bg-white text-black/60 border-black/10 hover:border-black/20'
-                }`}
+                onClick={() => setTeamSearch('')}
+                aria-label="Clear search"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-md hover:bg-black/[0.06] text-black/55 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/30"
               >
-                {opt !== 'All' && <span className={`w-1.5 h-1.5 rounded-full ${
-                  opt === 'Complete' ? 'bg-emerald-500' : opt === 'In Progress' ? 'bg-amber-500' : opt === 'Pending' ? 'bg-black/25' : ''
-                }`} />}
-                {opt}
+                <X className="w-3.5 h-3.5" />
               </button>
-            ))}
+            )}
           </div>
-        </div>
 
-        {/* Kickoff Status */}
-        <div>
-          <label className="text-black/60 mb-2 block text-micro font-semibold">KICKOFF STATUS</label>
-          <div className="flex flex-wrap gap-1.5">
-            {(['All', 'Done', 'Onboarding', 'Pending'] as const).map(opt => (
-              <button
-                key={opt}
-                onClick={() => onChange({ ...filters, kickoffStatus: opt })}
-                className={`px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 text-caption font-medium ${
-                  filters.kickoffStatus === opt
-                    ? opt === 'Done' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : opt === 'Onboarding' ? 'bg-blue-50 text-blue-700 border-blue-200'
-                    : opt === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200'
-                    : 'bg-[#EEF1FB] text-[#204CC7] border-[#204CC7]/20'
-                    : 'bg-white text-black/60 border-black/10 hover:border-black/20'
-                }`}
-              >
-                {opt !== 'All' && <span className={`w-1.5 h-1.5 rounded-full ${
-                  opt === 'Done' ? 'bg-emerald-500' : opt === 'Onboarding' ? 'bg-blue-500' : opt === 'Pending' ? 'bg-amber-500' : ''
-                }`} />}
-                {opt}
-              </button>
+          {/* Helper text only when nothing is selected and no search — keeps
+              the panel quiet during active narrowing. */}
+          {filters.team.length === 0 && !teamSearch && (
+            <p className="text-caption text-black/45 mb-1.5">Pick one or more — results match any selected member.</p>
+          )}
+
+          {/* Inner scroll container — caps the section's vertical footprint
+              so the team list never dominates the panel even at 30+ rows.
+              Items render in two visually-separated groups: pinned-selected
+              first, then the remainder. The divider only shows when both
+              groups have content (otherwise it would be a stray line). */}
+          <div
+            role="group"
+            aria-label="Team member"
+            className="max-h-[280px] overflow-y-auto -mx-1 px-1 flex flex-col gap-0.5"
+          >
+            {/* Empty state — search returned nothing. Action button so the
+                user can reset without hunting for the X. */}
+            {matches.length === 0 && (
+              <div className="px-2 py-6 text-center">
+                <p className="text-caption text-black/55">
+                  No teammates match <span className="font-semibold text-black/75">"{teamSearch}"</span>
+                </p>
+                <button
+                  onClick={() => setTeamSearch('')}
+                  className="mt-1.5 text-caption font-medium text-[#204CC7] hover:underline focus:outline-none focus:ring-2 focus:ring-[#204CC7]/30 rounded-sm px-1"
+                >
+                  Clear search
+                </button>
+              </div>
+            )}
+
+            {/* Pinned: selected members. Always visible, never scrolled away. */}
+            {teamSelected.map(tm => (
+              <TeamRow
+                key={`sel-${tm.initials}`}
+                tm={tm}
+                active
+                onToggle={() => toggleTeam(tm.initials)}
+              />
             ))}
-          </div>
-        </div>
 
-        {/* KSM Target */}
-        <div>
-          <label className="text-black/60 mb-2 block text-micro font-semibold">KSM TARGET</label>
-          <div className="flex flex-wrap gap-1.5">
-            {(['All', 'Hit', 'Miss'] as const).map(opt => (
-              <button
-                key={opt}
-                onClick={() => onChange({ ...filters, ksmTarget: opt })}
-                className={`px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 text-caption font-medium ${
-                  filters.ksmTarget === opt
-                    ? opt === 'Hit' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : opt === 'Miss' ? 'bg-rose-50 text-rose-600 border-rose-200'
-                    : 'bg-[#EEF1FB] text-[#204CC7] border-[#204CC7]/20'
-                    : 'bg-white text-black/60 border-black/10 hover:border-black/20'
-                }`}
-              >
-                {opt !== 'All' && <span className={`w-1.5 h-1.5 rounded-full ${
-                  opt === 'Hit' ? 'bg-emerald-500' : opt === 'Miss' ? 'bg-rose-500' : ''
-                }`} />}
-                {opt}
-              </button>
-            ))}
-          </div>
-        </div>
+            {/* Subtle divider — only when both groups have content. */}
+            {teamSelected.length > 0 && teamRest.length > 0 && (
+              <div className="my-1 border-t border-black/[0.06]" role="separator" aria-hidden="true" />
+            )}
 
-        {/* Team Member */}
-        <div>
-          <label className="text-black/60 mb-2 block text-micro font-semibold">TEAM MEMBER</label>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => onChange({ ...filters, team: 'All' })}
-              className={`px-3 py-1.5 rounded-lg border transition-all text-caption font-medium ${
-                filters.team === 'All'
-                  ? 'bg-[#EEF1FB] text-[#204CC7] border-[#204CC7]/20'
-                  : 'bg-white text-black/60 border-black/10 hover:border-black/20'
-              }`}
-            >
-              All
-            </button>
-            {teamMembers.map(tm => (
-              <button
+            {/* The rest of the (filtered) roster. */}
+            {teamRest.map(tm => (
+              <TeamRow
                 key={tm.initials}
-                onClick={() => onChange({ ...filters, team: tm.initials })}
-                className={`px-3 py-1.5 rounded-lg border transition-all text-caption font-medium ${
-                  filters.team === tm.initials
-                    ? 'bg-[#EEF1FB] text-[#204CC7] border-[#204CC7]/20'
-                    : 'bg-white text-black/60 border-black/10 hover:border-black/20'
-                }`}
-              >
-                {tm.name}
-              </button>
+                tm={tm}
+                active={false}
+                onToggle={() => toggleTeam(tm.initials)}
+              />
             ))}
           </div>
-        </div>
-
-        {/* Weekly Plan */}
-        <div>
-          <label className="text-black/60 mb-2 block text-micro font-semibold">WEEKLY PLAN</label>
-          <div className="flex flex-wrap gap-1.5">
-            {(['All', 'Not Started', 'In Progress', 'Sent'] as const).map(opt => (
-              <button
-                key={opt}
-                onClick={() => onChange({ ...filters, growthPlan: opt })}
-                className={`px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 text-caption font-medium ${
-                  filters.growthPlan === opt
-                    ? opt === 'Sent' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : opt === 'In Progress' ? 'bg-blue-50 text-blue-700 border-blue-200'
-                    : opt === 'Not Started' ? 'bg-black/[0.04] text-black/60 border-black/10'
-                    : 'bg-[#EEF1FB] text-[#204CC7] border-[#204CC7]/20'
-                    : 'bg-white text-black/60 border-black/10 hover:border-black/20'
-                }`}
-              >
-                {opt !== 'All' && <span className={`w-1.5 h-1.5 rounded-full ${
-                  opt === 'Sent' ? 'bg-emerald-500' : opt === 'In Progress' ? 'bg-blue-500' : opt === 'Not Started' ? 'bg-black/25' : ''
-                }`} />}
-                {opt}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="px-4 py-3 border-t border-black/[0.05] flex justify-end gap-2">
-        <button onClick={onClose} className="px-4 py-2 rounded-lg border border-black/10 text-black/60 hover:bg-black/[0.03] transition-all text-caption font-medium">
-          Cancel
-        </button>
-        <button onClick={onClose} className="px-4 py-2 rounded-lg bg-[#204CC7] text-white hover:bg-[#1a3fa8] transition-all text-caption font-semibold">
-          Apply Filters
-        </button>
+        </section>
       </div>
     </div>
   );
@@ -1105,7 +2299,9 @@ function BusinessInfoModal({ client, onClose }: {
   client: Client;
   onClose: () => void;
 }) {
-  const isLeadGen = client.clientType === 'Lead generation';
+  // Business-info modal currently surfaces one template at a time. Use the
+  // client's primary type — adding a per-type tab is a future enhancement.
+  const isLeadGen = primaryType(client) === 'Lead generation';
   const ecomInfo = !isLeadGen ? clientBusinessInfo[client.id] : null;
   const leadGenInfo = isLeadGen ? clientLeadGenBusinessInfo[client.id] : null;
   const hasInfo = !!(ecomInfo || leadGenInfo);
@@ -1192,26 +2388,46 @@ function BusinessInfoModal({ client, onClose }: {
 
   if (!hasInfo) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
+      <div className="fixed inset-0 z-50" onClick={onClose}>
+        <div className="absolute inset-0 bg-black/30 backdrop-blur-[1.5px]" style={{ animation: 'biFadeIn 0.2s ease-out' }} />
         <div
           role="dialog"
           aria-modal="true"
-          className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[540px] p-10 text-center"
-          style={{ animation: 'biSlideUp 0.25s ease-out' }}
+          aria-labelledby="bi-empty-title"
+          className="absolute top-0 right-0 bottom-0 bg-white shadow-2xl w-full max-w-[640px] flex flex-col"
+          style={{ animation: 'biSlideInRight 0.28s cubic-bezier(0.32, 0.72, 0, 1)' }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="w-14 h-14 rounded-2xl bg-black/[0.03] flex items-center justify-center mx-auto mb-5">
-            <Building2 className="w-7 h-7 text-black/20" />
+          {/* Minimal header */}
+          <div className="flex items-center justify-between h-[56px] px-6 border-b border-black/[0.06]">
+            <div className="flex items-center gap-3">
+              <div className={`w-8 h-8 rounded-lg ${accentBg} flex items-center justify-center flex-shrink-0`}>
+                <Building2 className="w-4 h-4" style={{ color: accent }} />
+              </div>
+              <h2 id="bi-empty-title" className="text-h3 font-bold text-black/85">{client.name}</h2>
+            </div>
+            <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-md hover:bg-black/[0.04] transition-colors" aria-label="Close drawer">
+              <X className="w-[18px] h-[18px] text-black/35" />
+            </button>
           </div>
-          <h2 className="text-h2 font-bold text-black/80 mb-2">No business info yet</h2>
-          <p className="text-body text-black/40 mb-7 max-w-[340px] mx-auto leading-relaxed">This client hasn&apos;t completed the onboarding form on the client app yet.</p>
-          <button onClick={onClose} className="px-6 py-2.5 rounded-lg bg-black/[0.04] text-black/50 text-body font-medium hover:bg-black/[0.07] transition-colors">Close</button>
+          {/* Empty body */}
+          <div className="flex-1 flex flex-col items-center justify-center px-10 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-black/[0.03] flex items-center justify-center mb-5">
+              <Building2 className="w-8 h-8 text-black/20" />
+            </div>
+            <h2 className="text-h2 font-bold text-black/80 mb-2">No business info yet</h2>
+            <p className="text-body text-black/40 mb-7 max-w-[340px] leading-relaxed">This client hasn&apos;t completed the onboarding form on the client app yet.</p>
+            <button onClick={onClose} className="px-6 py-2.5 rounded-lg bg-black/[0.04] text-black/55 text-body font-medium hover:bg-black/[0.07] transition-colors">Close</button>
+          </div>
         </div>
         <style jsx>{`
-          @keyframes biSlideUp {
-            from { transform: translateY(12px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
+          @keyframes biSlideInRight {
+            from { transform: translateX(24px); opacity: 0; }
+            to   { transform: translateX(0);    opacity: 1; }
+          }
+          @keyframes biFadeIn {
+            from { opacity: 0; }
+            to   { opacity: 1; }
           }
         `}</style>
       </div>
@@ -1245,28 +2461,29 @@ function BusinessInfoModal({ client, onClose }: {
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[1.5px]" style={{ animation: 'biFadeIn 0.2s ease-out' }} />
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="bi-modal-title"
-        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[780px] max-h-[90vh] flex flex-col overflow-hidden"
-        style={{ animation: 'biSlideUp 0.25s ease-out' }}
+        className="absolute top-0 right-0 bottom-0 bg-white shadow-2xl w-full max-w-[640px] flex flex-col"
+        style={{ animation: 'biSlideInRight 0.28s cubic-bezier(0.32, 0.72, 0, 1)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* ── Header ── */}
-        <div className="px-7 pt-6 pb-0">
-          <div className="flex items-start justify-between mb-5">
-            <div className="flex items-center gap-4">
+        {/* ── Sticky Header ── */}
+        <div className="flex-shrink-0 border-b border-black/[0.06] bg-white">
+          {/* Top row: identity + close */}
+          <div className="flex items-start justify-between px-6 pt-5 pb-4">
+            <div className="flex items-start gap-3.5 min-w-0">
               <div className={`w-11 h-11 rounded-xl ${accentBg} flex items-center justify-center flex-shrink-0`}>
                 <Building2 className="w-5 h-5" style={{ color: accent }} />
               </div>
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <h2 id="bi-modal-title" className="text-h2 font-bold text-black/90">{companyName}</h2>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h2 id="bi-modal-title" className="text-h2 font-bold text-black/90 truncate">{companyName}</h2>
                   <span
-                    className="text-[11px] font-semibold px-2 py-0.5 rounded-md border"
+                    className="text-caption font-semibold px-2 py-0.5 rounded-md border flex-shrink-0"
                     style={{
                       color: accent,
                       backgroundColor: isLeadGen ? 'rgba(124,58,237,0.06)' : 'rgba(32,76,199,0.06)',
@@ -1276,8 +2493,8 @@ function BusinessInfoModal({ client, onClose }: {
                     {isLeadGen ? 'Lead Gen' : 'E-Commerce'}
                   </span>
                 </div>
-                <div className="flex items-center gap-3 mt-1.5">
-                  <span className="text-caption text-black/40">{industry}</span>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span className="text-caption text-black/45">{industry}</span>
                   <span className="text-black/15">·</span>
                   <a href={websiteUrl} target="_blank" rel="noopener noreferrer" className="text-caption font-medium flex items-center gap-1 hover:underline transition-colors" style={{ color: accent }}>
                     {websiteUrl.replace('https://', '')}
@@ -1286,53 +2503,57 @@ function BusinessInfoModal({ client, onClose }: {
                 </div>
               </div>
             </div>
-            <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-black/[0.04] transition-colors -mr-1 mt-0.5" aria-label="Close">
-              <X className="w-[18px] h-[18px] text-black/30" />
+            <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-md hover:bg-black/[0.04] transition-colors flex-shrink-0 -mr-1" aria-label="Close drawer">
+              <X className="w-[18px] h-[18px] text-black/35" />
             </button>
           </div>
 
-          {/* Tab bar */}
-          <div className="flex items-stretch bg-black/[0.025] rounded-xl p-1 gap-1 mb-0">
-            {tabs.map(tab => {
-              const isActive = activeTab === tab.key;
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`flex-1 py-2.5 rounded-lg text-body font-semibold transition-all text-center flex items-center justify-center gap-2 ${
-                    isActive
-                      ? 'bg-white shadow-sm'
-                      : 'text-black/30 hover:text-black/50 hover:bg-white/40'
-                  }`}
-                  style={isActive ? { color: accent } : undefined}
-                >
-                  <Icon className="w-4 h-4" />
-                  {tab.label}
-                </button>
-              );
-            })}
+          {/* Tab bar (segmented) */}
+          <div className="px-6 pb-4">
+            <div className="flex items-stretch bg-black/[0.025] rounded-xl p-1 gap-1" role="tablist">
+              {tabs.map(tab => {
+                const isActive = activeTab === tab.key;
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.key}
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`flex-1 py-2 rounded-lg text-body font-semibold transition-all text-center flex items-center justify-center gap-2 ${
+                      isActive
+                        ? 'bg-white shadow-sm'
+                        : 'text-black/35 hover:text-black/55 hover:bg-white/40'
+                    }`}
+                    style={isActive ? { color: accent } : undefined}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        <div className="h-px bg-black/[0.06] mt-5" />
-
         {/* ── Scrollable Content ── */}
-        <div className="flex-1 overflow-y-auto px-7 py-6">
+        <div className="flex-1 overflow-y-auto px-6 py-6">
 
           {/* ══════════ E-COMMERCE BASIC INFO ══════════ */}
           {activeTab === 'basic' && ecomInfo && (
-            <div className="space-y-6" style={{ animation: 'biSlideUp 0.15s ease-out' }}>
+            <div className="space-y-6" style={{ animation: 'biFadeIn 0.18s ease-out' }}>
               {/* Company details in bordered cards */}
               <div>
-                <h3 className="text-body font-bold text-black/65 mb-3.5 flex items-center gap-2 uppercase tracking-wide" style={{ fontSize: '11px' }}>
+                <h3 className="text-caption font-bold text-black/55 mb-3 flex items-center gap-2 uppercase tracking-wider">
                   <Building2 className="w-3.5 h-3.5 text-[#204CC7]" />
                   Company Details
                 </h3>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <FieldCard label="Company Name" value={ecomInfo.companyName} />
                   <FieldCard label="Industry" value={ecomInfo.industry} />
-                  <FieldCard label="Primary Goal" value={ecomInfo.primaryGoal} />
+                  <div className="col-span-2">
+                    <FieldCard label="Primary Goal" value={ecomInfo.primaryGoal} />
+                  </div>
                 </div>
               </div>
 
@@ -1340,7 +2561,7 @@ function BusinessInfoModal({ client, onClose }: {
 
               {/* Marketing details */}
               <div>
-                <h3 className="text-body font-bold text-black/65 mb-3.5 flex items-center gap-2 uppercase tracking-wide" style={{ fontSize: '11px' }}>
+                <h3 className="text-caption font-bold text-black/55 mb-3 flex items-center gap-2 uppercase tracking-wider">
                   <Target className="w-3.5 h-3.5 text-[#204CC7]" />
                   Marketing Details
                 </h3>
@@ -1371,10 +2592,10 @@ function BusinessInfoModal({ client, onClose }: {
 
           {/* ══════════ LEAD GEN BASIC INFO ══════════ */}
           {activeTab === 'basic' && leadGenInfo && (
-            <div className="space-y-6" style={{ animation: 'biSlideUp 0.15s ease-out' }}>
+            <div className="space-y-6" style={{ animation: 'biFadeIn 0.18s ease-out' }}>
               {/* Company details */}
               <div>
-                <h3 className="text-body font-bold text-black/65 mb-3.5 flex items-center gap-2 uppercase tracking-wide" style={{ fontSize: '11px' }}>
+                <h3 className="text-caption font-bold text-black/55 mb-3 flex items-center gap-2 uppercase tracking-wider">
                   <Building2 className="w-3.5 h-3.5 text-[#7C3AED]" />
                   Company Details
                 </h3>
@@ -1388,7 +2609,7 @@ function BusinessInfoModal({ client, onClose }: {
 
               {/* Lead Generation Details */}
               <div>
-                <h3 className="text-body font-bold text-black/65 mb-3.5 flex items-center gap-2 uppercase tracking-wide" style={{ fontSize: '11px' }}>
+                <h3 className="text-caption font-bold text-black/55 mb-3 flex items-center gap-2 uppercase tracking-wider">
                   <Target className="w-3.5 h-3.5 text-[#7C3AED]" />
                   Lead Generation Details
                 </h3>
@@ -1397,7 +2618,7 @@ function BusinessInfoModal({ client, onClose }: {
                   <label className="text-caption text-[#7C3AED]/50 font-medium block mb-1">Primary Service Offered</label>
                   <p className="text-body text-black/75 font-semibold">{leadGenInfo.primaryServiceOffered}</p>
                 </div>
-                <div className="grid grid-cols-3 gap-3 mb-3">
+                <div className="grid grid-cols-3 gap-2.5 mb-3">
                   <div className="rounded-xl bg-purple-50/40 border border-[#7C3AED]/8 px-4 py-3.5">
                     <label className="text-caption text-[#7C3AED]/50 font-medium block mb-1">Monthly Ad Budget</label>
                     <p className="text-body text-[#7C3AED] font-bold">{leadGenInfo.monthlyAdBudget}</p>
@@ -1428,13 +2649,13 @@ function BusinessInfoModal({ client, onClose }: {
 
           {/* ══════════ COMPETITORS — E-COMMERCE ══════════ */}
           {activeTab === 'competitors' && ecomInfo && (
-            <div className="space-y-3" style={{ animation: 'biSlideUp 0.15s ease-out' }}>
-              <p className="text-caption text-black/30 mb-1">{ecomInfo.competitors.length} competitor{ecomInfo.competitors.length !== 1 ? 's' : ''} tracked</p>
+            <div className="space-y-3" style={{ animation: 'biFadeIn 0.18s ease-out' }}>
+              <p className="text-caption text-black/40 mb-1">{ecomInfo.competitors.length} competitor{ecomInfo.competitors.length !== 1 ? 's' : ''} tracked</p>
               {ecomInfo.competitors.map((comp, i) => (
                 <div key={i} className="border border-black/[0.06] rounded-xl px-5 py-4 hover:border-black/10 transition-colors hover:shadow-sm">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3.5">
-                      <span className="w-8 h-8 rounded-lg bg-black/[0.03] flex items-center justify-center text-caption font-bold text-black/25">{i + 1}</span>
+                      <span className="w-8 h-8 rounded-lg bg-black/[0.03] flex items-center justify-center text-caption font-bold text-black/30">{i + 1}</span>
                       <div>
                         <p className="text-body text-black/80 font-semibold">{comp.name}</p>
                         <a href={comp.website} target="_blank" rel="noopener noreferrer" className="text-caption text-[#204CC7]/70 hover:text-[#204CC7] flex items-center gap-1 mt-0.5 transition-colors">
@@ -1444,26 +2665,26 @@ function BusinessInfoModal({ client, onClose }: {
                       </div>
                     </div>
                     {i === 0 && (
-                      <span className="text-[11px] text-black/30 font-semibold bg-black/[0.035] px-2.5 py-1 rounded-lg">Primary</span>
+                      <span className="text-caption text-black/45 font-semibold bg-black/[0.035] px-2.5 py-1 rounded-lg">Primary</span>
                     )}
                   </div>
                 </div>
               ))}
               {ecomInfo.competitors.length === 0 && (
-                <p className="text-center text-caption text-black/25 py-10">No competitors listed</p>
+                <p className="text-center text-caption text-black/30 py-10">No competitors listed</p>
               )}
             </div>
           )}
 
           {/* ══════════ COMPETITORS — LEAD GEN ══════════ */}
           {activeTab === 'competitors' && leadGenInfo && (
-            <div className="space-y-3" style={{ animation: 'biSlideUp 0.15s ease-out' }}>
-              <p className="text-caption text-black/30 mb-1">{leadGenInfo.competitors.length} competitor{leadGenInfo.competitors.length !== 1 ? 's' : ''} tracked</p>
+            <div className="space-y-3" style={{ animation: 'biFadeIn 0.18s ease-out' }}>
+              <p className="text-caption text-black/40 mb-1">{leadGenInfo.competitors.length} competitor{leadGenInfo.competitors.length !== 1 ? 's' : ''} tracked</p>
               {leadGenInfo.competitors.map((comp, i) => (
                 <div key={i} className="border border-black/[0.06] rounded-xl px-5 py-4 hover:border-black/10 transition-colors hover:shadow-sm">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3.5">
-                      <span className="w-8 h-8 rounded-lg bg-purple-50/70 flex items-center justify-center text-caption font-bold text-[#7C3AED]/40">{i + 1}</span>
+                      <span className="w-8 h-8 rounded-lg bg-purple-50/70 flex items-center justify-center text-caption font-bold text-[#7C3AED]/55">{i + 1}</span>
                       <div>
                         <p className="text-body text-black/80 font-semibold">{comp.name}</p>
                         <a href={comp.website} target="_blank" rel="noopener noreferrer" className="text-caption text-[#7C3AED]/70 hover:text-[#7C3AED] flex items-center gap-1 mt-0.5 transition-colors">
@@ -1473,7 +2694,7 @@ function BusinessInfoModal({ client, onClose }: {
                       </div>
                     </div>
                     {i === 0 && (
-                      <span className="text-[11px] text-[#7C3AED]/50 font-semibold bg-purple-50/60 px-2.5 py-1 rounded-lg border border-purple-100/50">Primary</span>
+                      <span className="text-caption text-[#7C3AED]/65 font-semibold bg-purple-50/60 px-2.5 py-1 rounded-lg border border-purple-100/50">Primary</span>
                     )}
                   </div>
                   {/* Key Offering row */}
@@ -1481,24 +2702,24 @@ function BusinessInfoModal({ client, onClose }: {
                     <div className="flex items-start gap-2">
                       <Zap className="w-3.5 h-3.5 text-[#FDAB3D]/70 mt-0.5 flex-shrink-0" />
                       <div>
-                        <label className="text-[11px] text-black/30 font-semibold uppercase tracking-wide block mb-0.5">Key Offering</label>
-                        <p className="text-caption text-black/60 leading-relaxed">{comp.keyOffering}</p>
+                        <label className="text-caption text-black/45 font-semibold uppercase tracking-wider block mb-0.5">Key Offering</label>
+                        <p className="text-caption text-black/65 leading-relaxed">{comp.keyOffering}</p>
                       </div>
                     </div>
                   </div>
                 </div>
               ))}
               {leadGenInfo.competitors.length === 0 && (
-                <p className="text-center text-caption text-black/25 py-10">No competitors listed</p>
+                <p className="text-center text-caption text-black/30 py-10">No competitors listed</p>
               )}
             </div>
           )}
 
           {/* ══════════ PRODUCTS & USPs — E-COMMERCE ══════════ */}
           {activeTab === 'products' && ecomInfo && (
-            <div className="space-y-6" style={{ animation: 'biSlideUp 0.15s ease-out' }}>
+            <div className="space-y-6" style={{ animation: 'biFadeIn 0.18s ease-out' }}>
               <div>
-                <h3 className="text-body font-bold text-black/65 mb-3.5 flex items-center gap-2 uppercase tracking-wide" style={{ fontSize: '11px' }}>
+                <h3 className="text-caption font-bold text-black/55 mb-3 flex items-center gap-2 uppercase tracking-wider">
                   <Package className="w-3.5 h-3.5 text-[#204CC7]" />
                   Products ({ecomInfo.products.length})
                 </h3>
@@ -1513,16 +2734,16 @@ function BusinessInfoModal({ client, onClose }: {
                       </div>
                       <div className="grid grid-cols-2 gap-3 ml-12 mb-3">
                         <div className="rounded-lg bg-black/[0.02] border border-black/[0.04] px-3 py-2">
-                          <label className="text-[11px] text-black/30 font-semibold uppercase tracking-wide">Category</label>
-                          <p className="text-caption text-black/65 font-medium mt-0.5">{prod.category}</p>
+                          <label className="text-caption text-black/45 font-semibold uppercase tracking-wider">Category</label>
+                          <p className="text-caption text-black/70 font-medium mt-0.5">{prod.category}</p>
                         </div>
                         <div className="rounded-lg bg-black/[0.02] border border-black/[0.04] px-3 py-2">
-                          <label className="text-[11px] text-black/30 font-semibold uppercase tracking-wide">Price Range</label>
-                          <p className="text-caption text-black/65 font-medium mt-0.5">{prod.priceRange}</p>
+                          <label className="text-caption text-black/45 font-semibold uppercase tracking-wider">Price Range</label>
+                          <p className="text-caption text-black/70 font-medium mt-0.5">{prod.priceRange}</p>
                         </div>
                       </div>
                       {prod.description && (
-                        <p className="text-caption text-black/45 leading-relaxed ml-12">{prod.description}</p>
+                        <p className="text-caption text-black/55 leading-relaxed ml-12">{prod.description}</p>
                       )}
                     </div>
                   ))}
@@ -1532,19 +2753,19 @@ function BusinessInfoModal({ client, onClose }: {
               <div className="h-px bg-black/[0.04]" />
 
               <div>
-                <h3 className="text-body font-bold text-black/65 mb-3.5 flex items-center gap-2 uppercase tracking-wide" style={{ fontSize: '11px' }}>
+                <h3 className="text-caption font-bold text-black/55 mb-3 flex items-center gap-2 uppercase tracking-wider">
                   <Star className="w-3.5 h-3.5 text-[#FDAB3D]" />
                   Unique Selling Points ({ecomInfo.usps.length})
                 </h3>
                 <div className="space-y-2">
                   {ecomInfo.usps.map((usp, i) => (
                     <div key={i} className="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-50/40 border border-amber-100/50">
-                      <span className="w-6 h-6 rounded-lg bg-[#FDAB3D]/10 flex items-center justify-center text-[11px] font-bold text-[#FDAB3D] flex-shrink-0 mt-px">{i + 1}</span>
-                      <p className="text-body text-black/65 font-medium leading-relaxed">{usp}</p>
+                      <span className="w-6 h-6 rounded-lg bg-[#FDAB3D]/15 flex items-center justify-center text-caption font-bold text-[#FDAB3D] flex-shrink-0 mt-px">{i + 1}</span>
+                      <p className="text-body text-black/70 font-medium leading-relaxed">{usp}</p>
                     </div>
                   ))}
                   {ecomInfo.usps.length === 0 && (
-                    <p className="text-center text-caption text-black/25 py-8">No USPs listed</p>
+                    <p className="text-center text-caption text-black/30 py-8">No USPs listed</p>
                   )}
                 </div>
               </div>
@@ -1553,11 +2774,11 @@ function BusinessInfoModal({ client, onClose }: {
 
           {/* ══════════ LEAD FUNNEL — LEAD GEN ══════════ */}
           {activeTab === 'funnel' && leadGenInfo && (
-            <div className="space-y-7" style={{ animation: 'biSlideUp 0.15s ease-out' }}>
+            <div className="space-y-7" style={{ animation: 'biFadeIn 0.18s ease-out' }}>
 
               {/* Services You Offer */}
               <div>
-                <h3 className="text-body font-bold text-black/65 mb-3.5 flex items-center gap-2 uppercase tracking-wide" style={{ fontSize: '11px' }}>
+                <h3 className="text-caption font-bold text-black/55 mb-3 flex items-center gap-2 uppercase tracking-wider">
                   <Briefcase className="w-3.5 h-3.5 text-[#7C3AED]" />
                   Services You Offer ({leadGenInfo.services.length})
                 </h3>
@@ -1572,12 +2793,12 @@ function BusinessInfoModal({ client, onClose }: {
                       </div>
                       <div className="grid grid-cols-2 gap-3 ml-12">
                         <div className="rounded-lg bg-purple-50/30 border border-[#7C3AED]/6 px-3 py-2">
-                          <label className="text-[11px] text-[#7C3AED]/40 font-semibold uppercase tracking-wide">Avg. Deal Value</label>
+                          <label className="text-caption text-[#7C3AED]/55 font-semibold uppercase tracking-wider">Avg. Deal Value</label>
                           <p className="text-caption text-[#7C3AED] font-bold mt-0.5">{svc.avgDealValue}</p>
                         </div>
                         <div className="rounded-lg bg-black/[0.02] border border-black/[0.04] px-3 py-2">
-                          <label className="text-[11px] text-black/30 font-semibold uppercase tracking-wide">Avg. Sales Cycle</label>
-                          <p className="text-caption text-black/65 font-medium mt-0.5">{svc.avgSalesCycle}</p>
+                          <label className="text-caption text-black/45 font-semibold uppercase tracking-wider">Avg. Sales Cycle</label>
+                          <p className="text-caption text-black/70 font-medium mt-0.5">{svc.avgSalesCycle}</p>
                         </div>
                       </div>
                     </div>
@@ -1589,11 +2810,11 @@ function BusinessInfoModal({ client, onClose }: {
 
               {/* Lead Qualification Criteria */}
               <div>
-                <h3 className="text-body font-bold text-black/65 mb-1 flex items-center gap-2 uppercase tracking-wide" style={{ fontSize: '11px' }}>
+                <h3 className="text-caption font-bold text-black/55 mb-1 flex items-center gap-2 uppercase tracking-wider">
                   <Filter className="w-3.5 h-3.5 text-[#FDAB3D]" />
                   Lead Qualification Criteria
                 </h3>
-                <p className="text-caption text-black/30 mb-3.5">Which signals indicate a quality lead?</p>
+                <p className="text-caption text-black/40 mb-3.5">Which signals indicate a quality lead?</p>
                 <div className="grid grid-cols-2 gap-2.5">
                   {leadGenInfo.leadQualificationCriteria.map((crit, i) => (
                     <div
@@ -1626,7 +2847,7 @@ function BusinessInfoModal({ client, onClose }: {
 
               {/* Follow-up Channels */}
               <div>
-                <h3 className="text-body font-bold text-black/65 mb-3.5 flex items-center gap-2 uppercase tracking-wide" style={{ fontSize: '11px' }}>
+                <h3 className="text-caption font-bold text-black/55 mb-3 flex items-center gap-2 uppercase tracking-wider">
                   <MessageCircle className="w-3.5 h-3.5 text-[#00C875]" />
                   Follow-up Channels
                 </h3>
@@ -1659,53 +2880,54 @@ function BusinessInfoModal({ client, onClose }: {
           )}
         </div>
 
-        {/* ── Footer — Smart Nudge Banner or Simple Close ── */}
-        <div className="h-px bg-black/[0.06]" />
-        {showNudgeBanner ? (
-          <div className="px-7 py-4">
-            <div className="flex items-center justify-between gap-4 bg-amber-50/70 border border-amber-200/50 rounded-xl px-5 py-3.5">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-lg bg-amber-100/80 flex items-center justify-center flex-shrink-0">
-                  <AlertCircle className="w-[18px] h-[18px] text-amber-600" />
+        {/* ── Sticky Footer — Smart Nudge Banner or Simple Close ── */}
+        <div className="flex-shrink-0 border-t border-black/[0.06] bg-white">
+          {showNudgeBanner ? (
+            <div className="px-6 py-4">
+              <div className="flex items-center justify-between gap-4 bg-amber-50/70 border border-amber-200/50 rounded-xl px-4 py-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-lg bg-amber-100/80 flex items-center justify-center flex-shrink-0">
+                    <AlertCircle className="w-[18px] h-[18px] text-amber-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-body text-amber-900/85 font-semibold">
+                      {pendingItems.length > 0
+                        ? `${pendingItems.length} section${pendingItems.length !== 1 ? 's' : ''} incomplete in business profile`
+                        : `Onboarding ${client.onboardingStatus === 'Pending' ? 'not started' : 'in progress'}`
+                      }
+                    </p>
+                    <p className="text-caption text-amber-700/60 mt-0.5 truncate">
+                      {pendingItems.length > 0
+                        ? `${[...new Set(pendingItems.map(i => i.category))].join(' · ')} need client input`
+                        : 'Business information submission still pending from client'
+                      }
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-body text-amber-900/80 font-semibold">
-                    {pendingItems.length > 0
-                      ? `${pendingItems.length} section${pendingItems.length !== 1 ? 's' : ''} incomplete in business profile`
-                      : `Onboarding ${client.onboardingStatus === 'Pending' ? 'not started' : 'in progress'}`
-                    }
-                  </p>
-                  <p className="text-caption text-amber-700/50 mt-0.5 truncate">
-                    {pendingItems.length > 0
-                      ? `${[...new Set(pendingItems.map(i => i.category))].join(' · ')} need client input`
-                      : 'Business information submission still pending from client'
-                    }
-                  </p>
-                </div>
+                <button
+                  onClick={() => setShowNudgeOverlay(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-body font-semibold transition-all shadow-sm hover:shadow flex-shrink-0"
+                  style={{ backgroundColor: '#D97706' }}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#B45309')}
+                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#D97706')}
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  Nudge Client
+                </button>
               </div>
-              <button
-                onClick={() => setShowNudgeOverlay(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-body font-semibold transition-all shadow-sm hover:shadow flex-shrink-0"
-                style={{ backgroundColor: '#D97706' }}
-                onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#B45309')}
-                onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#D97706')}
-              >
-                <Send className="w-3.5 h-3.5" />
-                Nudge Client
+            </div>
+          ) : (
+            <div className="flex items-center justify-between px-6 py-4">
+              <div className="flex items-center gap-2 text-caption text-emerald-600/80">
+                <CheckCircle2 className="w-4 h-4" />
+                <span className="font-medium">Onboarding complete — all sections filled</span>
+              </div>
+              <button onClick={onClose} className="px-5 py-2 rounded-xl text-body font-medium text-black/45 hover:text-black/65 hover:bg-black/[0.03] transition-all">
+                Close
               </button>
             </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between px-7 py-4">
-            <div className="flex items-center gap-2 text-caption text-emerald-600/70">
-              <CheckCircle2 className="w-4 h-4" />
-              <span className="font-medium">Onboarding complete — all sections filled</span>
-            </div>
-            <button onClick={onClose} className="px-5 py-2 rounded-xl text-body font-medium text-black/35 hover:text-black/55 hover:bg-black/[0.03] transition-all">
-              Close
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ── Nudge Client Overlay ── */}
@@ -1742,7 +2964,7 @@ function BusinessInfoModal({ client, onClose }: {
                         <p className="text-caption text-black/35 mt-0.5">Encourage {companyName} to complete their setup</p>
                       </div>
                     </div>
-                    <button onClick={() => !nudgeSending && setShowNudgeOverlay(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-black/[0.04] transition-colors" aria-label="Close">
+                    <button onClick={() => !nudgeSending && setShowNudgeOverlay(false)} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/[0.04] transition-colors" aria-label="Close">
                       <X className="w-4 h-4 text-black/30" />
                     </button>
                   </div>
@@ -1755,37 +2977,37 @@ function BusinessInfoModal({ client, onClose }: {
 
                   {/* Channel Target */}
                   <div>
-                    <label className="text-[11px] font-semibold text-black/40 uppercase tracking-wide block mb-2">Sending to</label>
+                    <label className="text-caption font-semibold text-black/55 uppercase tracking-wider block mb-2">Sending to</label>
                     <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-black/[0.02] border border-black/[0.05]">
                       <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${accent}15` }}>
                         <Hash className="w-3.5 h-3.5" style={{ color: accent }} />
                       </div>
-                      <span className="text-body text-black/70 font-semibold">{clientChannelSlug}</span>
-                      <span className="text-caption text-black/25 ml-1">Client Channel</span>
-                      <ExternalLink className="w-3 h-3 text-black/20 ml-auto" />
+                      <span className="text-body text-black/75 font-semibold">{clientChannelSlug}</span>
+                      <span className="text-caption text-black/35 ml-1">Client Channel</span>
+                      <ExternalLink className="w-3 h-3 text-black/25 ml-auto" />
                     </div>
                   </div>
 
                   {/* Pending Items */}
                   {pendingItems.length > 0 ? (
                     <div>
-                      <label className="text-[11px] font-semibold text-black/40 uppercase tracking-wide block mb-2">Incomplete sections flagged ({pendingItems.length})</label>
+                      <label className="text-caption font-semibold text-black/55 uppercase tracking-wider block mb-2">Incomplete sections flagged ({pendingItems.length})</label>
                       <div className="space-y-1.5">
                         {pendingItems.map((item, i) => (
                           <div key={i} className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-amber-50/50 border border-amber-100/60">
                             <ClockIcon className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-                            <span className="text-body text-amber-900/70 font-medium flex-1 min-w-0 truncate">{item.label}</span>
-                            <span className="text-[11px] text-amber-600/50 font-medium flex-shrink-0">{item.category}</span>
+                            <span className="text-body text-amber-900/75 font-medium flex-1 min-w-0 truncate">{item.label}</span>
+                            <span className="text-caption text-amber-700/65 font-medium flex-shrink-0">{item.category}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                   ) : onboardingIncomplete && (
                     <div>
-                      <label className="text-[11px] font-semibold text-black/40 uppercase tracking-wide block mb-2">Onboarding status</label>
+                      <label className="text-caption font-semibold text-black/55 uppercase tracking-wider block mb-2">Onboarding status</label>
                       <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-amber-50/50 border border-amber-100/60">
                         <AlertCircle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-                        <span className="text-body text-amber-900/70 font-medium">Business information form — {client.onboardingStatus}</span>
+                        <span className="text-body text-amber-900/75 font-medium">Business information form — {client.onboardingStatus}</span>
                       </div>
                     </div>
                   )}
@@ -1793,8 +3015,8 @@ function BusinessInfoModal({ client, onClose }: {
                   {/* Message Preview */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <label className="text-[11px] font-semibold text-black/40 uppercase tracking-wide">Message preview</label>
-                      <div className="flex items-center gap-1 text-[11px] font-medium" style={{ color: `${accent}90` }}>
+                      <label className="text-caption font-semibold text-black/55 uppercase tracking-wider">Message preview</label>
+                      <div className="flex items-center gap-1 text-caption font-medium" style={{ color: `${accent}90` }}>
                         <Sparkles className="w-3 h-3" />
                         Auto-generated
                       </div>
@@ -1849,9 +3071,17 @@ function BusinessInfoModal({ client, onClose }: {
       )}
 
       <style jsx>{`
+        @keyframes biSlideInRight {
+          from { transform: translateX(24px); opacity: 0; }
+          to   { transform: translateX(0);    opacity: 1; }
+        }
         @keyframes biSlideUp {
           from { transform: translateY(12px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
+          to   { transform: translateY(0);    opacity: 1; }
+        }
+        @keyframes biFadeIn {
+          from { opacity: 0; }
+          to   { opacity: 1; }
         }
       `}</style>
     </div>
@@ -2032,7 +3262,7 @@ function GrowthPlanModal({ client, onClose, onStatusChange }: {
                 <p className="text-caption text-black/40 mt-1">Growth Plan · {monthLabel} · {doneTasks}/{totalTasks} tasks</p>
               </div>
             </div>
-            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-black/[0.04] transition-colors -mr-1" aria-label="Close">
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/[0.04] transition-colors -mr-1" aria-label="Close">
               <X className="w-4 h-4 text-black/35" />
             </button>
           </div>
@@ -2101,7 +3331,7 @@ function GrowthPlanModal({ client, onClose, onStatusChange }: {
                 className="w-full px-3.5 py-2.5 rounded-lg border border-[#204CC7]/20 bg-white text-body text-black/80 placeholder:text-black/30 focus:outline-none focus:ring-2 focus:ring-[#204CC7]/10 focus:border-[#204CC7]/30 resize-none transition-all"
               />
               <div className="flex items-center gap-2">
-                <button onClick={saveHappening} className="px-3.5 py-1.5 rounded-lg bg-[#204CC7] text-white text-caption font-semibold hover:bg-[#1a3fa8] transition-colors">Save</button>
+                <button onClick={saveHappening} className="px-3.5 py-1.5 rounded-md bg-[#204CC7] text-white text-caption font-semibold hover:bg-[#1a3fa8] transition-colors">Save</button>
                 <button onClick={() => setEditingHappening(false)} className="px-3 py-1.5 rounded-lg text-black/40 text-caption font-medium hover:bg-black/[0.04] transition-colors">Cancel</button>
               </div>
             </div>
@@ -2277,7 +3507,7 @@ function GrowthPlanModal({ client, onClose, onStatusChange }: {
           {client.growthPlanStatus !== 'Sent' && hasContent && (
             <button
               onClick={handleSendToClient}
-              className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-body font-semibold bg-[#204CC7] text-white hover:bg-[#1a3fa8] shadow-sm shadow-[#204CC7]/20 transition-all"
+              className="flex items-center gap-1.5 px-5 py-2 rounded-md text-body font-semibold bg-[#204CC7] text-white hover:bg-[#1a3fa8] shadow-sm shadow-[#204CC7]/20 transition-all"
             >
               <Send className="w-3.5 h-3.5" aria-hidden="true" />
               Send to Client
@@ -2309,7 +3539,10 @@ function KickoffModal({ client, mode, onClose, onLaunch, onApprove }: {
   onLaunch: (assignments: Record<string, string>, metrics: KickoffMetrics) => void;
   onApprove: (finalMetrics: KickoffMetrics) => void;
 }) {
-  const businessType: 'ecommerce' | 'leadgen' = client.clientType === 'Ecommerce' ? 'ecommerce' : 'leadgen';
+  // Kickoff captures one set of metrics per session — anchor on the primary
+  // motion. Multi-type clients will get a follow-up kickoff for their second
+  // motion (handled outside this modal today).
+  const businessType: 'ecommerce' | 'leadgen' = primaryType(client) === 'Ecommerce' ? 'ecommerce' : 'leadgen';
   const fields = getMetricFields(businessType);
   const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('');
 
@@ -2385,19 +3618,27 @@ function KickoffModal({ client, mode, onClose, onLaunch, onApprove }: {
   };
 
   const handleGoToChannel = () => {
-    // Store discussion data in sessionStorage for Inbox to pick up
+    // Prefer the client's own channel in the Inbox (e.g. client-acme-corp).
+    // If the Inbox doesn't have a channel for this client yet, the Inbox will
+    // gracefully fall back to the SEM team channel using the `service` hint.
+    const clientSlug = clientChannelName
+      .toLowerCase()
+      .replace(/\s*\(.*?\)\s*/g, '')      // strip parentheticals
+      .replace(/[^a-z0-9]+/g, '-')         // non-alnum → hyphen
+      .replace(/(^-|-$)/g, '');            // trim hyphens
+    const targetChannel = `client-${clientSlug}`;
     if (lastDiscussionRef.current) {
-      const channelId = clientChannelName.toLowerCase().replace(/\s+/g, '-');
       sessionStorage.setItem('inbox_discussion_msg', JSON.stringify({
-        channelId,
+        channelId: targetChannel,
+        clientName: clientChannelName,
+        service: 'PM',
         ...lastDiscussionRef.current,
         sender: 'You',
       }));
     }
     setSentToast(null);
     onClose();
-    const channelId = clientChannelName.toLowerCase().replace(/\s+/g, '-');
-    window.location.href = `/inbox?channel=${channelId}`;
+    window.location.href = `/inbox?channel=${targetChannel}`;
   };
 
   // ─── Reusable: role slot row (initial mode only) ───
@@ -2495,7 +3736,7 @@ function KickoffModal({ client, mode, onClose, onLaunch, onApprove }: {
               {businessType === 'ecommerce' ? 'E-Commerce' : 'Lead Generation'} · Performance Marketing
             </p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-black/[0.04] transition-colors -mt-0.5 -mr-1 flex-shrink-0" aria-label="Close modal">
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/[0.04] transition-colors -mt-0.5 -mr-1 flex-shrink-0" aria-label="Close modal">
             <X className="w-4 h-4 text-black/30" />
           </button>
         </div>
@@ -2762,7 +4003,7 @@ function KickoffModal({ client, mode, onClose, onLaunch, onApprove }: {
                                       <button
                                         onClick={() => handleSendDiscussion(f.label, f.key, f.prefix, f.suffix)}
                                         disabled={!discussMsg.trim()}
-                                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-caption font-semibold transition-all ${discussMsg.trim() ? 'bg-[#204CC7] text-white hover:bg-[#1a3fa3] shadow-sm shadow-[#204CC7]/20' : 'bg-black/[0.04] text-black/30 cursor-not-allowed'}`}
+                                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-caption font-semibold transition-all ${discussMsg.trim() ? 'bg-[#204CC7] text-white hover:bg-[#1a3fa3] shadow-sm shadow-[#204CC7]/20' : 'bg-black/[0.04] text-black/30 cursor-not-allowed'}`}
                                         aria-label="Send to channel"
                                       >
                                         <Send className="w-3 h-3" aria-hidden="true" />Send
@@ -2925,6 +4166,35 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [clients, setClients] = useState<Client[]>(mockClients);
+  // Per-client editable platform targets (Meta + Google). Seeded lazily when
+  // the KSM drawer is first opened so opens don't blow away prior edits.
+  const [clientPlatformTargets, setClientPlatformTargets] = useState<Record<string, EditableTargets>>({});
+  const updatePlatformTarget = useCallback((clientId: string, platform: 'meta' | 'google', key: MetricKey, raw: number) => {
+    setClientPlatformTargets(prev => {
+      const cur = prev[clientId];
+      if (!cur) return prev;
+      // Type-narrow + spread
+      if (cur.type === 'Ecommerce') {
+        const k = key as keyof EcomTargets;
+        return { ...prev, [clientId]: { ...cur, [platform]: { ...cur[platform], [k]: raw } } };
+      }
+      const k = key as keyof LeadGenTargets;
+      return { ...prev, [clientId]: { ...cur, [platform]: { ...cur[platform], [k]: raw } } };
+    });
+  }, []);
+
+  // KSM drawer — opens when user clicks a Hit/Miss chip on a per-type row.
+  // Identity is the (client, businessType) tuple: Lead Gen and E-commerce
+  // are entirely separate KPI families, so each row owns its own drawer
+  // instance keyed on the type the user clicked.
+  const [ksmDrawer, setKsmDrawer] = useState<{ client: Client; businessType: ClientType } | null>(null);
+  const openKsmDrawer = (c: Client, businessType: ClientType) => {
+    setClientPlatformTargets(prev => {
+      if (prev[c.id]) return prev;
+      return { ...prev, [c.id]: seedEditableTargets(businessType, generatePlatformBreakdown(c.id, businessType)) };
+    });
+    setKsmDrawer({ client: c, businessType });
+  };
   const [kickoffClient, setKickoffClient] = useState<Client | null>(null);
   const [kickoffMode, setKickoffMode] = useState<'initial' | 'review'>('initial');
   const [growthPlanClient, setGrowthPlanClient] = useState<Client | null>(null);
@@ -2949,13 +4219,22 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
   const [editingQC, setEditingQC] = useState<string | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
-  const [filters, setFilters] = useState<{ clientType: ClientType | 'All'; ksmTarget: KSMStatus | 'All'; team: string; kickoffStatus: KickoffStatus | 'All'; growthPlan: GrowthPlanStatus | 'All'; onboarding: OnboardingStatus | 'All' }>({ clientType: 'All', ksmTarget: 'All', team: 'All', kickoffStatus: 'All', growthPlan: 'All', onboarding: 'All' });
+  // Filter state. `team` is a multi-select array — empty means "no team filter".
+  // `growthPlan` was removed (Weekly Plan concept retired from the table).
+  const [filters, setFilters] = useState<{ clientType: ClientType | 'All'; ksmTarget: KSMStatus | 'All'; team: string[]; kickoffStatus: KickoffStatus | 'All'; onboarding: OnboardingStatus | 'All' }>({ clientType: 'All', ksmTarget: 'All', team: [], kickoffStatus: 'All', onboarding: 'All' });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const menuRef = useRef<HTMLDivElement>(null);
+  const qcPopoverRef = useRef<HTMLDivElement>(null);
 
-  // Active filter count
-  const activeFilterCount = (filters.clientType !== 'All' ? 1 : 0) + (filters.ksmTarget !== 'All' ? 1 : 0) + (filters.team !== 'All' ? 1 : 0) + (filters.kickoffStatus !== 'All' ? 1 : 0) + (filters.growthPlan !== 'All' ? 1 : 0) + (filters.onboarding !== 'All' ? 1 : 0);
+  // Active filter count — each section that's narrowing the table contributes 1.
+  // Team is multi-select; any non-empty selection counts as a single active filter
+  // (the panel + chip row will surface the per-member detail).
+  const activeFilterCount =
+    (filters.clientType !== 'All' ? 1 : 0)
+    + (filters.ksmTarget !== 'All' ? 1 : 0)
+    + (filters.team.length > 0 ? 1 : 0)
+    + (filters.onboarding !== 'All' ? 1 : 0);
 
   // Close menu on outside click
   useEffect(() => {
@@ -2966,40 +4245,91 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
     return () => document.removeEventListener('mousedown', handler);
   }, [showClientMenu]);
 
-  const filteredClients = useMemo(() => {
-    return clients
-      .filter(c => {
-        if (!c.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-        if (filters.clientType !== 'All' && c.clientType !== filters.clientType) return false;
-        if (filters.kickoffStatus !== 'All' && c.kickoffStatus !== filters.kickoffStatus) return false;
-        if (filters.ksmTarget !== 'All' && c.ksmTarget !== filters.ksmTarget) return false;
-        if (filters.team !== 'All' && !c.team.some(t => t.initials === filters.team)) return false;
-        if (filters.growthPlan !== 'All' && c.growthPlanStatus !== filters.growthPlan) return false;
-        if (filters.onboarding !== 'All' && c.onboardingStatus !== filters.onboarding) return false;
+  // Close QC scheduler popover on outside click + Escape key
+  useEffect(() => {
+    if (!editingQC) return;
+    const handleClick = (e: MouseEvent) => {
+      if (qcPopoverRef.current && !qcPopoverRef.current.contains(e.target as Node)) {
+        // Don't close if click is on the trigger button (its onClick toggles state itself)
+        const target = e.target as Element;
+        if (target.closest('[aria-haspopup="dialog"]')) return;
+        setEditingQC(null);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setEditingQC(null); };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [editingQC]);
+
+  // Pending clients (no team, onboarding not started) live in the onboarding queue,
+  // not the main client table. Exclude them from the universe of rows here.
+  const activeClients = useMemo(
+    () => clients.filter(c => c.onboardingStatus !== 'Pending'),
+    [clients]
+  );
+
+  // ── Per-type row model ────────────────────────────────────────────────
+  // Lead Gen and E-commerce are entirely separate KPI families (CPL/leads
+  // vs. ROAS/spend) — comparing them in a single row destroys the user's
+  // ability to read performance at a glance. So a client that runs both
+  // motions appears as TWO independent rows, each tracked, filtered, and
+  // sorted on its own. Row identity = `${clientId}::${businessType}`.
+  type ClientRow = Client & { businessType: ClientType; rowKey: string };
+  const allRows = useMemo<ClientRow[]>(
+    () => activeClients.flatMap(c =>
+      c.clientTypes.map(bt => ({ ...c, businessType: bt, rowKey: `${c.id}::${bt}` }))
+    ),
+    [activeClients]
+  );
+
+  const filteredRows = useMemo<ClientRow[]>(() => {
+    return allRows
+      .filter(row => {
+        if (!row.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        // Type filter narrows to rows of the chosen motion — a multi-type
+        // client with one Lead-Gen row + one E-com row will keep only the
+        // matching one when filtered.
+        if (filters.clientType !== 'All' && row.businessType !== filters.clientType) return false;
+        if (filters.ksmTarget !== 'All' && row.ksmTarget !== filters.ksmTarget) return false;
+        if (filters.team.length > 0 && !row.team.some(t => filters.team.includes(t.initials))) return false;
+        if (filters.onboarding !== 'All' && row.onboardingStatus !== filters.onboarding) return false;
         return true;
       })
       .sort((a, b) => {
         const dir = sortDir === 'asc' ? 1 : -1;
-        if (sortField === 'name') return a.name.localeCompare(b.name) * dir;
-        if (sortField === 'clientType') return a.clientType.localeCompare(b.clientType) * dir;
+        // Stable secondary key by businessType keeps a client's two rows
+        // adjacent when sorting by name.
+        if (sortField === 'name') {
+          const byName = a.name.localeCompare(b.name) * dir;
+          return byName !== 0 ? byName : a.businessType.localeCompare(b.businessType);
+        }
+        if (sortField === 'clientType') {
+          const byType = a.businessType.localeCompare(b.businessType) * dir;
+          return byType !== 0 ? byType : a.name.localeCompare(b.name);
+        }
         if (sortField === 'ksmTarget') return a.ksmTarget.localeCompare(b.ksmTarget) * dir;
         return 0;
       });
-  }, [clients, searchQuery, filters, sortField, sortDir]);
+  }, [allRows, searchQuery, filters, sortField, sortDir]);
 
-  const totalClients = clients.length;
-  const hitCount = filteredClients.filter(c => c.ksmTarget === 'Hit').length;
-  const missCount = filteredClients.filter(c => c.ksmTarget === 'Miss').length;
-  const hitRate = filteredClients.length > 0 ? Math.round((hitCount / filteredClients.length) * 100) : 0;
+  const totalClients = activeClients.length;
+  const totalRows = allRows.length;
+  const hitCount = filteredRows.filter(r => r.ksmTarget === 'Hit').length;
+  const missCount = filteredRows.filter(r => r.ksmTarget === 'Miss').length;
+  const hitRate = filteredRows.length > 0 ? Math.round((hitCount / filteredRows.length) * 100) : 0;
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDir('asc'); }
   };
 
-  const handleClientClick = (client: Client) => {
+  const handleClientClick = (client: Client, rowKey: string) => {
     setSelectedClient(client);
-    setShowClientMenu(client.id);
+    setShowClientMenu(rowKey);
   };
 
   const handleViewSelect = (view: View) => {
@@ -3012,13 +4342,15 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
     setSelectedClient(null);
   };
 
-  // Bulk select helpers
-  const allVisibleSelected = filteredClients.length > 0 && filteredClients.every(c => selectedIds.has(c.id));
+  // Bulk select helpers — selection is per-row (rowKey), so a multi-type
+  // client can have its E-com row selected without auto-selecting its
+  // Lead-Gen row. Each motion is tracked independently.
+  const allVisibleSelected = filteredRows.length > 0 && filteredRows.every(r => selectedIds.has(r.rowKey));
   const someSelected = selectedIds.size > 0;
 
   const toggleSelectAll = () => {
     if (allVisibleSelected) setSelectedIds(new Set());
-    else setSelectedIds(new Set(filteredClients.map(c => c.id)));
+    else setSelectedIds(new Set(filteredRows.map(r => r.rowKey)));
   };
 
   const toggleSelect = (id: string) => {
@@ -3031,7 +4363,7 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
 
   const clearSelection = () => setSelectedIds(new Set());
 
-  const resetFilters = () => setFilters({ clientType: 'All', ksmTarget: 'All', team: 'All', kickoffStatus: 'All', growthPlan: 'All', onboarding: 'All' });
+  const resetFilters = () => setFilters({ clientType: 'All', ksmTarget: 'All', team: [], kickoffStatus: 'All', onboarding: 'All' });
 
   // ─── CLIENT LIST VIEW ─────────────────────────────────────────
   if (currentView === 'clientList') {
@@ -3045,7 +4377,9 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
               <div>
                 <h1 className="text-black/90 text-h2 font-bold">Performance Marketing</h1>
                 <p className="text-black/50 mt-0.5 text-caption font-normal">
-                  {filteredClients.length} of {totalClients} clients
+                  {filteredRows.length} {filteredRows.length === 1 ? 'entry' : 'entries'}
+                  <span className="text-black/30 mx-1.5">·</span>
+                  {totalClients} {totalClients === 1 ? 'client' : 'clients'}
                 </p>
               </div>
               <div className="w-px h-8 bg-black/8" />
@@ -3071,7 +4405,7 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setIsSearchFocused(true)}
                   onBlur={() => setIsSearchFocused(false)}
-                  className="w-full pl-9 pr-3 py-2 bg-[#F6F7FF] border border-black/5 rounded-xl placeholder:text-black/35 focus:outline-none focus:bg-white focus:border-[#204CC7]/25 focus:ring-1 focus:ring-[#204CC7]/10 transition-all text-caption font-normal"
+                  className="w-full pl-9 pr-3 py-2 bg-[#F6F7FF] border border-black/5 rounded-md placeholder:text-black/35 focus:outline-none focus:bg-white focus:border-[#204CC7]/25 focus:ring-1 focus:ring-[#204CC7]/10 transition-all text-caption font-normal"
                 />
               </div>
 
@@ -3079,7 +4413,7 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
               <div className="relative">
                 <button
                   onClick={() => setShowFilterPanel(p => !p)}
-                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl border transition-all active:scale-[0.98] text-caption font-medium ${
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-md border transition-all active:scale-[0.98] text-caption font-medium ${
                     showFilterPanel || activeFilterCount > 0
                       ? 'bg-[#EEF1FB] border-[#204CC7]/20 text-[#204CC7]'
                       : 'border-black/8 hover:bg-black/[0.03] hover:border-black/12 text-black/65'
@@ -3100,76 +4434,100 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
               </div>
 
               {/* Export / Share */}
-              <button className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-black/8 hover:bg-black/[0.03] hover:border-black/12 text-black/65 transition-all active:scale-[0.98] text-caption font-medium" title="Export">
+              <button className="flex items-center gap-1.5 px-3.5 py-2 rounded-md border border-black/8 hover:bg-black/[0.03] hover:border-black/12 text-black/65 transition-all active:scale-[0.98] text-caption font-medium" title="Export">
                 <Share className="w-3.5 h-3.5" />
                 Export
               </button>
             </div>
           </div>
 
-          {/* ── Active Filter Tags ── */}
-          {activeFilterCount > 0 && (
-            <div className="flex items-center gap-2 pb-3 flex-wrap">
-              <span className="text-black/55 text-micro font-medium">Active filters:</span>
-              {filters.clientType !== 'All' && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#EEF1FB] text-[#3D5EC7] rounded-lg text-caption font-medium">
-                  <Tag className="w-3 h-3" />
-                  {filters.clientType}
-                  <button onClick={() => setFilters(f => ({ ...f, clientType: 'All' }))} className="hover:bg-[#204CC7]/10 rounded p-0.5 transition-colors"><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {filters.onboarding !== 'All' && (
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-caption font-medium ${
-                  filters.onboarding === 'Complete' ? 'bg-emerald-50 text-emerald-700'
-                  : filters.onboarding === 'In Progress' ? 'bg-amber-50 text-amber-700'
-                  : 'bg-black/[0.04] text-black/60'
-                }`}>
-                  <Building2 className="w-3 h-3" />
-                  {filters.onboarding}
-                  <button onClick={() => setFilters(f => ({ ...f, onboarding: 'All' }))} className="hover:bg-black/5 rounded p-0.5 transition-colors"><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {filters.ksmTarget !== 'All' && (
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-caption font-medium ${
-                  filters.ksmTarget === 'Hit' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'
-                }`}>
-                  <Target className="w-3 h-3" />
-                  {filters.ksmTarget}
-                  <button onClick={() => setFilters(f => ({ ...f, ksmTarget: 'All' }))} className="hover:bg-black/5 rounded p-0.5 transition-colors"><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {filters.kickoffStatus !== 'All' && (
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-caption font-medium ${
-                  filters.kickoffStatus === 'Done' ? 'bg-emerald-50 text-emerald-700'
-                  : filters.kickoffStatus === 'Onboarding' ? 'bg-blue-50 text-blue-700'
-                  : 'bg-amber-50 text-amber-700'
-                }`}>
-                  <CircleCheck className="w-3 h-3" />
-                  {filters.kickoffStatus}
-                  <button onClick={() => setFilters(f => ({ ...f, kickoffStatus: 'All' }))} className="hover:bg-black/5 rounded p-0.5 transition-colors"><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {filters.team !== 'All' && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-violet-50 text-violet-700 rounded-lg text-caption font-medium">
-                  <Users className="w-3 h-3" />
-                  {[{ initials: 'JD', name: 'Jay Desai' }, { initials: 'AS', name: 'Aarti Shah' }, { initials: 'PM', name: 'Priya Mehta' }, { initials: 'RK', name: 'Rahul Kumar' }].find(t => t.initials === filters.team)?.name || filters.team}
-                  <button onClick={() => setFilters(f => ({ ...f, team: 'All' }))} className="hover:bg-violet-100 rounded p-0.5 transition-colors"><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {filters.growthPlan !== 'All' && (
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-caption font-medium ${
-                  filters.growthPlan === 'Sent' ? 'bg-emerald-50 text-emerald-700'
-                  : filters.growthPlan === 'In Progress' ? 'bg-blue-50 text-blue-700'
-                  : 'bg-black/[0.04] text-black/60'
-                }`}>
-                  <CalendarCheck2 className="w-3 h-3" />
-                  {filters.growthPlan}
-                  <button onClick={() => setFilters(f => ({ ...f, growthPlan: 'All' }))} className="hover:bg-black/5 rounded p-0.5 transition-colors"><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              <button onClick={resetFilters} className="text-[#204CC7] hover:underline text-micro font-medium">Clear all</button>
-            </div>
-          )}
+          {/* ── Active Filter Tags ──
+              Echoes the panel's selections as dismissible chips above the table.
+              Team is multi-select: render one chip per selected member so admins
+              can drop one without losing the others. */}
+          {activeFilterCount > 0 && (() => {
+            // Lookup uses module-level SEM_TEAM — adding a member there
+            // automatically lights up here without further edits.
+            const teamRoster = SEM_TEAM;
+            return (
+              <div className="flex items-center gap-2 pb-3 flex-wrap">
+                <span className="text-black/55 text-caption font-medium">Active filters:</span>
+                {filters.clientType !== 'All' && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#EEF1FB] text-[#3D5EC7] rounded-lg text-caption font-medium">
+                    <Tag className="w-3 h-3" aria-hidden="true" />
+                    {filters.clientType}
+                    <button
+                      onClick={() => setFilters(f => ({ ...f, clientType: 'All' }))}
+                      aria-label={`Clear ${filters.clientType} filter`}
+                      className="hover:bg-[#204CC7]/10 rounded p-0.5 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
+                {filters.onboarding !== 'All' && (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-caption font-medium ${
+                    filters.onboarding === 'Complete' ? 'bg-emerald-50 text-emerald-700'
+                    : filters.onboarding === 'In Progress' ? 'bg-amber-50 text-amber-700'
+                    : 'bg-black/[0.04] text-black/60'
+                  }`}>
+                    <Building2 className="w-3 h-3" aria-hidden="true" />
+                    {filters.onboarding}
+                    <button
+                      onClick={() => setFilters(f => ({ ...f, onboarding: 'All' }))}
+                      aria-label={`Clear ${filters.onboarding} filter`}
+                      className="hover:bg-black/5 rounded p-0.5 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
+                {filters.ksmTarget !== 'All' && (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-caption font-medium ${
+                    filters.ksmTarget === 'Hit' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'
+                  }`}>
+                    <Target className="w-3 h-3" aria-hidden="true" />
+                    {filters.ksmTarget}
+                    <button
+                      onClick={() => setFilters(f => ({ ...f, ksmTarget: 'All' }))}
+                      aria-label={`Clear ${filters.ksmTarget} filter`}
+                      className="hover:bg-black/5 rounded p-0.5 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
+                {/* One chip per selected team member — independently dismissible. */}
+                {filters.team.map(initials => {
+                  const tm = teamRoster.find(t => t.initials === initials);
+                  if (!tm) return null;
+                  return (
+                    <span
+                      key={initials}
+                      className="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 bg-violet-50 text-violet-700 rounded-lg text-caption font-medium"
+                    >
+                      <span
+                        className="w-5 h-5 rounded-full flex items-center justify-center text-white text-caption font-semibold"
+                        style={{ backgroundColor: tm.color }}
+                        aria-hidden="true"
+                      >
+                        {tm.initials}
+                      </span>
+                      {tm.name}
+                      <button
+                        onClick={() => setFilters(f => ({ ...f, team: f.team.filter(i => i !== initials) }))}
+                        aria-label={`Remove ${tm.name} from filter`}
+                        className="hover:bg-violet-100 rounded p-0.5 transition-colors"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  );
+                })}
+                <button onClick={resetFilters} className="text-[#204CC7] hover:underline text-caption font-medium">Clear all</button>
+              </div>
+            );
+          })()}
         </div>
 
         {/* ── Content ── */}
@@ -3180,7 +4538,7 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
           <div className="mb-3 flex items-center gap-3 px-4 py-2.5 bg-[#204CC7] rounded-xl text-white animate-in slide-in-from-top-2 duration-200">
             <div className="flex items-center gap-2 flex-1">
               <Check className="w-4 h-4" />
-              <span className="text-caption font-medium">{selectedIds.size} client{selectedIds.size > 1 ? 's' : ''} selected</span>
+              <span className="text-caption font-medium">{selectedIds.size} entr{selectedIds.size > 1 ? 'ies' : 'y'} selected</span>
             </div>
             <div className="flex items-center gap-1.5">
               <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white/15 hover:bg-white/25 rounded-lg transition-colors text-caption font-medium">
@@ -3204,108 +4562,120 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
         )}
 
         {/* ── Data Table ── */}
-        <div className="bg-white rounded-xl border border-black/5 overflow-hidden min-w-0">
+        <div className="bg-white rounded-xl border border-black/5 overflow-hidden min-w-0 relative">
           <div className="overflow-x-auto">
-            <table style={{ minWidth: 1280 }}>
+            <table style={{ minWidth: 1276, tableLayout: 'fixed' }}>
+              <colgroup>
+                <col style={{ width: 220 }} />  {/* 1: client    — sticky left */}
+                <col style={{ width: 156 }} />  {/* 2: team — fits up to 4 circles + overflow chip */}
+                <col style={{ width: 144 }} />  {/* 3: type */}
+                <col style={{ width: 138 }} />  {/* 4: onboarding */}
+                <col style={{ width: 130 }} />  {/* 5: last QC */}
+                <col style={{ width: 126 }} />  {/* 6: next QC */}
+                <col style={{ width: 112 }} />  {/* 7: KSM */}
+                <col style={{ width: 200 }} />  {/* 8: comments */}
+                <col style={{ width: 56 }} />   {/* 9: actions  — sticky right */}
+              </colgroup>
               <thead>
                 <tr className="border-b border-black/[0.06]">
-                  <th className="text-left py-3.5 pl-6 pr-4" style={{ width: 220 }}>
+                  <th className="text-left py-3.5 pl-5 pr-4 sticky left-0 z-[31] bg-white">
                     <button onClick={() => handleSort('name')} className="flex items-center gap-1.5 hover:text-black/70 transition-colors group">
                       <span className="text-black/50 text-micro font-semibold uppercase tracking-wider">Clients</span>
                       <ArrowUpDown className="w-3 h-3 text-black/20 group-hover:text-black/50 transition-colors" />
                     </button>
                   </th>
-                  <th className="text-left py-3.5 px-4" style={{ width: 90 }}>
+                  <th className="text-left py-3.5 px-4">
                     <span className="text-black/50 text-micro font-semibold uppercase tracking-wider">Team</span>
                   </th>
-                  <th className="text-left py-3.5 px-4" style={{ width: 130 }}>
+                  <th className="text-left py-3.5 px-4">
                     <button onClick={() => handleSort('clientType')} className="flex items-center gap-1.5 hover:text-black/70 transition-colors group">
                       <span className="text-black/50 text-micro font-semibold uppercase tracking-wider">Type</span>
                       <ArrowUpDown className="w-3 h-3 text-black/20 group-hover:text-black/50 transition-colors" />
                     </button>
                   </th>
-                  <th className="text-center py-3.5 px-4" style={{ width: 120 }}>
+                  <th className="text-center py-3.5 px-4">
                     <span className="text-black/50 text-micro font-semibold uppercase tracking-wider">Onboarding</span>
                   </th>
-                  <th className="text-center py-3.5 px-4" style={{ width: 120 }}>
-                    <span className="text-black/50 text-micro font-semibold uppercase tracking-wider">Kickoff</span>
-                  </th>
-                  <th className="text-left py-3.5 px-4" style={{ width: 110 }}>
-                    <span className="text-black/50 text-micro font-semibold uppercase tracking-wider">Last QC</span>
-                  </th>
-                  <th className="text-left py-3.5 px-4" style={{ width: 110 }}>
+                  <th className="text-left py-3.5 px-4" colSpan={2}>
                     <span className="text-black/50 text-micro font-semibold uppercase tracking-wider">Next QC</span>
                   </th>
-                  <th className="text-center py-3.5 px-4" style={{ width: 90 }}>
+                  <th className="text-center py-3.5 px-4">
                     <button onClick={() => handleSort('ksmTarget')} className="flex items-center gap-1.5 justify-center hover:text-black/70 transition-colors group mx-auto">
                       <span className="text-black/50 text-micro font-semibold uppercase tracking-wider">KSM</span>
                       <ArrowUpDown className="w-3 h-3 text-black/20 group-hover:text-black/50 transition-colors" />
                     </button>
                   </th>
-                  <th className="text-center py-3.5 px-4" style={{ width: 120 }}>
-                    <span className="text-black/50 text-micro font-semibold uppercase tracking-wider">Weekly Plan</span>
-                  </th>
-                  <th className="text-left py-3.5 px-4" style={{ width: 180 }}>
+                  <th className="text-left py-3.5 px-4">
                     <span className="text-black/50 text-micro font-semibold uppercase tracking-wider">Comments</span>
                   </th>
-                  <th className="w-12 py-3.5 pr-4"></th>
+                  <th className="py-3.5 pr-4 sticky right-0 z-[31] bg-white" style={{ boxShadow: '-2px 0 6px -2px rgba(0,0,0,0.04)' }}></th>
                 </tr>
               </thead>
               <tbody>
-                {filteredClients.map((client, idx) => {
-                  const isSelected = selectedIds.has(client.id);
+                {filteredRows.map((row, idx) => {
+                  const client = row;
+                  const isSelected = selectedIds.has(row.rowKey);
+                  // A multi-type client renders as two adjacent rows. Each
+                  // row is fully self-describing and visually identical —
+                  // the type chip is what differentiates them. Acting on a
+                  // row only ever affects that (client × business type)
+                  // pair.
                   return (
                     <tr
-                      key={client.id}
+                      key={row.rowKey}
                       className={`border-b border-black/[0.04] hover:bg-[#F6F7FF]/50 transition-colors cursor-pointer group ${
                         isSelected ? 'bg-[#EEF1FB]/40' : idx % 2 === 0 ? 'bg-white' : 'bg-black/[0.008]'
                       }`}
                     >
-                      <td className="py-3.5 pl-6 pr-4">
+                      {/* Client name (sticky) — rendered identically on
+                          every row, including the second row of a
+                          multi-type client. The type chip carries the
+                          differentiation; the name does not need to. */}
+                      <td className={`py-3.5 pl-5 pr-4 sticky left-0 z-20 ${isSelected ? 'bg-[#EEF1FB]/40' : idx % 2 === 0 ? 'bg-white' : 'bg-black/[0.008]'} group-hover:bg-[#F6F7FF]/50`}>
                         <span className="text-black/85 text-body font-medium whitespace-nowrap">{client.name}</span>
                       </td>
                       <td className="py-3.5 px-4">
-                        {client.kickoffStatus === 'Pending' ? (
-                          <span className="text-black/20 text-body">—</span>
+                        {client.team.length > 0 ? (
+                          <TeamAvatarStack team={client.team} />
                         ) : (
-                          <div className="flex items-center -space-x-1.5">
-                            {client.team.map((member, mIdx) => (
-                              <div
-                                key={mIdx}
-                                className="w-7 h-7 rounded-full flex items-center justify-center ring-2 ring-white text-[9px] font-bold text-white"
-                                style={{ backgroundColor: member.color }}
-                                title={member.initials}
-                              >
-                                {member.initials}
-                              </div>
-                            ))}
-                          </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setBusinessInfoClient(client); }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-dashed border-black/15 text-black/55 text-caption font-medium hover:bg-black/[0.03] hover:text-black/75 hover:border-black/25 transition-colors"
+                            aria-label={`Assign team to ${client.name}`}
+                          >
+                            <UserPlus className="w-3.5 h-3.5" aria-hidden="true" />
+                            Assign
+                          </button>
                         )}
                       </td>
                       <td className="py-3.5 px-4">
+                        {/* Single chip — this row IS one (client × type)
+                            tuple. Lead Gen and E-commerce are completely
+                            separate KPI families (CPL/leads vs. ROAS/spend),
+                            so a multi-type client appears as two independent
+                            rows and KSM, history, and targets are scoped to
+                            this row's businessType. */}
                         <span
                           className={`inline-flex items-center px-2.5 py-1 rounded-lg text-caption font-medium whitespace-nowrap ${
-                            client.clientType === 'Ecommerce' ? 'bg-[#EEF1FB] text-[#3D5EC7]' : 'bg-violet-50 text-violet-600'
+                            row.businessType === 'Ecommerce'
+                              ? 'bg-[#EEF1FB] text-[#3D5EC7]'
+                              : 'bg-violet-50 text-violet-600'
                           }`}
+                          title={row.businessType}
                         >
-                          {client.clientType}
+                          {row.businessType}
                         </span>
                       </td>
-                      {/* ONBOARDING STATUS */}
+                      {/* ONBOARDING STATUS — binary by design.
+                          A client is either fully live (business info
+                          complete AND kickoff signed off → Complete) or
+                          they're somewhere in the onboarding pipeline
+                          (→ In Progress). The intermediate states
+                          (kickoff pending, in review) live in the row's
+                          ⋮ menu as direct actions, not as visual states
+                          that compete with KSM for the eye. */}
                       <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                        {client.onboardingStatus === 'Pending' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-black/[0.03] border border-black/[0.06] text-black/35 text-caption font-medium whitespace-nowrap">
-                            Pending
-                          </span>
-                        ) : client.onboardingStatus === 'In Progress' ? (
-                          <button
-                            onClick={() => setBusinessInfoClient(client)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200/60 text-amber-700 text-caption font-medium hover:bg-amber-100/80 hover:border-amber-300 transition-all group/onb whitespace-nowrap"
-                          >
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                            In Progress
-                          </button>
-                        ) : (
+                        {client.onboardingStatus === 'Complete' && client.kickoffStatus === 'Done' ? (
                           <button
                             onClick={() => setBusinessInfoClient(client)}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200/60 text-emerald-700 text-caption font-medium hover:bg-emerald-100/80 hover:border-emerald-300 transition-all whitespace-nowrap"
@@ -3313,109 +4683,112 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                             Complete
                           </button>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                        {client.kickoffStatus === 'Pending' ? (
-                          <button
-                            onClick={() => { setKickoffMode('initial'); setKickoffClient(client); }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200/60 text-amber-700 text-caption font-medium hover:bg-amber-100/80 hover:border-amber-300 transition-all group/kick whitespace-nowrap"
-                          >
-                            Pending
-                            <ChevronRight className="w-3 h-3 text-amber-400 group-hover/kick:text-amber-600 group-hover/kick:translate-x-0.5 transition-all" aria-hidden="true" />
-                          </button>
-                        ) : client.kickoffStatus === 'Onboarding' ? (
-                          <button
-                            onClick={() => { setKickoffMode('review'); setKickoffClient(client); }}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200/60 text-blue-700 text-caption font-medium hover:bg-blue-100/80 hover:border-blue-300 transition-all cursor-pointer group/onb whitespace-nowrap"
-                          >
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                            Onboarding
-                            <Eye className="w-3 h-3 text-blue-400 group-hover/onb:text-blue-600 transition-colors" aria-hidden="true" />
-                          </button>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200/60 text-emerald-700 text-caption font-medium whitespace-nowrap">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            Done
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
-                        {client.kickoffStatus === 'Pending' ? (
-                          <span className="text-black/20 text-body">—</span>
-                        ) : editingQC === client.id ? (
-                          <input
-                            type="date"
-                            autoFocus
-                            value={clientQCDates[client.id] || ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val) setClientQCDates(prev => ({ ...prev, [client.id]: val }));
-                            }}
-                            onBlur={() => setEditingQC(null)}
-                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setEditingQC(null); }}
-                            className="px-2 py-0.5 border border-[#204CC7]/30 rounded-lg outline-none text-caption font-medium text-black/70 bg-white focus:ring-1 focus:ring-[#204CC7]/20 w-[130px]"
-                          />
                         ) : (
                           <button
-                            onClick={() => setEditingQC(client.id)}
-                            className="text-black/60 text-caption font-medium hover:text-[#204CC7] hover:bg-[#EEF1FB]/50 px-1.5 py-0.5 -mx-1.5 rounded transition-colors cursor-pointer whitespace-nowrap"
-                            title="Click to edit"
-                          >
-                            {formatQCDate(clientQCDates[client.id] || client.lastQC)}
-                          </button>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        {client.kickoffStatus === 'Pending' ? (
-                          <span className="text-black/20 text-body">—</span>
-                        ) : (
-                          <span className="text-black/60 text-caption font-medium whitespace-nowrap">
-                            {formatQCDate(addDays(clientQCDates[client.id] || client.lastQC, 15))}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        {client.ksmTarget === 'Hit' ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700 text-caption font-semibold whitespace-nowrap">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            Hit
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 border border-rose-100 text-rose-600 text-caption font-semibold whitespace-nowrap">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-                            Miss
-                          </span>
-                        )}
-                      </td>
-
-                      {/* GROWTH PLAN STATUS */}
-                      <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                        {client.kickoffStatus === 'Pending' ? (
-                          <span className="text-black/20 text-body">—</span>
-                        ) : client.growthPlanStatus === 'Not Started' ? (
-                          <button
-                            onClick={() => setGrowthPlanClient(client)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-black/[0.03] border border-black/[0.06] text-black/40 text-caption font-medium hover:bg-black/[0.06] hover:text-black/60 hover:border-black/10 transition-all group/gp whitespace-nowrap"
-                          >
-                            Not Started
-                            <Plus className="w-3 h-3 text-black/25 group-hover/gp:text-black/50 transition-colors" aria-hidden="true" />
-                          </button>
-                        ) : client.growthPlanStatus === 'In Progress' ? (
-                          <button
-                            onClick={() => setGrowthPlanClient(client)}
+                            onClick={() => setBusinessInfoClient(client)}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200/60 text-amber-700 text-caption font-medium hover:bg-amber-100/80 hover:border-amber-300 transition-all whitespace-nowrap"
                           >
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                             In Progress
+                          </button>
+                        )}
+                      </td>
+                      {/* ───────────────────────────────────────────────────────
+                          Next QC cell — one line: date + subtle relative label.
+                          Click opens a tiny popover with just a date input and a
+                          "Today" shortcut. Next QC is auto-derived (+15 days) so
+                          editing happens against the Last QC date.
+                          ─────────────────────────────────────────────────────── */}
+                      <td className="py-3.5 px-4 relative" colSpan={2} onClick={(e) => e.stopPropagation()}>
+                        {client.kickoffStatus === 'Pending' ? (
+                          <span className="text-black/20 text-body">—</span>
+                        ) : (() => {
+                          const lastISO = clientQCDates[client.id] || client.lastQC;
+                          const nextISO = addDays(lastISO, 15);
+                          const status = getQCStatus(nextISO);
+                          const toneClass: Record<QCTone, string> = {
+                            overdue: 'text-rose-600',
+                            today:   'text-[#204CC7]',
+                            tomorrow:'text-amber-600',
+                            soon:    'text-black/50',
+                            normal:  'text-black/40',
+                          };
+                          const isOpen = editingQC === client.id;
+                          return (
+                            <>
+                              <button
+                                onClick={() => setEditingQC(isOpen ? null : client.id)}
+                                aria-haspopup="dialog"
+                                aria-expanded={isOpen}
+                                className="inline-flex items-center gap-1.5 -mx-1.5 px-1.5 py-1 rounded-lg hover:bg-black/[0.03] transition-colors text-left whitespace-nowrap"
+                                title="Click to reschedule"
+                              >
+                                <span className="text-caption font-medium text-black/70 tabular-nums">
+                                  {formatQCDate(nextISO)}
+                                </span>
+                                {status.label && (
+                                  <span className={`text-caption font-medium ${toneClass[status.tone]}`}>
+                                    · {status.label}
+                                  </span>
+                                )}
+                              </button>
+
+                              {isOpen && (
+                                <div
+                                  ref={qcPopoverRef}
+                                  role="dialog"
+                                  aria-label="Set last QC date"
+                                  className="absolute top-full left-3 mt-1 z-50 w-[230px] bg-white rounded-xl border border-black/[0.08] shadow-xl shadow-black/[0.10] p-3"
+                                >
+                                  <span className="text-caption text-black/50 font-medium mb-1.5 block">Last QC</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <input
+                                      type="date"
+                                      value={lastISO}
+                                      max={todayISO()}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val) setClientQCDates(prev => ({ ...prev, [client.id]: val }));
+                                      }}
+                                      className="flex-1 min-w-0 px-2.5 py-1.5 border border-black/[0.12] rounded-lg outline-none text-caption font-medium text-black/75 bg-white focus:border-[#204CC7]/40 focus:ring-2 focus:ring-[#204CC7]/15 transition-all"
+                                    />
+                                    <button
+                                      onClick={() => setClientQCDates(prev => ({ ...prev, [client.id]: todayISO() }))}
+                                      className="text-caption font-semibold text-[#204CC7] px-2.5 py-1.5 rounded-lg bg-[#EEF1FB]/60 hover:bg-[#EEF1FB] transition-colors whitespace-nowrap"
+                                    >
+                                      Today
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </td>
+                      <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                        {client.kickoffStatus === 'Pending' ? (
+                          <span className="text-black/20 text-body">—</span>
+                        ) : client.ksmTarget === 'Hit' ? (
+                          <button
+                            onClick={() => openKsmDrawer(client, row.businessType)}
+                            aria-label={`Open ${client.name} (${row.businessType}) performance drawer — KSM Hit`}
+                            title={`View ${row.businessType} performance breakdown`}
+                            className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 rounded-full bg-emerald-50 border border-emerald-200/70 text-emerald-700 text-caption font-semibold whitespace-nowrap hover:bg-emerald-100 hover:border-emerald-300 hover:shadow-sm hover:-translate-y-px active:translate-y-0 active:shadow-none transition-all group/ksm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 cursor-pointer"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                            Hit
+                            <ChevronRight className="w-3 h-3 text-emerald-500/55 group-hover/ksm:text-emerald-700 group-hover/ksm:translate-x-0.5 transition-all" aria-hidden="true" />
                           </button>
                         ) : (
                           <button
-                            onClick={() => setGrowthPlanClient(client)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200/60 text-emerald-700 text-caption font-medium hover:bg-emerald-100/80 hover:border-emerald-300 transition-all whitespace-nowrap"
+                            onClick={() => openKsmDrawer(client, row.businessType)}
+                            aria-label={`Open ${client.name} (${row.businessType}) performance drawer — KSM Miss`}
+                            title={`View ${row.businessType} performance breakdown`}
+                            className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 rounded-full bg-rose-50 border border-rose-200/70 text-rose-700 text-caption font-semibold whitespace-nowrap hover:bg-rose-100 hover:border-rose-300 hover:shadow-sm hover:-translate-y-px active:translate-y-0 active:shadow-none transition-all group/ksm focus:outline-none focus:ring-2 focus:ring-rose-500/30 cursor-pointer"
                           >
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            Sent
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" aria-hidden="true" />
+                            Miss
+                            <ChevronRight className="w-3 h-3 text-rose-500/55 group-hover/ksm:text-rose-700 group-hover/ksm:translate-x-0.5 transition-all" aria-hidden="true" />
                           </button>
                         )}
                       </td>
@@ -3429,15 +4802,44 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
                           className="w-full bg-transparent border-none outline-none text-black/65 placeholder:text-black/25 hover:placeholder:text-black/35 focus:placeholder:text-black/30 transition-colors text-caption font-normal"
                         />
                       </td>
-                      <td className="py-3.5 pr-4 relative">
+                      <td className={`py-3.5 pr-4 relative sticky right-0 z-20 ${isSelected ? 'bg-[#EEF1FB]' : 'bg-white'} group-hover:bg-[#F6F7FF]`} style={{ boxShadow: '-2px 0 6px -2px rgba(0,0,0,0.04)' }}>
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleClientClick(client); }}
-                          className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-black/5 rounded-lg transition-all"
+                          onClick={(e) => { e.stopPropagation(); handleClientClick(client, row.rowKey); }}
+                          className="w-8 h-8 rounded-full bg-black/[0.04] hover:bg-black/[0.08] flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                          aria-label={`Open actions for ${client.name} (${row.businessType})`}
                         >
-                          <MoreVertical className="w-4 h-4 text-black/55" />
+                          <MoreVertical className="w-4 h-4 text-black/50" />
                         </button>
-                        {showClientMenu === client.id && (
-                          <div ref={menuRef} className="absolute right-10 top-1/2 -translate-y-1/2 z-50 bg-white rounded-xl shadow-xl border border-black/[0.06] py-1.5 min-w-[200px]">
+                        {showClientMenu === row.rowKey && (
+                          <div ref={menuRef} className="absolute right-10 top-1/2 -translate-y-1/2 z-50 bg-white rounded-xl shadow-xl border border-black/[0.06] py-1.5 min-w-[220px]">
+                            {/* Kickoff actions surface only when actionable.
+                                A row in the kickoff pipeline sees the next
+                                step at the top of the menu so it's always
+                                one click away. */}
+                            {client.kickoffStatus === 'Pending' && (
+                              <>
+                                <button
+                                  onClick={() => { setKickoffMode('initial'); setKickoffClient(client); setShowClientMenu(null); }}
+                                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#F6F7FF] transition-colors text-left"
+                                >
+                                  <Zap className="w-4 h-4 text-violet-600" />
+                                  <span className="text-black/75 text-caption font-medium">Start kickoff</span>
+                                </button>
+                                <div className="my-1 border-t border-black/[0.05]" />
+                              </>
+                            )}
+                            {client.kickoffStatus === 'Onboarding' && (
+                              <>
+                                <button
+                                  onClick={() => { setKickoffMode('review'); setKickoffClient(client); setShowClientMenu(null); }}
+                                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#F6F7FF] transition-colors text-left"
+                                >
+                                  <Eye className="w-4 h-4 text-blue-600" />
+                                  <span className="text-black/75 text-caption font-medium">Review for HOD sign-off</span>
+                                </button>
+                                <div className="my-1 border-t border-black/[0.05]" />
+                              </>
+                            )}
                             <button onClick={() => { setBusinessInfoClient(client); setShowClientMenu(null); }} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#F6F7FF] transition-colors text-left">
                               <Building2 className="w-4 h-4 text-[#5B7FD6]" />
                               <span className="text-black/75 text-caption font-medium">Business Info</span>
@@ -3452,11 +4854,11 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
                     </tr>
                   );
                 })}
-                {filteredClients.length === 0 && (
+                {filteredRows.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="py-16 text-center">
+                    <td colSpan={9} className="py-16 text-center">
                       <Search className="w-10 h-10 text-black/10 mx-auto mb-3" />
-                      <p className="text-black/55 text-body font-medium">No clients match your filters</p>
+                      <p className="text-black/55 text-body font-medium">No entries match your filters</p>
                       <button onClick={resetFilters} className="mt-2 text-[#204CC7] hover:underline text-caption font-medium">Reset filters</button>
                     </td>
                   </tr>
@@ -3468,7 +4870,9 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
           {/* Footer */}
           <div className="px-4 py-3 border-t border-black/[0.04] flex items-center justify-between bg-black/[0.01]">
             <span className="text-black/55 text-caption font-normal">
-              Showing {filteredClients.length} of {totalClients} clients
+              Showing {filteredRows.length} of {totalRows} {totalRows === 1 ? 'entry' : 'entries'}
+              <span className="text-black/30 mx-1.5">·</span>
+              {totalClients} {totalClients === 1 ? 'client' : 'clients'}
             </span>
             <div className="flex items-center gap-2">
               <button disabled className="px-3 py-1.5 rounded-lg border border-black/8 text-black/60 hover:bg-black/[0.03] transition-all disabled:opacity-30 text-caption font-medium">
@@ -3497,6 +4901,21 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
             client={growthPlanClient}
             onClose={() => setGrowthPlanClient(null)}
             onStatusChange={handleGrowthPlanStatusChange}
+          />
+        )}
+
+        {/* ── KSM Drawer (Hit/Miss chip → performance + targets + history) ── */}
+        {ksmDrawer && clientPlatformTargets[ksmDrawer.client.id] && (
+          <KsmDrawer
+            client={ksmDrawer.client}
+            businessType={ksmDrawer.businessType}
+            targets={clientPlatformTargets[ksmDrawer.client.id]}
+            history={generateClientHistory(ksmDrawer.client.id, ksmDrawer.businessType)}
+            current={generatePlatformBreakdown(ksmDrawer.client.id, ksmDrawer.businessType)}
+            onUpdateTarget={(platform, key, raw) =>
+              updatePlatformTarget(ksmDrawer.client.id, platform, key, raw)
+            }
+            onClose={() => setKsmDrawer(null)}
           />
         )}
 
@@ -3568,7 +4987,7 @@ export function PerformanceMarketing({ onBack }: PerformanceMarketingProps) {
       <div className="-mx-8 -mt-6">
         <div className="bg-white border-b border-black/5 px-6 py-4 sticky -top-6 z-30">
           <div className="flex items-center gap-3">
-            <button onClick={handleBackToList} className="p-2 hover:bg-black/[0.04] rounded-xl transition-colors">
+            <button onClick={handleBackToList} className="p-2 hover:bg-black/[0.04] rounded-md transition-colors">
               <ChevronLeft className="w-5 h-5 text-black/60" />
             </button>
             <div>

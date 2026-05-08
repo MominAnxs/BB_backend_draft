@@ -138,3 +138,19 @@
       'opsz' 20;
   }
 }
+
+/* ═══ Shared Animations ═══ */
+
+@keyframes slideIn {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+/* Stable className for the right-edge drawer slide-in. Using a class
+   (instead of inline `style={{ animation }}`) keeps the animation
+   declaration identical across React re-renders so browsers don't
+   restart it whenever drawer state (uploads, month switches, etc.)
+   triggers a parent re-render. `forwards` pins the end state. */
+.animate-drawer-in {
+  animation: slideIn 0.25s ease-out forwards;
+}

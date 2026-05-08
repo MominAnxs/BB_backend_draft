@@ -13,7 +13,9 @@ import {
   UserPlus, CalendarDays, Briefcase, GraduationCap, UserCheck, UserX, PartyPopper, CheckCircle2,
   Activity, Zap, Hash,
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, AreaChart, Area } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, AreaChart, Area, ReferenceLine } from 'recharts';
+import { SuperAdminHome } from './SuperAdminHome';
+import { WORKSPACE_ROUTES } from '@/lib/workspace-routes';
 
 // ═══════════════════════════════════════════════
 // ─── SERVICE DISPLAY LABELS ──────────────────
@@ -26,9 +28,10 @@ const svcLabel = (s: string) => SERVICE_LABEL[s] ?? s;
 // ─── ROLE PREVIEW TOGGLE ──────────────────────
 // ═══════════════════════════════════════════════
 
-type DashboardRole = 'hod' | 'manager' | 'executive' | 'hr';
+type DashboardRole = 'super-admin' | 'hod' | 'manager' | 'executive' | 'hr';
 
 const ROLE_OPTIONS: { value: DashboardRole; label: string }[] = [
+  { value: 'super-admin', label: 'Admin' },
   { value: 'hod', label: 'HOD' },
   { value: 'manager', label: 'Manager' },
   { value: 'executive', label: 'Executive' },
@@ -52,7 +55,9 @@ interface MyTask {
   dueDateISO: string;
   group: string;
   groupColor: string;
-  project: 'BG' | 'A&T' | 'PM';
+  // Service line for the task. SEM (`'PM'`) and A&T are the two Brego service
+  // lines; client-facing channels and reports use the same enum throughout.
+  project: 'A&T' | 'PM';
   projectColor: string;
   assignee: { initials: string; color: string };
 }
@@ -149,7 +154,7 @@ const teamChannelMentions: InboxMention[] = [
 // PM — Needs Attention (from PerformanceMarketing.tsx clients)
 interface PMAttentionItem {
   client: string;
-  type: 'onboarding' | 'kickoff' | 'growth-plan';
+  type: 'onboarding' | 'growth-plan';
   stage: string;           // e.g. "Not Started", "Awaiting Proposal", "In Progress"
   detail: string;
   urgency: 'high' | 'medium';
@@ -162,8 +167,7 @@ const pmAttention: PMAttentionItem[] = [
   { client: 'Nor Black Nor White', type: 'onboarding', stage: 'Not Started', detail: 'No team assigned yet', urgency: 'high', daysPending: 12 },
   { client: 'Enagenbio', type: 'onboarding', stage: 'Awaiting Proposal', detail: 'No teams assigned yet', urgency: 'high', daysPending: 8 },
   { client: 'Una Homes LLP', type: 'onboarding', stage: 'Team Assigned', detail: 'Onboarding in progress', urgency: 'medium', daysPending: 5 },
-  // Kickoff
-  { client: 'Knickgasm', type: 'kickoff', stage: 'Negotiation', detail: 'Counter-proposal received — needs review', urgency: 'high', daysPending: 6 },
+  { client: 'Knickgasm', type: 'onboarding', stage: 'Kickoff Review', detail: 'Counter-proposal received — needs review', urgency: 'high', daysPending: 6 },
   // Growth Plans
   { client: 'Skin Essentials', type: 'growth-plan', stage: 'Pending', detail: 'Send the weekly plan', urgency: 'high', daysPending: 3 },
   { client: 'Bio Basket', type: 'growth-plan', stage: 'Stalled', detail: 'KSM target missed — needs rework', urgency: 'high', daysPending: 7 },
@@ -172,7 +176,6 @@ const pmAttention: PMAttentionItem[] = [
 // PM category config for grouped rendering
 const pmCategoryConfig: Record<string, { label: string; accent: string; bg: string; text: string }> = {
   onboarding: { label: 'Onboarding', accent: '#F59E0B', bg: 'bg-amber-50', text: 'text-amber-700' },
-  kickoff:    { label: 'Kickoff', accent: '#E2445C', bg: 'bg-rose-50', text: 'text-rose-600' },
   'growth-plan': { label: 'Weekly Plan', accent: '#7C3AED', bg: 'bg-purple-50', text: 'text-purple-600' },
 };
 
@@ -274,7 +277,7 @@ interface Birthday {
 const upcomingBirthdays: Birthday[] = [
   { name: 'Zubear S.', initials: 'ZS', color: '#06B6D4', role: 'A&T HOD', date: '20 Mar', daysAway: 2 },
   { name: 'Harshal R.', initials: 'HR', color: '#10B981', role: 'Operations', date: '24 Mar', daysAway: 6 },
-  { name: 'Chinmay P.', initials: 'CP', color: '#7C3AED', role: 'PM HOD', date: '2 Apr', daysAway: 15 },
+  { name: 'Chinmay P.', initials: 'CP', color: '#7C3AED', role: 'SEM HOD', date: '2 Apr', daysAway: 15 },
 ];
 
 // ═══════════════════════════════════════════════
@@ -493,6 +496,130 @@ const marginByPeriod: Record<ChartPeriod, MarginPeriodData> = {
   },
 };
 
+// ── Executive Individual Performance ──
+// Personal client retention: how many of YOUR assigned clients you kept vs lost
+interface ExecRetentionMonth {
+  month: string;
+  myClients: number;      // total clients assigned to you that month
+  retained: number;       // clients you kept
+  lost: number;           // clients lost from your book
+  revLost: number;        // revenue lost from those clients
+}
+
+interface ExecMarginMonth {
+  month: string;
+  revenue: number;        // revenue generated from your clients
+  cost: number;           // cost of servicing your clients
+  margin: number;         // your personal margin %
+  companyAvg: number;     // company average margin % (for comparison)
+}
+
+interface ExecPerformanceData {
+  retention: {
+    data: ExecRetentionMonth[];
+    myRetentionRate: number;
+    companyRetentionRate: number;
+    totalAssigned: number;
+    clientsLost: number;
+    revLost: number;
+    trend: string;
+  };
+  margin: {
+    data: ExecMarginMonth[];
+    myAvgMargin: number;
+    companyAvgMargin: number;
+    myRevenue: number;
+    trend: string;
+  };
+}
+
+const execPerformanceByPeriod: Record<'Q1-26' | 'Q4-25', ExecPerformanceData> = {
+  'Q1-26': {
+    retention: {
+      data: [
+        { month: 'Jan', myClients: 8, retained: 8, lost: 0, revLost: 0 },
+        { month: 'Feb', myClients: 8, retained: 7, lost: 1, revLost: 180000 },
+        { month: 'Mar', myClients: 7, retained: 7, lost: 0, revLost: 0 },
+      ],
+      myRetentionRate: 88, companyRetentionRate: 94, totalAssigned: 8, clientsLost: 1, revLost: 180000, trend: 'Needs attention',
+    },
+    margin: {
+      data: [
+        { month: 'Jan', revenue: 480000, cost: 336000, margin: 30.0, companyAvg: 32.0 },
+        { month: 'Feb', revenue: 420000, cost: 277000, margin: 34.0, companyAvg: 33.0 },
+        { month: 'Mar', revenue: 510000, cost: 331500, margin: 35.0, companyAvg: 34.0 },
+      ],
+      myAvgMargin: 33.0, companyAvgMargin: 33.0, myRevenue: 1410000, trend: '+5% vs last Q',
+    },
+  },
+  'Q4-25': {
+    retention: {
+      data: [
+        { month: 'Oct', myClients: 9, retained: 8, lost: 1, revLost: 150000 },
+        { month: 'Nov', myClients: 8, retained: 8, lost: 0, revLost: 0 },
+        { month: 'Dec', myClients: 8, retained: 7, lost: 1, revLost: 210000 },
+      ],
+      myRetentionRate: 78, companyRetentionRate: 88, totalAssigned: 9, clientsLost: 2, revLost: 360000, trend: '-10% vs Q3',
+    },
+    margin: {
+      data: [
+        { month: 'Oct', revenue: 400000, cost: 288000, margin: 28.0, companyAvg: 30.0 },
+        { month: 'Nov', revenue: 440000, cost: 308000, margin: 30.0, companyAvg: 32.0 },
+        { month: 'Dec', revenue: 380000, cost: 281000, margin: 26.0, companyAvg: 29.0 },
+      ],
+      myAvgMargin: 28.0, companyAvgMargin: 30.3, myRevenue: 1220000, trend: '-3% vs Q3',
+    },
+  },
+};
+
+type ExecPeriod = 'Q1-26' | 'Q4-25';
+
+const EXEC_PERIOD_OPTIONS: { value: ExecPeriod; label: string }[] = [
+  { value: 'Q1-26', label: 'Q1 2026' },
+  { value: 'Q4-25', label: 'Q4 2025' },
+];
+
+// ── Manager Individual Performance ──
+// Manager oversees a team of executives → larger client book, team-level metrics
+const mgrPerformanceByPeriod: Record<'Q1-26' | 'Q4-25', ExecPerformanceData> = {
+  'Q1-26': {
+    retention: {
+      data: [
+        { month: 'Jan', myClients: 24, retained: 23, lost: 1, revLost: 220000 },
+        { month: 'Feb', myClients: 23, retained: 22, lost: 1, revLost: 150000 },
+        { month: 'Mar', myClients: 22, retained: 21, lost: 1, revLost: 180000 },
+      ],
+      myRetentionRate: 87, companyRetentionRate: 94, totalAssigned: 24, clientsLost: 3, revLost: 550000, trend: 'Improving',
+    },
+    margin: {
+      data: [
+        { month: 'Jan', revenue: 1450000, cost: 957000, margin: 34.0, companyAvg: 32.0 },
+        { month: 'Feb', revenue: 1380000, cost: 897000, margin: 35.0, companyAvg: 33.0 },
+        { month: 'Mar', revenue: 1520000, cost: 958000, margin: 37.0, companyAvg: 34.0 },
+      ],
+      myAvgMargin: 35.3, companyAvgMargin: 33.0, myRevenue: 4350000, trend: '+4% vs last Q',
+    },
+  },
+  'Q4-25': {
+    retention: {
+      data: [
+        { month: 'Oct', myClients: 26, retained: 24, lost: 2, revLost: 380000 },
+        { month: 'Nov', myClients: 24, retained: 23, lost: 1, revLost: 190000 },
+        { month: 'Dec', myClients: 23, retained: 21, lost: 2, revLost: 420000 },
+      ],
+      myRetentionRate: 81, companyRetentionRate: 88, totalAssigned: 26, clientsLost: 5, revLost: 990000, trend: '-6% vs Q3',
+    },
+    margin: {
+      data: [
+        { month: 'Oct', revenue: 1280000, cost: 883000, margin: 31.0, companyAvg: 30.0 },
+        { month: 'Nov', revenue: 1350000, cost: 918000, margin: 32.0, companyAvg: 32.0 },
+        { month: 'Dec', revenue: 1200000, cost: 852000, margin: 29.0, companyAvg: 29.0 },
+      ],
+      myAvgMargin: 30.7, companyAvgMargin: 30.3, myRevenue: 3830000, trend: '-2% vs Q3',
+    },
+  },
+};
+
 // ── CLA/NTF Nominations ──
 type NominationStatus = 'nominated' | 'approved' | 'rejected' | 'pending-review';
 
@@ -636,9 +763,9 @@ function ClientCirclesGroup({ clients }: { clients: string[] }) {
 const hrResourceRequests = [
   { id: 1, dept: 'Finance', position: 'Floaters - 4/5', head: 'Product', team: 'Pooja', budget: '25k-35k', status: 'Active' as const, comments: ['Chetan — Will be moved from 10th April', 'Parul Offered: Joined', 'Nisha Offered: 33.2K, DOJ: 06th April 2026'] },
   { id: 2, dept: 'Finance', position: '1x Manager', head: 'Product', team: 'Pooja', budget: '45k-55k', status: 'Interviewing' as const, comments: ['No shortlist for final round'] },
-  { id: 3, dept: 'Sales', position: '7x BDE - 0/7', head: 'Growth', team: 'Ujwal / Priyanka', budget: '30k-50k', status: 'Active' as const, comments: ['No shortlist for final round'] },
-  { id: 4, dept: 'Sales', position: '1x BDE - 0/1', head: 'Growth', team: 'Ujwal / Priyanka', budget: '30k-50k', status: 'Active' as const, comments: ['No shortlist for final round'] },
-  { id: 5, dept: 'Sales', position: '8x Business Dev Execs', head: 'Growth', team: 'Ujwal / Priyanka', budget: '30k-50k', status: 'Offer Sent' as const, comments: ['Maaz offered: 54k, DOJ: 02nd April', 'Vaishnavi offered: 45k, DOJ: 20th April', 'Arya Offered: 60k, DOJ: Yet to confirm'] },
+  { id: 3, dept: 'Sales', position: '7x BDE - 0/7', head: 'Growth', team: 'Priyanka', budget: '30k-50k', status: 'Active' as const, comments: ['No shortlist for final round'] },
+  { id: 4, dept: 'Sales', position: '1x BDE - 0/1', head: 'Growth', team: 'Priyanka', budget: '30k-50k', status: 'Active' as const, comments: ['No shortlist for final round'] },
+  { id: 5, dept: 'Sales', position: '8x Business Dev Execs', head: 'Growth', team: 'Priyanka', budget: '30k-50k', status: 'Offer Sent' as const, comments: ['Maaz offered: 54k, DOJ: 02nd April', 'Vaishnavi offered: 45k, DOJ: 20th April', 'Arya Offered: 60k, DOJ: Yet to confirm'] },
   { id: 6, dept: 'SEM', position: 'Floaters - 0/3', head: 'Product', team: 'Ravina', budget: '45-50K', status: 'Active' as const, comments: ['No shortlist for final round'] },
   { id: 7, dept: 'SEM', position: '2x SEM Manager / QC', head: 'Product', team: 'Ravina', budget: '70-85K', status: 'Interviewing' as const, comments: ['Harsh Offered: 83k, DOJ: 1st May', 'Nachiket interview scheduled Tue 6 PM', 'Ashish interview scheduled Tue 6 PM'] },
   { id: 8, dept: 'Technology', position: '1x Full Stack Dev', head: 'Product', team: 'Ravina', budget: '80k-1.2L', status: 'Offer Sent' as const, comments: ['Sadashiv offered 15 lac, DOJ: 13th April'] },
@@ -719,7 +846,7 @@ const hrOnboarding = [
   { name: 'Parul', dept: 'Finance', status: 'Settling' as const },
   { name: 'Naeela', dept: 'Finance', status: 'Settling' as const },
   { name: 'Prathamesh T.', dept: 'Finance', status: 'Settling' as const },
-  { name: 'Ujjwal B.', dept: 'HR', status: 'Settling' as const },
+  { name: 'Siddharth K.', dept: 'HR', status: 'Settling' as const },
   { name: 'Purva P.', dept: 'Operations', status: 'Settling' as const },
   { name: 'Luiza S.', dept: 'Perf. Marketing', status: 'Settling' as const },
   { name: 'Daniya S.', dept: 'Technology', status: 'Settling' as const },
@@ -757,7 +884,7 @@ const hrIncidentList = [
 
 export function Dashboard() {
   const router = useRouter();
-  const [activeRole, setActiveRole] = useState<DashboardRole>('hod');
+  const [activeRole, setActiveRole] = useState<DashboardRole>('super-admin');
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
   const roleDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -768,6 +895,8 @@ export function Dashboard() {
       if (marginPeriodRef.current && !marginPeriodRef.current.contains(e.target as Node)) setMarginPeriodOpen(false);
       if (rrDeptDropdownRef.current && !rrDeptDropdownRef.current.contains(e.target as Node)) setRrDeptDropdownOpen(false);
       if (recruiterDropdownRef.current && !recruiterDropdownRef.current.contains(e.target as Node)) setRecruiterDropdownOpen(false);
+      if (execPeriodRef.current && !execPeriodRef.current.contains(e.target as Node)) setExecPeriodOpen(false);
+      if (mgrPeriodRef.current && !mgrPeriodRef.current.contains(e.target as Node)) setMgrPeriodOpen(false);
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -775,7 +904,7 @@ export function Dashboard() {
 
   const [taskFilter, setTaskFilter] = useState<'all' | 'P1' | 'P2'>('all');
   const [incidentTab, setIncidentTab] = useState<'client' | 'employee'>('client');
-  const [pmTab, setPmTab] = useState<'onboarding' | 'kickoff' | 'growth-plan'>('onboarding');
+  const [pmTab, setPmTab] = useState<'onboarding' | 'growth-plan'>('onboarding');
   const [atTab, setAtTab] = useState<'overdue' | 'onboarding'>('overdue');
   const [pmPerfTab, setPmPerfTab] = useState<'ecommerce' | 'leadgen'>('ecommerce');
   const [attritionPeriod, setAttritionPeriod] = useState<ChartPeriod>('Q1-26');
@@ -788,8 +917,14 @@ export function Dashboard() {
   const [selectedRecruiter, setSelectedRecruiter] = useState(0);
   const [recruiterDropdownOpen, setRecruiterDropdownOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
+  const [execPeriod, setExecPeriod] = useState<ExecPeriod>('Q1-26');
+  const [execPeriodOpen, setExecPeriodOpen] = useState(false);
+  const [mgrPeriod, setMgrPeriod] = useState<ExecPeriod>('Q1-26');
+  const [mgrPeriodOpen, setMgrPeriodOpen] = useState(false);
   const attritionPeriodRef = useRef<HTMLDivElement>(null);
   const marginPeriodRef = useRef<HTMLDivElement>(null);
+  const execPeriodRef = useRef<HTMLDivElement>(null);
+  const mgrPeriodRef = useRef<HTMLDivElement>(null);
   const rrDeptDropdownRef = useRef<HTMLDivElement>(null);
   const recruiterDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -798,12 +933,12 @@ export function Dashboard() {
   const pendingAssignments = myAssignments.filter(t => t.status === 'Pending');
   const filteredAssignments = taskFilter === 'all' ? pendingAssignments : pendingAssignments.filter(t => t.priority === taskFilter);
 
-  // Split: Client Tasks vs Brego Group
+  // Split: Client Tasks vs Internal Tasks (Brego delivery team)
   const clientTasks = filteredAssignments.filter(t => t.group !== 'Brego Delivery Team');
-  const bregoTasks = filteredAssignments.filter(t => t.group === 'Brego Delivery Team');
+  const internalTasks = filteredAssignments.filter(t => t.group === 'Brego Delivery Team');
 
   // Helper: group, sort groups by urgency, sort tasks within groups
-  const buildSortedGroups = (tasks: MyTask[], mode: 'client' | 'brego') => {
+  const buildSortedGroups = (tasks: MyTask[], mode: 'client' | 'internal') => {
     const grouped = tasks.reduce<Record<string, MyTask[]>>((acc, task) => {
       const key = mode === 'client' ? task.group : task.project === 'A&T' ? 'Accounts & Taxation' : 'Performance Marketing';
       if (!acc[key]) acc[key] = [];
@@ -825,12 +960,12 @@ export function Dashboard() {
   };
 
   const clientSortedGroups = buildSortedGroups(clientTasks, 'client');
-  const bregoSortedGroups = buildSortedGroups(bregoTasks, 'brego');
+  const internalSortedGroups = buildSortedGroups(internalTasks, 'internal');
 
   const p1Count = myAssignments.filter(t => t.priority === 'P1').length;
   const overdueCount = myAssignments.filter(t => daysUntil(t.dueDateISO) < 0).length;
   const clientOverdue = clientTasks.filter(t => daysUntil(t.dueDateISO) < 0).length;
-  const bregoOverdue = bregoTasks.filter(t => daysUntil(t.dueDateISO) < 0).length;
+  const internalOverdue = internalTasks.filter(t => daysUntil(t.dueDateISO) < 0).length;
 
   // HOD KPI computations
   const activeAttrition = attritionByPeriod['Q1-26'];
@@ -841,7 +976,12 @@ export function Dashboard() {
 
   return (
     <main className="h-[calc(100vh-53px)] overflow-y-auto bg-[#FAFBFC]" aria-label="Home">
-      {/* ── Top Bar: Greeting + Insights + Role Toggle ── */}
+      {/* ── Top Bar: Greeting + Insights + Role Toggle ──
+          Every role now owns its chrome inside SuperAdminHome's
+          sidebar (which carries its own role picker). This legacy
+          strip is unreachable but kept as scaffolding in case a
+          future role lands without a SuperAdminHome treatment. */}
+      {activeRole !== 'super-admin' && activeRole !== 'hod' && activeRole !== 'hr' && activeRole !== 'manager' && activeRole !== 'executive' && (
       <div className="sticky top-0 z-20 bg-white border-b border-black/[0.04]">
         <div className="px-6 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-6">
@@ -851,10 +991,15 @@ export function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {(activeRole === 'hr' || activeRole === 'hod' || activeRole === 'manager' || activeRole === 'executive') && (
+            {/* HR's greeting + role chip + Insights button now live
+                inside SuperAdminHome's chrome — the Employees
+                Overview top bar carries the personalised greeting
+                directly. This legacy top bar applies only to
+                Manager / Executive paths now. */}
+            {((activeRole as string) === 'manager' || activeRole === 'executive') && (
             <button
               onClick={() => setInsightsOpen(true)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg border transition-colors text-caption font-medium ${insightsOpen ? 'bg-[#204CC7]/5 border-[#204CC7]/20 text-[#204CC7]' : 'bg-white border-black/[0.08] hover:border-black/[0.15] text-black/60 hover:text-black/75'}`}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-md border transition-colors text-caption font-medium ${insightsOpen ? 'bg-[#204CC7]/5 border-[#204CC7]/20 text-[#204CC7]' : 'bg-white border-black/[0.08] hover:border-black/[0.15] text-black/60 hover:text-black/75'}`}
             >
               <BarChart3 className="w-3.5 h-3.5" aria-hidden="true" />
               Insights
@@ -901,12 +1046,33 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* ── Super Admin + HOD + HR: full Adminland-style layout
+            (no px wrapper, owns its own grid). Each role flavours
+            the sidebar / default tab via the activeRole prop:
+              • Super Admin → full nav, lands on Business Overview
+              • HOD         → A&T + Customers, lands on A&T
+              • HR          → Employees only, lands on Employees
+            Manager / Executive still use the legacy Dashboard.tsx
+            content below (kept as-is for now). ── */}
+      {(activeRole === 'super-admin' || activeRole === 'hod' || activeRole === 'hr' || activeRole === 'manager' || activeRole === 'executive') && (
+        <SuperAdminHome
+          activeRole={activeRole}
+          onRoleChange={(r) => { setActiveRole(r as DashboardRole); setInsightsOpen(false); }}
+          roleOptions={ROLE_OPTIONS}
+        />
+      )}
 
       {/* ── Main Content ── */}
+      {activeRole !== 'super-admin' && activeRole !== 'hod' && activeRole !== 'hr' && activeRole !== 'manager' && activeRole !== 'executive' && (
       <div className="px-6 pt-6 pb-12">
 
         {/* ═══ ROLE-SPECIFIC CONTENT ═══ */}
-        {activeRole === 'hr' && (
+        {/* HR legacy content — superseded by SuperAdminHome chrome.
+            Gated false so the JSX stays available for future
+            revival without compiling under the narrowed type. */}
+        {false && (
           <div className="mt-2 mb-8 space-y-5" style={{ animation: 'dashUp 0.3s ease-out' }}>
 
             {/* ── KPI Strip ── */}
@@ -1034,11 +1200,11 @@ export function Dashboard() {
                                           return (
                                             <div key={ci} className={`flex items-start gap-2 px-2.5 py-1.5 rounded-lg text-caption leading-relaxed ${
                                               isOffer ? 'bg-emerald-50/80 text-emerald-800/70' :
-                                              isPending ? 'bg-amber-50/80 text-amber-800/70' :
+                                              isPending ? 'bg-rose-50/80 text-rose-800/70' :
                                               'bg-white text-black/50'
                                             }`}>
                                               <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-[5px] ${
-                                                isOffer ? 'bg-emerald-500' : isPending ? 'bg-amber-400' : 'bg-black/15'
+                                                isOffer ? 'bg-emerald-500' : isPending ? 'bg-rose-400' : 'bg-black/15'
                                               }`} />
                                               <span>{c}</span>
                                             </div>
@@ -1428,8 +1594,15 @@ export function Dashboard() {
           </div>
         )}
 
-        {/* ── HOD Dashboard Content ── */}
-        {(activeRole === 'hod' || activeRole === 'manager' || activeRole === 'executive') && (<>
+        {/* ── HOD Dashboard Content ──
+            HOD now renders the SuperAdminHome chrome above (see the
+            `activeRole === 'super-admin' || activeRole === 'hod'`
+            branch), so this legacy block applies only to Manager and
+            Executive roles. The 'hod' check has been dropped from
+            the predicate — TS narrows it out anyway because the
+            outer `activeRole !== 'hod'` guard prevents it reaching
+            here. */}
+        {((activeRole as string) === 'manager' || activeRole === 'executive') && (<>
 
         {/* ── HOD Quick Summary Strip ── */}
         <div className="flex items-center gap-2.5 mb-7 flex-wrap" role="status" aria-label="Dashboard summary" style={{ animation: 'dashUp 0.3s ease-out' }}>
@@ -1465,18 +1638,10 @@ export function Dashboard() {
             <DollarSign className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
             <span className="text-caption font-semibold text-emerald-700">{activeMargin.avgMargin}% Margin</span>
           </div>
-          {activeRole === 'hod' && claCount > 0 && (
-            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-rose-50 border border-rose-100">
-              <AlertTriangle className="w-3.5 h-3.5 text-rose-500" aria-hidden="true" />
-              <span className="text-caption font-semibold text-rose-600">{claCount} sureshot CLA</span>
-            </div>
-          )}
-          {activeRole === 'hod' && (
-          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-50 border border-blue-100">
-            <Sparkles className="w-3.5 h-3.5 text-[#204CC7]" aria-hidden="true" />
-            <span className="text-caption font-semibold text-[#204CC7]">{formatLakh(upsellTotal)} upsell</span>
-          </div>
-          )}
+          {/* HOD-specific summary chips (sureshot CLA count + upsell
+              total) used to live here. HOD now renders the
+              SuperAdminHome chrome instead, where these signals are
+              already surfaced via the A&T overview KPIs. */}
           <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-100">
             <Star className="w-3.5 h-3.5 text-[#FDAB3D]" aria-hidden="true" />
             <span className="text-caption font-semibold text-amber-700">{avgRating.toFixed(1)} rating</span>
@@ -1486,7 +1651,7 @@ export function Dashboard() {
         {/* ── Row-Based Symmetric Grid ── */}
         <div className="space-y-6">
 
-          {/* ═══ ROW 1: Client Tasks + Brego Group — Two Equal Columns ═══ */}
+          {/* ═══ ROW 1: Client Tasks + Internal Tasks — Two Equal Columns ═══ */}
           <div className="grid grid-cols-2 gap-6" style={{ animation: 'dashUp 0.3s ease-out 0.05s both' }}>
 
             {/* ── Shared Priority Filter (above both widgets) ── */}
@@ -1506,21 +1671,16 @@ export function Dashboard() {
                     <span className="text-caption font-bold px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-500">{clientOverdue} overdue</span>
                   )}
                 </div>
-                <div className="flex items-center gap-0.5 bg-black/[0.03] rounded-lg p-0.5" role="radiogroup" aria-label="Filter client tasks by priority">
-                  {(['all', 'P1', 'P2'] as const).map(f => (
-                    <button
-                      key={f}
-                      role="radio"
-                      aria-checked={taskFilter === f}
-                      onClick={() => setTaskFilter(f)}
-                      className={`px-2.5 py-1 rounded-md text-caption font-semibold transition-all ${
-                        taskFilter === f ? 'bg-white shadow-sm text-[#204CC7]' : 'text-black/35 hover:text-black/55'
-                      }`}
-                    >
-                      {f === 'all' ? 'All' : f}
-                    </button>
-                  ))}
-                </div>
+                <select
+                  value={taskFilter}
+                  onChange={(e) => setTaskFilter(e.target.value as 'all' | 'P1' | 'P2')}
+                  aria-label="Filter client tasks by priority"
+                  className="px-2.5 py-1.5 rounded-lg border border-black/[0.08] text-caption font-semibold text-black/60 bg-white outline-none focus:border-[#204CC7]/30 cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22rgba(0%2C0%2C0%2C0.35)%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:12px] bg-[right_6px_center] bg-no-repeat pr-6"
+                >
+                  <option value="all">All</option>
+                  <option value="P1">P1</option>
+                  <option value="P2">P2</option>
+                </select>
               </div>
 
               {/* Task List — grouped by client */}
@@ -1577,7 +1737,7 @@ export function Dashboard() {
                                   </span>
                                   <span className="text-black/10">·</span>
                                   <span className="inline-flex items-center gap-1 text-caption text-black/35">
-                                    <span className="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-600 font-semibold text-[11px] leading-none">Pending</span>
+                                    <span className="px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-600 font-semibold text-[11px] leading-none">Pending</span>
                                   </span>
                                 </div>
                               </div>
@@ -1605,46 +1765,41 @@ export function Dashboard() {
               </div>
             </section>
 
-            {/* ── Brego Group Widget (Basecamp-style) ── */}
-            <section className="rounded-xl border border-black/[0.06] bg-white overflow-hidden flex flex-col" aria-label="Brego internal task assignments">
+            {/* ── Internal Tasks Widget (Basecamp-style) ── */}
+            <section className="rounded-xl border border-black/[0.06] bg-white overflow-hidden flex flex-col" aria-label="Internal task assignments">
               {/* Header */}
               <div className="px-5 py-3.5 border-b border-black/[0.04] flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center" aria-hidden="true">
                     <Shield className="w-3.5 h-3.5 text-[#204CC7]" />
                   </div>
-                  <h2 className="text-body font-bold text-black/80">Brego Group</h2>
-                  <span className="text-caption font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-[#204CC7]">{bregoTasks.length}</span>
-                  {bregoOverdue > 0 && (
-                    <span className="text-caption font-bold px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-500">{bregoOverdue} overdue</span>
+                  <h2 className="text-body font-bold text-black/80">Internal Tasks</h2>
+                  <span className="text-caption font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-[#204CC7]">{internalTasks.length}</span>
+                  {internalOverdue > 0 && (
+                    <span className="text-caption font-bold px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-500">{internalOverdue} overdue</span>
                   )}
                 </div>
-                <div className="flex items-center gap-0.5 bg-black/[0.03] rounded-lg p-0.5" role="radiogroup" aria-label="Filter internal tasks by priority">
-                  {(['all', 'P1', 'P2'] as const).map(f => (
-                    <button
-                      key={f}
-                      role="radio"
-                      aria-checked={taskFilter === f}
-                      onClick={() => setTaskFilter(f)}
-                      className={`px-2.5 py-1 rounded-md text-caption font-semibold transition-all ${
-                        taskFilter === f ? 'bg-white shadow-sm text-[#204CC7]' : 'text-black/35 hover:text-black/55'
-                      }`}
-                    >
-                      {f === 'all' ? 'All' : f}
-                    </button>
-                  ))}
-                </div>
+                <select
+                  value={taskFilter}
+                  onChange={(e) => setTaskFilter(e.target.value as 'all' | 'P1' | 'P2')}
+                  aria-label="Filter internal tasks by priority"
+                  className="px-2.5 py-1.5 rounded-lg border border-black/[0.08] text-caption font-semibold text-black/60 bg-white outline-none focus:border-[#204CC7]/30 cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22rgba(0%2C0%2C0%2C0.35)%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:12px] bg-[right_6px_center] bg-no-repeat pr-6"
+                >
+                  <option value="all">All</option>
+                  <option value="P1">P1</option>
+                  <option value="P2">P2</option>
+                </select>
               </div>
 
               {/* Task List — grouped by department (A&T / PM) */}
               <div className="flex-1 overflow-y-auto" style={{ maxHeight: '400px' }}>
-                {bregoSortedGroups.length === 0 ? (
+                {internalSortedGroups.length === 0 ? (
                   <div className="px-5 py-10 text-center">
                     <p className="text-body text-black/30">No {taskFilter === 'all' ? '' : taskFilter + ' '}pending internal tasks</p>
                   </div>
                 ) : (
                   <div>
-                    {bregoSortedGroups.map(([groupName, tasks]) => {
+                    {internalSortedGroups.map(([groupName, tasks]) => {
                       const deptColor = groupName === 'Accounts & Taxation' ? '#06B6D4' : '#7C3AED';
                       const deptLabel = groupName === 'Accounts & Taxation' ? 'A&T' : 'SEM';
                       return (
@@ -1693,7 +1848,7 @@ export function Dashboard() {
                                     </span>
                                     <span className="text-black/10">·</span>
                                     <span className="inline-flex items-center gap-1 text-caption text-black/35">
-                                      <span className="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-600 font-semibold text-[11px] leading-none">Pending</span>
+                                      <span className="px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-600 font-semibold text-[11px] leading-none">Pending</span>
                                     </span>
                                   </div>
                                 </div>
@@ -1716,7 +1871,7 @@ export function Dashboard() {
               </div>
 
               <div className="px-5 py-2.5 border-t border-black/[0.04] bg-black/[0.01]">
-                <button onClick={() => router.push('/workspace/task-management/brego-group')} className="text-caption font-semibold text-[#204CC7]/70 hover:text-[#204CC7] flex items-center gap-1 transition-colors">
+                <button onClick={() => router.push(WORKSPACE_ROUTES.bregoGroup)} className="text-caption font-semibold text-[#204CC7]/70 hover:text-[#204CC7] flex items-center gap-1 transition-colors">
                   View all tasks <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
@@ -1799,7 +1954,11 @@ export function Dashboard() {
                         </span>
                         <span className="text-caption text-black/30">·</span>
                         <span className={`text-caption font-medium px-1.5 py-0.5 rounded ${
-                          inc.service === 'PM' ? 'bg-purple-50 text-[#7C3AED]' : inc.service === 'A&T' ? 'bg-cyan-50 text-[#06B6D4]' : 'bg-slate-50 text-black/55'
+                          /* PM and A&T share the same purple chip
+                             across the build — A&T's brand-cyan tag
+                             was retired for consistency. Internal
+                             still gets the slate fallback. */
+                          inc.service === 'PM' ? 'bg-purple-50 text-[#7C3AED]' : inc.service === 'A&T' ? 'bg-purple-50 text-[#7C3AED]' : 'bg-slate-50 text-black/55'
                         }`}>{inc.service === 'Internal' ? 'HR / Internal' : svcLabel(inc.service)}</span>
                         <span className="text-caption text-black/30">·</span>
                         <span className="text-caption text-black/50">{inc.category}</span>
@@ -1829,11 +1988,10 @@ export function Dashboard() {
                 <span className="text-caption font-bold px-1.5 py-0.5 rounded-md bg-purple-50 text-[#7C3AED]">{pmAttention.length}</span>
               </div>
 
-              {/* Onboarding / Kickoff / Weekly Plan Tabs */}
+              {/* Onboarding / Weekly Plan Tabs */}
               <div className="px-5 py-0 border-b border-black/[0.04] flex items-center gap-0" role="tablist" aria-label="PM category">
                 {([
                   { key: 'onboarding' as const, label: 'Onboarding' },
-                  { key: 'kickoff' as const, label: 'Kickoff' },
                   { key: 'growth-plan' as const, label: 'Weekly Plan' },
                 ]).map(tab => {
                   const count = pmAttention.filter(i => i.type === tab.key).length;
@@ -1882,7 +2040,7 @@ export function Dashboard() {
                     >
                       <div className="flex items-center justify-between mb-0.5">
                         <span className="text-body font-medium text-black/75 truncate">{item.client}</span>
-                        <span className="text-caption font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ml-2 bg-amber-50 text-amber-600">Pending</span>
+                        <span className="text-caption font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ml-2 bg-rose-50 text-rose-600">Pending</span>
                       </div>
                       <p className="text-caption text-black/55 leading-relaxed">{item.detail}</p>
                       {item.daysPending && (
@@ -1897,7 +2055,7 @@ export function Dashboard() {
               </div>
 
               <div className="mt-auto px-5 py-2.5 border-t border-black/[0.04] bg-black/[0.01]">
-                <button onClick={() => router.push('/workspace/performance-marketing')} className="text-caption font-semibold text-[#204CC7]/70 hover:text-[#204CC7] flex items-center gap-1 transition-colors">
+                <button onClick={() => router.push(WORKSPACE_ROUTES.performanceMarketing)} className="text-caption font-semibold text-[#204CC7]/70 hover:text-[#204CC7] flex items-center gap-1 transition-colors">
                   SEM Workspace <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
@@ -1983,8 +2141,8 @@ export function Dashboard() {
                             </>
                           ) : (
                             <>
-                              <div className="w-2 h-2 rounded-full bg-amber-400" aria-hidden="true" />
-                              <span className="text-caption font-semibold text-amber-500">Pending</span>
+                              <div className="w-2 h-2 rounded-full bg-rose-400" aria-hidden="true" />
+                              <span className="text-caption font-semibold text-rose-500">Pending</span>
                             </>
                           )}
                         </div>
@@ -1995,7 +2153,7 @@ export function Dashboard() {
               </div>
 
               <div className="mt-auto px-5 py-2.5 border-t border-black/[0.04] bg-black/[0.01]">
-                <button onClick={() => router.push('/workspace/accounts-taxation')} className="text-caption font-semibold text-[#204CC7]/70 hover:text-[#204CC7] flex items-center gap-1 transition-colors">
+                <button onClick={() => router.push(WORKSPACE_ROUTES.accountsTaxation)} className="text-caption font-semibold text-[#204CC7]/70 hover:text-[#204CC7] flex items-center gap-1 transition-colors">
                   Accounts & Taxation Workspace <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
@@ -2102,7 +2260,7 @@ export function Dashboard() {
                       <span className="w-2 h-2 rounded-full bg-emerald-400" aria-hidden="true" />
                       <span className="text-caption text-black/35">KSM Hit</span>
                     </div>
-                    <button onClick={() => router.push('/workspace/performance-marketing')} className="text-caption font-semibold text-[#204CC7]/70 hover:text-[#204CC7] flex items-center gap-1 transition-colors">
+                    <button onClick={() => router.push(WORKSPACE_ROUTES.performanceMarketing)} className="text-caption font-semibold text-[#204CC7]/70 hover:text-[#204CC7] flex items-center gap-1 transition-colors">
                       Full Report <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -2240,208 +2398,420 @@ export function Dashboard() {
           })()}
 
           {/* ═══ ROW 5: Attrition + Margin Performance — Two Charts ═══ */}
+          {/* Executive/Manager view: personal performance; Other views: company-wide */}
           <div className="grid grid-cols-2 gap-6">
 
-            {/* ── Attrition Performance ── */}
-            {(() => {
-              const ap = attritionByPeriod[attritionPeriod];
-              const apLabel = CHART_PERIOD_OPTIONS.find(o => o.value === attritionPeriod)?.label ?? attritionPeriod;
-              return (
-                <section className="rounded-xl border border-black/[0.06] bg-white overflow-hidden flex flex-col" style={{ animation: 'dashUp 0.5s ease-out 0.26s both' }} aria-label="Client attrition performance">
-                  <div className="px-6 py-4 border-b border-black/[0.04] flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center" aria-hidden="true">
-                        <UserMinus className="w-4 h-4 text-[#E2445C]" />
-                      </div>
-                      <h2 className="text-body font-bold text-black/80">Client Attrition</h2>
-                      <div ref={attritionPeriodRef} className="relative ml-1">
-                        <button onClick={() => setAttritionPeriodOpen(!attritionPeriodOpen)} className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-black/[0.08] bg-black/[0.015] hover:bg-black/[0.03] transition-colors">
-                          <span className="text-caption font-medium text-black/60">{apLabel}</span>
-                          <ChevronDown className={`w-3 h-3 text-black/35 transition-transform ${attritionPeriodOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
-                        </button>
-                        {attritionPeriodOpen && (
-                          <div className="absolute top-full left-0 mt-1 w-[160px] bg-white rounded-lg border border-black/[0.08] shadow-lg py-1 z-50">
-                            {CHART_PERIOD_OPTIONS.map(o => (
-                              <button key={o.value} onClick={() => { setAttritionPeriod(o.value); setAttritionPeriodOpen(false); }} className={`w-full text-left px-3 py-1.5 text-caption transition-colors flex items-center justify-between ${attritionPeriod === o.value ? 'bg-black/[0.03] font-semibold text-black/80' : 'text-black/60 hover:bg-black/[0.02]'}`}>
-                                {o.label}
-                                {attritionPeriod === o.value && <Check className="w-3 h-3 text-[#204CC7]" />}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <p className="text-h3 font-bold text-[#00C875]">{ap.retentionRate}%</p>
-                        <p className="text-caption text-black/50">Retention</p>
-                      </div>
-                      <div className="w-px h-8 bg-black/[0.06]" />
-                      <div className="text-right">
-                        <p className="text-h3 font-bold text-[#E2445C]">{formatLakh(ap.revenueLost)}</p>
-                        <p className="text-caption text-black/50">Rev. Lost</p>
-                      </div>
-                      <div className="w-px h-8 bg-black/[0.06]" />
-                      <div className="text-right">
-                        <p className="text-h3 font-bold text-black/75">{ap.lost}</p>
-                        <p className="text-caption text-black/50">Lost ({ap.periodLabel})</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="px-4 pt-4 pb-2 flex-1" style={{ minHeight: '200px' }}>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={ap.data} barCategoryGap="25%">
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                        <XAxis dataKey="month" tick={{ fontSize: 13, fill: 'rgba(0,0,0,0.45)' }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 13, fill: 'rgba(0,0,0,0.35)' }} axisLine={false} tickLine={false} width={28} />
-                        <Tooltip
-                          content={({ active, payload, label }) => {
-                            if (!active || !payload?.[0]) return null;
-                            const d = payload[0].payload as AttritionEntry;
-                            return (
-                              <div className="bg-white rounded-xl border border-black/[0.06] shadow-lg px-3.5 py-2.5 text-caption" style={{ minWidth: 140 }}>
-                                <p className="font-semibold text-black/70 mb-1.5">{label}</p>
-                                <div className="flex items-center justify-between gap-4 mb-1">
-                                  <span className="text-black/50">Lost</span>
-                                  <span className="font-bold text-[#E2445C]">{d.lost}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-4 mb-1">
-                                  <span className="text-black/50">Rev. Lost</span>
-                                  <span className="font-bold text-[#E2445C]">{d.revLost > 0 ? formatLakh(d.revLost) : '—'}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-4 pt-1 border-t border-black/[0.06]">
-                                  <span className="text-black/50">Attrition</span>
-                                  <span className="font-bold text-black/70">{d.rate}%</span>
-                                </div>
-                              </div>
-                            );
-                          }}
-                        />
-                        <Bar dataKey="retained" stackId="a" fill="#00C875" radius={[0, 0, 4, 4]} name="retained" />
-                        <Bar dataKey="lost" stackId="a" fill="#E2445C" radius={[4, 4, 0, 0]} name="lost" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="px-6 py-3 border-t border-black/[0.04] flex items-center gap-4">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-sm bg-[#00C875]" aria-hidden="true" />
-                      <span className="text-caption text-black/50">Retained</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-sm bg-[#E2445C]" aria-hidden="true" />
-                      <span className="text-caption text-black/50">Lost</span>
-                    </div>
-                    <div className="flex-1" />
-                    <div className="flex items-center gap-1">
-                      <TrendingUp className="w-3 h-3 text-[#00C875]" aria-hidden="true" />
-                      <span className="text-caption font-medium text-[#00C875]">{ap.trend}</span>
-                    </div>
-                  </div>
-                </section>
-              );
-            })()}
+            {(activeRole === 'executive' || (activeRole as string) === 'manager') ? (
+              /* ═══ EXECUTIVE / MANAGER: My Client Retention + My Margin Contribution ═══ */
+              (() => {
+                const isManager = (activeRole as string) === 'manager';
+                const currentPeriod = isManager ? mgrPeriod : execPeriod;
+                const ep = isManager ? mgrPerformanceByPeriod[mgrPeriod] : execPerformanceByPeriod[execPeriod];
+                const epLabel = EXEC_PERIOD_OPTIONS.find(o => o.value === currentPeriod)?.label ?? currentPeriod;
+                const ret = ep.retention;
+                const mar = ep.margin;
+                const retDiff = ret.myRetentionRate - ret.companyRetentionRate;
+                const retDiffColor = retDiff >= 0 ? '#00C875' : '#E2445C';
+                const marDiff = mar.myAvgMargin - mar.companyAvgMargin;
+                const marDiffColor = marDiff >= 0 ? '#00C875' : '#E2445C';
 
-            {/* ── Margin Performance ── */}
-            {(() => {
-              const mp = marginByPeriod[marginPeriod];
-              const revDisplay = mp.totalRevenue >= 10000000 ? `₹${(mp.totalRevenue / 10000000).toFixed(1)}Cr` : `₹${(mp.totalRevenue / 100000).toFixed(1)}L`;
-              const mpLabel = CHART_PERIOD_OPTIONS.find(o => o.value === marginPeriod)?.label ?? marginPeriod;
-              return (
-                <section className="rounded-xl border border-black/[0.06] bg-white overflow-hidden flex flex-col" style={{ animation: 'dashUp 0.5s ease-out 0.28s both' }} aria-label="Client margin performance">
-                  <div className="px-6 py-4 border-b border-black/[0.04] flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center" aria-hidden="true">
-                        <DollarSign className="w-4 h-4 text-[#00C875]" />
-                      </div>
-                      <h2 className="text-body font-bold text-black/80">Margin Performance</h2>
-                      <div ref={marginPeriodRef} className="relative ml-1">
-                        <button onClick={() => setMarginPeriodOpen(!marginPeriodOpen)} className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-black/[0.08] bg-black/[0.015] hover:bg-black/[0.03] transition-colors">
-                          <span className="text-caption font-medium text-black/60">{mpLabel}</span>
-                          <ChevronDown className={`w-3 h-3 text-black/35 transition-transform ${marginPeriodOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
-                        </button>
-                        {marginPeriodOpen && (
-                          <div className="absolute top-full left-0 mt-1 w-[160px] bg-white rounded-lg border border-black/[0.08] shadow-lg py-1 z-50">
-                            {CHART_PERIOD_OPTIONS.map(o => (
-                              <button key={o.value} onClick={() => { setMarginPeriod(o.value); setMarginPeriodOpen(false); }} className={`w-full text-left px-3 py-1.5 text-caption transition-colors flex items-center justify-between ${marginPeriod === o.value ? 'bg-black/[0.03] font-semibold text-black/80' : 'text-black/60 hover:bg-black/[0.02]'}`}>
-                                {o.label}
-                                {marginPeriod === o.value && <Check className="w-3 h-3 text-[#204CC7]" />}
-                              </button>
-                            ))}
+                return (
+                  <>
+                    {/* ── My Client Retention ── */}
+                    <section className="rounded-xl border border-black/[0.06] bg-white overflow-hidden flex flex-col" style={{ animation: 'dashUp 0.5s ease-out 0.26s both' }} aria-label="My client retention">
+                      <div className="px-6 py-4 border-b border-black/[0.04] flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center" aria-hidden="true">
+                            <Shield className="w-4 h-4 text-[#204CC7]" />
                           </div>
+                          <h2 className="text-body font-bold text-black/80">{isManager ? 'My Team Retention' : 'My Client Retention'}</h2>
+                          <div ref={isManager ? mgrPeriodRef : execPeriodRef} className="relative ml-1">
+                            <button onClick={() => isManager ? setMgrPeriodOpen(!mgrPeriodOpen) : setExecPeriodOpen(!execPeriodOpen)} className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-black/[0.08] bg-black/[0.015] hover:bg-black/[0.03] transition-colors">
+                              <span className="text-caption font-medium text-black/60">{epLabel}</span>
+                              <ChevronDown className={`w-3 h-3 text-black/35 transition-transform ${(isManager ? mgrPeriodOpen : execPeriodOpen) ? 'rotate-180' : ''}`} aria-hidden="true" />
+                            </button>
+                            {(isManager ? mgrPeriodOpen : execPeriodOpen) && (
+                              <div className="absolute top-full left-0 mt-1 w-[160px] bg-white rounded-lg border border-black/[0.08] shadow-lg py-1 z-50">
+                                {EXEC_PERIOD_OPTIONS.map(o => (
+                                  <button key={o.value} onClick={() => { isManager ? setMgrPeriod(o.value) : setExecPeriod(o.value); isManager ? setMgrPeriodOpen(false) : setExecPeriodOpen(false); }} className={`w-full text-left px-3 py-1.5 text-caption transition-colors flex items-center justify-between ${currentPeriod === o.value ? 'bg-black/[0.03] font-semibold text-black/80' : 'text-black/60 hover:bg-black/[0.02]'}`}>
+                                    {o.label}
+                                    {currentPeriod === o.value && <Check className="w-3 h-3 text-[#204CC7]" />}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <p className="text-h3 font-bold" style={{ color: ret.myRetentionRate >= ret.companyRetentionRate ? '#00C875' : '#E2445C' }}>{ret.myRetentionRate}%</p>
+                              <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: retDiff >= 0 ? 'rgba(0,200,117,0.1)' : 'rgba(226,68,92,0.1)', color: retDiffColor }}>{retDiff >= 0 ? '+' : ''}{retDiff}%</span>
+                            </div>
+                            <p className="text-caption text-black/50">My Rate <span className="text-black/30">vs {ret.companyRetentionRate}% avg</span></p>
+                          </div>
+                          <div className="w-px h-8 bg-black/[0.06]" />
+                          <div className="text-right">
+                            <p className="text-h3 font-bold text-black/75">{ret.totalAssigned}</p>
+                            <p className="text-caption text-black/50">Assigned</p>
+                          </div>
+                          <div className="w-px h-8 bg-black/[0.06]" />
+                          <div className="text-right">
+                            <p className="text-h3 font-bold text-[#E2445C]">{ret.clientsLost}</p>
+                            <p className="text-caption text-black/50">Lost</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="px-4 pt-4 pb-2 flex-1" style={{ minHeight: '200px' }}>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <BarChart data={ret.data} barCategoryGap="25%">
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                            <XAxis dataKey="month" tick={{ fontSize: 13, fill: 'rgba(0,0,0,0.45)' }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fontSize: 13, fill: 'rgba(0,0,0,0.35)' }} axisLine={false} tickLine={false} width={28} />
+                            <Tooltip
+                              content={({ active, payload, label }) => {
+                                if (!active || !payload?.[0]) return null;
+                                const d = payload[0].payload as ExecRetentionMonth;
+                                return (
+                                  <div className="bg-white rounded-xl border border-black/[0.06] shadow-lg px-3.5 py-2.5 text-caption" style={{ minWidth: 160 }}>
+                                    <p className="font-semibold text-black/70 mb-1.5">{label}</p>
+                                    <div className="flex items-center justify-between gap-4 mb-1">
+                                      <span className="text-black/50">My Clients</span>
+                                      <span className="font-bold text-black/75">{d.myClients}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-4 mb-1">
+                                      <span className="text-black/50">Retained</span>
+                                      <span className="font-bold text-[#00C875]">{d.retained}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-4 mb-1">
+                                      <span className="text-black/50">Lost</span>
+                                      <span className="font-bold text-[#E2445C]">{d.lost}</span>
+                                    </div>
+                                    {d.revLost > 0 && (
+                                      <div className="flex items-center justify-between gap-4 pt-1 border-t border-black/[0.06]">
+                                        <span className="text-black/50">Rev. Lost</span>
+                                        <span className="font-bold text-[#E2445C]">{formatLakh(d.revLost)}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }}
+                            />
+                            <Bar dataKey="retained" stackId="a" fill="#00C875" radius={[0, 0, 4, 4]} name="Retained" />
+                            <Bar dataKey="lost" stackId="a" fill="#E2445C" radius={[4, 4, 0, 0]} name="Lost" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="px-6 py-3 border-t border-black/[0.04] flex items-center gap-4">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-sm bg-[#00C875]" aria-hidden="true" />
+                          <span className="text-caption text-black/50">Retained</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-sm bg-[#E2445C]" aria-hidden="true" />
+                          <span className="text-caption text-black/50">Lost</span>
+                        </div>
+                        <div className="flex-1" />
+                        {ret.revLost > 0 && (
+                          <span className="text-caption text-[#E2445C] font-medium">{formatLakh(ret.revLost)} revenue at risk</span>
                         )}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <p className="text-h3 font-bold text-[#00C875]">{mp.avgMargin}%</p>
-                        <p className="text-caption text-black/50">Avg. Margin</p>
+                    </section>
+
+                    {/* ── My Margin Contribution ── */}
+                    <section className="rounded-xl border border-black/[0.06] bg-white overflow-hidden flex flex-col" style={{ animation: 'dashUp 0.5s ease-out 0.28s both' }} aria-label="My margin contribution">
+                      <div className="px-6 py-4 border-b border-black/[0.04] flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center" aria-hidden="true">
+                            <DollarSign className="w-4 h-4 text-[#00C875]" />
+                          </div>
+                          <h2 className="text-body font-bold text-black/80">{isManager ? 'My Team Margins' : 'My Margin Contribution'}</h2>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <p className="text-h3 font-bold" style={{ color: mar.myAvgMargin >= mar.companyAvgMargin ? '#00C875' : '#E2445C' }}>{mar.myAvgMargin}%</p>
+                              <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: marDiff >= 0 ? 'rgba(0,200,117,0.1)' : 'rgba(226,68,92,0.1)', color: marDiffColor }}>{marDiff >= 0 ? '+' : ''}{marDiff.toFixed(1)}%</span>
+                            </div>
+                            <p className="text-caption text-black/50">My Avg <span className="text-black/30">vs {mar.companyAvgMargin}% avg</span></p>
+                          </div>
+                          <div className="w-px h-8 bg-black/[0.06]" />
+                          <div className="text-right">
+                            <p className="text-h3 font-bold text-black/75">{formatLakh(mar.myRevenue)}</p>
+                            <p className="text-caption text-black/50">Revenue</p>
+                          </div>
+                        </div>
                       </div>
-                      <div className="w-px h-8 bg-black/[0.06]" />
-                      <div className="text-right">
-                        <p className="text-h3 font-bold text-black/75">{revDisplay}</p>
-                        <p className="text-caption text-black/50">Revenue ({mp.periodLabel})</p>
+                      <div className="px-4 pt-4 pb-2 flex-1" style={{ minHeight: '200px' }}>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <BarChart data={mar.data} barCategoryGap="25%">
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                            <XAxis dataKey="month" tick={{ fontSize: 13, fill: 'rgba(0,0,0,0.45)' }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fontSize: 13, fill: 'rgba(0,0,0,0.35)' }} axisLine={false} tickLine={false} width={28} unit="%" domain={[20, 40]} />
+                            <Tooltip
+                              content={({ active, payload, label }) => {
+                                if (!active || !payload?.[0]) return null;
+                                const d = payload[0].payload as ExecMarginMonth;
+                                return (
+                                  <div className="bg-white rounded-xl border border-black/[0.06] shadow-lg px-3.5 py-2.5 text-caption" style={{ minWidth: 160 }}>
+                                    <p className="font-semibold text-black/70 mb-1.5">{label}</p>
+                                    <div className="flex items-center justify-between gap-4 mb-1">
+                                      <span className="text-black/50">My Margin</span>
+                                      <span className="font-bold" style={{ color: d.margin >= d.companyAvg ? '#00C875' : '#E2445C' }}>{d.margin}%</span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-4 mb-1">
+                                      <span className="text-black/50">Company Avg</span>
+                                      <span className="font-medium text-black/60">{d.companyAvg}%</span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-4 mb-1">
+                                      <span className="text-black/50">Revenue</span>
+                                      <span className="font-bold text-black/75">{formatLakh(d.revenue)}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-4 pt-1 border-t border-black/[0.06]">
+                                      <span className="text-black/50">Cost</span>
+                                      <span className="font-medium text-black/60">{formatLakh(d.cost)}</span>
+                                    </div>
+                                  </div>
+                                );
+                              }}
+                            />
+                            <ReferenceLine y={mar.companyAvgMargin} stroke="#204CC7" strokeDasharray="6 4" strokeWidth={1.5} label={{ value: `Co. avg ${mar.companyAvgMargin}%`, position: 'right', fill: '#204CC7', fontSize: 11, fontWeight: 600 }} />
+                            <Bar dataKey="margin" radius={[6, 6, 0, 0]} name="My Margin">
+                              {mar.data.map((entry, idx) => (
+                                <Cell key={idx} fill={entry.margin >= entry.companyAvg ? '#00C875' : entry.margin >= entry.companyAvg - 2 ? '#FDAB3D' : '#E2445C'} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
                       </div>
-                    </div>
-                  </div>
-                  <div className="px-4 pt-4 pb-2 flex-1" style={{ minHeight: '200px' }}>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={mp.data} barCategoryGap="25%">
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                        <XAxis dataKey="month" tick={{ fontSize: 13, fill: 'rgba(0,0,0,0.45)' }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 13, fill: 'rgba(0,0,0,0.35)' }} axisLine={false} tickLine={false} width={28} unit="%" />
-                        <Tooltip
-                          content={({ active, payload, label }) => {
-                            if (!active || !payload?.[0]) return null;
-                            const d = payload[0].payload as MarginEntry;
-                            return (
-                              <div className="bg-white rounded-xl border border-black/[0.06] shadow-lg px-3.5 py-2.5 text-caption" style={{ minWidth: 140 }}>
-                                <p className="font-semibold text-black/70 mb-1.5">{label}</p>
-                                <div className="flex items-center justify-between gap-4 mb-1">
-                                  <span className="text-black/50">Revenue</span>
-                                  <span className="font-bold text-black/75">{formatLakh(d.revenue)}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-4 mb-1">
-                                  <span className="text-black/50">Cost</span>
-                                  <span className="font-medium text-black/60">{formatLakh(d.cost)}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-4 pt-1 border-t border-black/[0.06]">
-                                  <span className="text-black/50">Margin</span>
-                                  <span className="font-bold" style={{ color: d.margin >= 32 ? '#00C875' : d.margin >= 30 ? '#FDAB3D' : '#E2445C' }}>{d.margin}%</span>
-                                </div>
+                      <div className="px-6 py-3 border-t border-black/[0.04] flex items-center gap-4">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-sm bg-[#00C875]" aria-hidden="true" />
+                          <span className="text-caption text-black/50">Above avg</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-sm bg-[#FDAB3D]" aria-hidden="true" />
+                          <span className="text-caption text-black/50">Near avg</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-sm bg-[#E2445C]" aria-hidden="true" />
+                          <span className="text-caption text-black/50">Below avg</span>
+                        </div>
+                        <div className="flex-1" />
+                        <div className="flex items-center gap-1">
+                          <TrendingUp className="w-3 h-3 text-[#00C875]" aria-hidden="true" />
+                          <span className="text-caption font-medium text-[#00C875]">{mar.trend}</span>
+                        </div>
+                      </div>
+                    </section>
+                  </>
+                );
+              })()
+            ) : (
+              /* ═══ NON-EXECUTIVE: Company-wide Attrition + Margin ═══ */
+              <>
+                {/* ── Attrition Performance ── */}
+                {(() => {
+                  const ap = attritionByPeriod[attritionPeriod];
+                  const apLabel = CHART_PERIOD_OPTIONS.find(o => o.value === attritionPeriod)?.label ?? attritionPeriod;
+                  return (
+                    <section className="rounded-xl border border-black/[0.06] bg-white overflow-hidden flex flex-col" style={{ animation: 'dashUp 0.5s ease-out 0.26s both' }} aria-label="Client attrition performance">
+                      <div className="px-6 py-4 border-b border-black/[0.04] flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center" aria-hidden="true">
+                            <UserMinus className="w-4 h-4 text-[#E2445C]" />
+                          </div>
+                          <h2 className="text-body font-bold text-black/80">Client Attrition</h2>
+                          <div ref={attritionPeriodRef} className="relative ml-1">
+                            <button onClick={() => setAttritionPeriodOpen(!attritionPeriodOpen)} className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-black/[0.08] bg-black/[0.015] hover:bg-black/[0.03] transition-colors">
+                              <span className="text-caption font-medium text-black/60">{apLabel}</span>
+                              <ChevronDown className={`w-3 h-3 text-black/35 transition-transform ${attritionPeriodOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                            </button>
+                            {attritionPeriodOpen && (
+                              <div className="absolute top-full left-0 mt-1 w-[160px] bg-white rounded-lg border border-black/[0.08] shadow-lg py-1 z-50">
+                                {CHART_PERIOD_OPTIONS.map(o => (
+                                  <button key={o.value} onClick={() => { setAttritionPeriod(o.value); setAttritionPeriodOpen(false); }} className={`w-full text-left px-3 py-1.5 text-caption transition-colors flex items-center justify-between ${attritionPeriod === o.value ? 'bg-black/[0.03] font-semibold text-black/80' : 'text-black/60 hover:bg-black/[0.02]'}`}>
+                                    {o.label}
+                                    {attritionPeriod === o.value && <Check className="w-3 h-3 text-[#204CC7]" />}
+                                  </button>
+                                ))}
                               </div>
-                            );
-                          }}
-                        />
-                        <Bar dataKey="margin" radius={[6, 6, 0, 0]} name="margin">
-                          {mp.data.map((entry, idx) => (
-                            <Cell key={idx} fill={entry.margin >= 32 ? '#00C875' : entry.margin >= 30 ? '#FDAB3D' : '#E2445C'} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="px-6 py-3 border-t border-black/[0.04] flex items-center gap-4">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-sm bg-[#00C875]" aria-hidden="true" />
-                      <span className="text-caption text-black/50">&ge;32%</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-sm bg-[#FDAB3D]" aria-hidden="true" />
-                      <span className="text-caption text-black/50">30-31%</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-sm bg-[#E2445C]" aria-hidden="true" />
-                      <span className="text-caption text-black/50">&lt;30%</span>
-                    </div>
-                    <div className="flex-1" />
-                    <div className="flex items-center gap-1">
-                      <TrendingUp className="w-3 h-3 text-[#00C875]" aria-hidden="true" />
-                      <span className="text-caption font-medium text-[#00C875]">{mp.trend}</span>
-                    </div>
-                  </div>
-                </section>
-              );
-            })()}
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <p className="text-h3 font-bold text-[#00C875]">{ap.retentionRate}%</p>
+                            <p className="text-caption text-black/50">Retention</p>
+                          </div>
+                          <div className="w-px h-8 bg-black/[0.06]" />
+                          <div className="text-right">
+                            <p className="text-h3 font-bold text-[#E2445C]">{formatLakh(ap.revenueLost)}</p>
+                            <p className="text-caption text-black/50">Rev. Lost</p>
+                          </div>
+                          <div className="w-px h-8 bg-black/[0.06]" />
+                          <div className="text-right">
+                            <p className="text-h3 font-bold text-black/75">{ap.lost}</p>
+                            <p className="text-caption text-black/50">Lost ({ap.periodLabel})</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="px-4 pt-4 pb-2 flex-1" style={{ minHeight: '200px' }}>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <BarChart data={ap.data} barCategoryGap="25%">
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                            <XAxis dataKey="month" tick={{ fontSize: 13, fill: 'rgba(0,0,0,0.45)' }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fontSize: 13, fill: 'rgba(0,0,0,0.35)' }} axisLine={false} tickLine={false} width={28} />
+                            <Tooltip
+                              content={({ active, payload, label }) => {
+                                if (!active || !payload?.[0]) return null;
+                                const d = payload[0].payload as AttritionEntry;
+                                return (
+                                  <div className="bg-white rounded-xl border border-black/[0.06] shadow-lg px-3.5 py-2.5 text-caption" style={{ minWidth: 140 }}>
+                                    <p className="font-semibold text-black/70 mb-1.5">{label}</p>
+                                    <div className="flex items-center justify-between gap-4 mb-1">
+                                      <span className="text-black/50">Lost</span>
+                                      <span className="font-bold text-[#E2445C]">{d.lost}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-4 mb-1">
+                                      <span className="text-black/50">Rev. Lost</span>
+                                      <span className="font-bold text-[#E2445C]">{d.revLost > 0 ? formatLakh(d.revLost) : '—'}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-4 pt-1 border-t border-black/[0.06]">
+                                      <span className="text-black/50">Attrition</span>
+                                      <span className="font-bold text-black/70">{d.rate}%</span>
+                                    </div>
+                                  </div>
+                                );
+                              }}
+                            />
+                            <Bar dataKey="retained" stackId="a" fill="#00C875" radius={[0, 0, 4, 4]} name="retained" />
+                            <Bar dataKey="lost" stackId="a" fill="#E2445C" radius={[4, 4, 0, 0]} name="lost" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="px-6 py-3 border-t border-black/[0.04] flex items-center gap-4">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-sm bg-[#00C875]" aria-hidden="true" />
+                          <span className="text-caption text-black/50">Retained</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-sm bg-[#E2445C]" aria-hidden="true" />
+                          <span className="text-caption text-black/50">Lost</span>
+                        </div>
+                        <div className="flex-1" />
+                        <div className="flex items-center gap-1">
+                          <TrendingUp className="w-3 h-3 text-[#00C875]" aria-hidden="true" />
+                          <span className="text-caption font-medium text-[#00C875]">{ap.trend}</span>
+                        </div>
+                      </div>
+                    </section>
+                  );
+                })()}
+
+                {/* ── Margin Performance ── */}
+                {(() => {
+                  const mp = marginByPeriod[marginPeriod];
+                  const revDisplay = mp.totalRevenue >= 10000000 ? `₹${(mp.totalRevenue / 10000000).toFixed(1)}Cr` : `₹${(mp.totalRevenue / 100000).toFixed(1)}L`;
+                  const mpLabel = CHART_PERIOD_OPTIONS.find(o => o.value === marginPeriod)?.label ?? marginPeriod;
+                  return (
+                    <section className="rounded-xl border border-black/[0.06] bg-white overflow-hidden flex flex-col" style={{ animation: 'dashUp 0.5s ease-out 0.28s both' }} aria-label="Client margin performance">
+                      <div className="px-6 py-4 border-b border-black/[0.04] flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center" aria-hidden="true">
+                            <DollarSign className="w-4 h-4 text-[#00C875]" />
+                          </div>
+                          <h2 className="text-body font-bold text-black/80">Margin Performance</h2>
+                          <div ref={marginPeriodRef} className="relative ml-1">
+                            <button onClick={() => setMarginPeriodOpen(!marginPeriodOpen)} className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-black/[0.08] bg-black/[0.015] hover:bg-black/[0.03] transition-colors">
+                              <span className="text-caption font-medium text-black/60">{mpLabel}</span>
+                              <ChevronDown className={`w-3 h-3 text-black/35 transition-transform ${marginPeriodOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                            </button>
+                            {marginPeriodOpen && (
+                              <div className="absolute top-full left-0 mt-1 w-[160px] bg-white rounded-lg border border-black/[0.08] shadow-lg py-1 z-50">
+                                {CHART_PERIOD_OPTIONS.map(o => (
+                                  <button key={o.value} onClick={() => { setMarginPeriod(o.value); setMarginPeriodOpen(false); }} className={`w-full text-left px-3 py-1.5 text-caption transition-colors flex items-center justify-between ${marginPeriod === o.value ? 'bg-black/[0.03] font-semibold text-black/80' : 'text-black/60 hover:bg-black/[0.02]'}`}>
+                                    {o.label}
+                                    {marginPeriod === o.value && <Check className="w-3 h-3 text-[#204CC7]" />}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <p className="text-h3 font-bold text-[#00C875]">{mp.avgMargin}%</p>
+                            <p className="text-caption text-black/50">Avg. Margin</p>
+                          </div>
+                          <div className="w-px h-8 bg-black/[0.06]" />
+                          <div className="text-right">
+                            <p className="text-h3 font-bold text-black/75">{revDisplay}</p>
+                            <p className="text-caption text-black/50">Revenue ({mp.periodLabel})</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="px-4 pt-4 pb-2 flex-1" style={{ minHeight: '200px' }}>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <BarChart data={mp.data} barCategoryGap="25%">
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                            <XAxis dataKey="month" tick={{ fontSize: 13, fill: 'rgba(0,0,0,0.45)' }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fontSize: 13, fill: 'rgba(0,0,0,0.35)' }} axisLine={false} tickLine={false} width={28} unit="%" />
+                            <Tooltip
+                              content={({ active, payload, label }) => {
+                                if (!active || !payload?.[0]) return null;
+                                const d = payload[0].payload as MarginEntry;
+                                return (
+                                  <div className="bg-white rounded-xl border border-black/[0.06] shadow-lg px-3.5 py-2.5 text-caption" style={{ minWidth: 140 }}>
+                                    <p className="font-semibold text-black/70 mb-1.5">{label}</p>
+                                    <div className="flex items-center justify-between gap-4 mb-1">
+                                      <span className="text-black/50">Revenue</span>
+                                      <span className="font-bold text-black/75">{formatLakh(d.revenue)}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-4 mb-1">
+                                      <span className="text-black/50">Cost</span>
+                                      <span className="font-medium text-black/60">{formatLakh(d.cost)}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-4 pt-1 border-t border-black/[0.06]">
+                                      <span className="text-black/50">Margin</span>
+                                      <span className="font-bold" style={{ color: d.margin >= 32 ? '#00C875' : d.margin >= 30 ? '#FDAB3D' : '#E2445C' }}>{d.margin}%</span>
+                                    </div>
+                                  </div>
+                                );
+                              }}
+                            />
+                            <Bar dataKey="margin" radius={[6, 6, 0, 0]} name="margin">
+                              {mp.data.map((entry, idx) => (
+                                <Cell key={idx} fill={entry.margin >= 32 ? '#00C875' : entry.margin >= 30 ? '#FDAB3D' : '#E2445C'} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="px-6 py-3 border-t border-black/[0.04] flex items-center gap-4">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-sm bg-[#00C875]" aria-hidden="true" />
+                          <span className="text-caption text-black/50">&ge;32%</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-sm bg-[#FDAB3D]" aria-hidden="true" />
+                          <span className="text-caption text-black/50">30-31%</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-sm bg-[#E2445C]" aria-hidden="true" />
+                          <span className="text-caption text-black/50">&lt;30%</span>
+                        </div>
+                        <div className="flex-1" />
+                        <div className="flex items-center gap-1">
+                          <TrendingUp className="w-3 h-3 text-[#00C875]" aria-hidden="true" />
+                          <span className="text-caption font-medium text-[#00C875]">{mp.trend}</span>
+                        </div>
+                      </div>
+                    </section>
+                  );
+                })()}
+              </>
+            )}
 
           </div>
 
@@ -2477,7 +2847,7 @@ export function Dashboard() {
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-body font-medium text-black/75">{r.client}</span>
                       <div className="flex items-center gap-2">
-                        <span className={`text-caption font-semibold px-1.5 py-0.5 rounded ${r.service === 'PM' ? 'bg-purple-50 text-[#7C3AED]' : 'bg-cyan-50 text-[#06B6D4]'}`}>{svcLabel(r.service)}</span>
+                        <span className="text-caption font-semibold px-1.5 py-0.5 rounded bg-purple-50 text-[#7C3AED]">{svcLabel(r.service)}</span>
                         <div className="flex items-center gap-0.5">
                           {[1,2,3,4,5].map(s => (
                             <Star key={s} className="w-3 h-3" aria-hidden="true"
@@ -2494,7 +2864,9 @@ export function Dashboard() {
               </div>
             </section>
 
-            {activeRole === 'hod' && (
+            {/* HOD legacy content — superseded by SuperAdminHome chrome. Gated false so the JSX stays available for future revival. */}
+
+            {false && (
             <section className="rounded-xl border border-black/[0.06] bg-white overflow-hidden flex flex-col" style={{ animation: 'dashUp 0.55s ease-out 0.32s both' }} aria-label="Upsell and cross-sell opportunities">
               <div className="px-5 py-3.5 border-b border-black/[0.04] flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
@@ -2521,7 +2893,7 @@ export function Dashboard() {
                       <div className="flex-1 min-w-0 pr-3">
                         <div className="flex items-center gap-2">
                           <p className="text-body font-medium text-black/80 truncate">{opp.client}</p>
-                          <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${opp.currentService === 'PM' ? 'bg-purple-50 text-[#7C3AED]' : 'bg-cyan-50 text-[#06B6D4]'}`}>{svcLabel(opp.currentService)}</span>
+                          <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 bg-purple-50 text-[#7C3AED]">{svcLabel(opp.currentService)}</span>
                         </div>
                         <p className="text-caption text-black/50 truncate mt-0.5">{opp.opportunity}</p>
                       </div>
@@ -2535,7 +2907,7 @@ export function Dashboard() {
             )}
 
             {/* Manager/Executive: Birthdays widget sits beside Customer Ratings */}
-            {(activeRole === 'manager' || activeRole === 'executive') && (
+            {((activeRole as string) === 'manager' || activeRole === 'executive') && (
               <section className="rounded-xl border border-black/[0.06] bg-white overflow-hidden flex flex-col" style={{ animation: 'dashUp 0.55s ease-out 0.32s both' }} aria-label="Upcoming birthdays">
                 <div className="px-5 py-3.5 border-b border-black/[0.04] flex items-center gap-2.5">
                   <div className="w-7 h-7 rounded-lg bg-pink-50 flex items-center justify-center" aria-hidden="true">
@@ -2570,7 +2942,9 @@ export function Dashboard() {
 
           </div>
 
-          {activeRole === 'hod' && (
+          {/* HOD legacy content — superseded by SuperAdminHome chrome. Gated false so the JSX stays available for future revival. */}
+
+          {false && (
           <>
           {/* ═══ ROW 7: CLA / NTF Nominations — Two Columns ═══ */}
           <div className="grid grid-cols-2 gap-6">
@@ -2664,7 +3038,8 @@ export function Dashboard() {
           )}
 
           {/* ═══ ROW 8: Upcoming Birthdays — Full Width (HOD only) ═══ */}
-          {activeRole === 'hod' && (
+          {/* HOD legacy content — superseded by SuperAdminHome chrome. Gated false so the JSX stays available for future revival. */}
+          {false && (
           <section className="rounded-xl border border-black/[0.06] bg-white overflow-hidden" style={{ animation: 'dashUp 0.5s ease-out 0.28s both' }} aria-label="Upcoming birthdays">
             <div className="px-6 py-3.5 border-b border-black/[0.04] flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-lg bg-pink-50 flex items-center justify-center" aria-hidden="true">
@@ -2699,6 +3074,7 @@ export function Dashboard() {
         </div>
       </>)}
       </div>
+      )}
 
       {/* ── HR Insights Drawer ── */}
       {insightsOpen && activeRole === 'hr' && (
